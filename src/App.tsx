@@ -1,162 +1,156 @@
 'use client';
 
-import { forwardRef, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
-import { Slider } from '@base-ui/react/slider';
-import { Switch } from '@base-ui/react/switch';
+import { useRef, useState } from 'react';
 import { Tabs } from '@base-ui/react/tabs';
 import { Toolbar } from '@base-ui/react/toolbar';
 import { Tooltip } from '@base-ui/react/tooltip';
 import {
   Download,
+  Eraser,
   FileCode2,
   Grid2X2,
-  RefreshCcw,
   Shuffle,
   Sparkles,
+  Trash2,
+  Type,
   Zap,
 } from 'lucide-react';
-
-type Template = 'radial' | 'manifest' | 'dashboard' | 'specimen';
-type Palette = {
-  name: string;
-  background: string;
-  ink: string;
-  muted: string;
-  accent: string;
-  second: string;
-  paper: string;
-};
-
-type Settings = {
-  template: Template;
-  paletteIndex: number;
-  seed: number;
-  density: number;
-  scale: number;
-  detail: number;
-  labels: boolean;
-  grid: boolean;
-  noise: boolean;
-};
-
-const palettes: Palette[] = [
-  {
-    name: 'Carbon signal',
-    background: '#f5f4ef',
-    paper: '#ffffff',
-    ink: '#151515',
-    muted: '#7f8179',
-    accent: '#e94f37',
-    second: '#107c6a',
-  },
-  {
-    name: 'Civic print',
-    background: '#f2efe5',
-    paper: '#fbfaf4',
-    ink: '#23201b',
-    muted: '#8d8274',
-    accent: '#235789',
-    second: '#c44900',
-  },
-  {
-    name: 'Transit lab',
-    background: '#eef3f1',
-    paper: '#ffffff',
-    ink: '#111827',
-    muted: '#667085',
-    accent: '#ef476f',
-    second: '#0b8f8f',
-  },
-  {
-    name: 'Archive red',
-    background: '#f8f1ed',
-    paper: '#fffdfb',
-    ink: '#211c1c',
-    muted: '#917a70',
-    accent: '#b81e2d',
-    second: '#345995',
-  },
-];
-
-const templates: Array<{ id: Template; name: string }> = [
-  { id: 'radial', name: 'Radial cluster' },
-  { id: 'manifest', name: 'Manifest strips' },
-  { id: 'dashboard', name: 'Instrument panel' },
-  { id: 'specimen', name: 'Specimen sheet' },
-];
-
-const glyphs = ['A', '07', 'N', 'R2', 'IX', '42', 'M', 'K3', 'T', '18'];
-const marks = ['cross', 'circle', 'square', 'tri', 'bar'];
-
-function seeded(seed: number) {
-  let value = seed % 2147483647;
-  if (value <= 0) value += 2147483646;
-  return () => {
-    value = (value * 16807) % 2147483647;
-    return (value - 1) / 2147483646;
-  };
-}
-
-function pick<T>(items: T[], random: () => number) {
-  return items[Math.floor(random() * items.length)];
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
+import { Field, ToggleRow, ToolButton } from './components/Controls';
+import { MicrographicSvg } from './components/MicrographicSvg';
+import { MicroMark } from './components/MicroMark';
+import { initialSettings, loadTemplateItems, marks, palettes, templates } from './data';
+import type { CanvasItem, CanvasSymbol, CanvasText, Settings, Template } from './types';
+import { clamp, downloadBlob } from './utils';
 
 function App() {
-  const [settings, setSettings] = useState<Settings>({
-    template: 'radial',
-    paletteIndex: 0,
-    seed: 628,
-    density: 58,
-    scale: 78,
-    detail: 64,
-    labels: true,
-    grid: true,
-    noise: true,
-  });
+  const [settings, setSettings] = useState<Settings>(initialSettings);
+  const [canvasItems, setCanvasItems] = useState<CanvasItem[]>(() => loadTemplateItems(initialSettings.template));
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [textDraft, setTextDraft] = useState('MICRO');
   const svgRef = useRef<SVGSVGElement | null>(null);
   const palette = palettes[settings.paletteIndex];
-
-  const elements = useMemo(() => {
-    const random = seeded(settings.seed);
-    const count = Math.round(18 + settings.density * 0.75);
-    return Array.from({ length: count }, (_, index) => ({
-      id: index,
-      x: 80 + random() * 920,
-      y: 75 + random() * 560,
-      w: 18 + random() * 86 * (settings.scale / 100),
-      h: 8 + random() * 54 * (settings.scale / 100),
-      rotate: random() * 32 - 16,
-      mark: pick(marks, random),
-      glyph: pick(glyphs, random),
-      tone: random(),
-    }));
-  }, [settings.density, settings.scale, settings.seed]);
 
   const update = <K extends keyof Settings>(key: K, value: Settings[K]) => {
     setSettings((current) => ({ ...current, [key]: value }));
   };
 
+  const chooseTemplate = (template: Template) => {
+    const nextSettings = { ...settings, template };
+    setSettings(nextSettings);
+    setCanvasItems(loadTemplateItems(template));
+    setSelectedId(null);
+  };
+
   const randomize = () => {
-    setSettings((current) => ({
-      ...current,
+    const nextTemplate = templates[Math.floor(Math.random() * templates.length)].id;
+    const nextSettings = {
+      ...settings,
       seed: Math.floor(Math.random() * 9000) + 1000,
-      template: templates[Math.floor(Math.random() * templates.length)].id,
+      template: nextTemplate,
       paletteIndex: Math.floor(Math.random() * palettes.length),
-    }));
+    };
+    setSettings(nextSettings);
+    setCanvasItems(loadTemplateItems(nextTemplate));
+    setSelectedId(null);
+  };
+
+  const itemBounds = (item: CanvasItem) => {
+    if (item.kind === 'symbol') {
+      const pad = 10;
+      return { x: item.x - item.size / 2 - pad, y: item.y - item.size / 2 - pad, width: item.size + pad * 2, height: item.size + pad * 2 };
+    }
+    if (item.kind === 'text') {
+      const lines = item.text.split('\n');
+      const width = Math.max(90, Math.max(...lines.map((line) => line.length)) * item.size * 0.62);
+      return { x: item.x - 8, y: item.y - item.size - 10, width: width + 16, height: lines.length * item.size * 1.08 + 22 };
+    }
+    return { x: item.x - 10, y: item.y - 10, width: item.w + 46, height: item.h + 46 };
+  };
+
+  const findOpenPosition = (width: number, height: number) => {
+    const existing = canvasItems.map(itemBounds);
+    const overlaps = (candidate: { x: number; y: number; width: number; height: number }) =>
+      existing.some((item) =>
+        candidate.x < item.x + item.width &&
+        candidate.x + candidate.width > item.x &&
+        candidate.y < item.y + item.height &&
+        candidate.y + candidate.height > item.y,
+      );
+
+    for (let y = 96; y <= 704 - height; y += 64) {
+      for (let x = 96; x <= 1104 - width; x += 64) {
+        const candidate = { x, y, width, height };
+        if (!overlaps(candidate)) return candidate;
+      }
+    }
+
+    return { x: 600 - width / 2, y: 400 - height / 2, width, height };
+  };
+
+  const addSymbol = (mark: string) => {
+    const size = 42;
+    const position = findOpenPosition(size + 20, size + 20);
+    const item: CanvasSymbol = {
+      id: `symbol-${Date.now()}`,
+      kind: 'symbol',
+      x: position.x + position.width / 2,
+      y: position.y + position.height / 2,
+      size,
+      rotate: 0,
+      mark,
+      tone: 0.9,
+    };
+    setCanvasItems((current) => [...current, item]);
+    setSelectedId(item.id);
+  };
+
+  const addText = () => {
+    const text = textDraft.trim();
+    if (!text) return;
+    const size = 42;
+    const width = Math.max(90, text.length * size * 0.62) + 16;
+    const height = size + 22;
+    const position = findOpenPosition(width, height);
+    const item: CanvasText = {
+      id: `text-${Date.now()}`,
+      kind: 'text',
+      x: position.x + 8,
+      y: position.y + size + 10,
+      rotate: 0,
+      size,
+      text,
+      tone: 0.82,
+    };
+    setCanvasItems((current) => [...current, item]);
+    setSelectedId(item.id);
+  };
+
+  const moveItem = (id: string, x: number, y: number) => {
+    setCanvasItems((current) =>
+      current.map((item) => (item.id === id ? { ...item, x: clamp(x, 52, 1148), y: clamp(y, 48, 752) } : item)),
+    );
+  };
+
+  const removeSelected = () => {
+    if (!selectedId) return;
+    setCanvasItems((current) => current.filter((item) => item.id !== selectedId));
+    setSelectedId(null);
+  };
+
+  const itemLabel = (item: CanvasItem, index: number) => {
+    if (item.kind === 'text') return item.text.split('\n')[0] || `Text ${index + 1}`;
+    if (item.kind === 'symbol') return `${item.mark} symbol`;
+    return `${item.mark} module`;
+  };
+
+  const uploadBackground = (file: File | undefined) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      update('backgroundImage', typeof reader.result === 'string' ? reader.result : null);
+      update('showBackground', true);
+    };
+    reader.readAsDataURL(file);
   };
 
   const exportSvg = () => {
@@ -203,8 +197,11 @@ function App() {
             <ToolButton label="Randomize" onClick={randomize}>
               <Shuffle size={17} aria-hidden="true" />
             </ToolButton>
-            <ToolButton label="Reset seed" onClick={() => update('seed', 628)}>
-              <RefreshCcw size={17} aria-hidden="true" />
+            <ToolButton label="Start blank" onClick={() => chooseTemplate('blank')}>
+              <Eraser size={17} aria-hidden="true" />
+            </ToolButton>
+            <ToolButton label="Delete selected" onClick={removeSelected}>
+              <Trash2 size={17} aria-hidden="true" />
             </ToolButton>
             <Toolbar.Separator className="toolbar-separator" />
             <ToolButton label="Export SVG" onClick={exportSvg}>
@@ -223,8 +220,8 @@ function App() {
               <Tabs.Tab className="tab" value="style">
                 Style
               </Tabs.Tab>
-              <Tabs.Tab className="tab" value="output">
-                Output
+              <Tabs.Tab className="tab" value="elements">
+                Elements
               </Tabs.Tab>
               <Tabs.Indicator className="tab-indicator" />
             </Tabs.List>
@@ -237,40 +234,48 @@ function App() {
                       className="template-button"
                       data-active={settings.template === template.id}
                       key={template.id}
-                      onClick={() => update('template', template.id)}
+                      onClick={() => chooseTemplate(template.id)}
                       type="button"
                     >
                       <Grid2X2 size={16} aria-hidden="true" />
                       {template.name}
                     </button>
                   ))}
+                  <button
+                    className="template-button"
+                    data-active={settings.template === 'blank'}
+                    onClick={() => chooseTemplate('blank')}
+                    type="button"
+                  >
+                    <Eraser size={16} aria-hidden="true" />
+                    Start from scratch
+                  </button>
                 </div>
               </Field>
-              <ControlSlider
-                label="Density"
-                max={100}
-                min={12}
-                value={settings.density}
-                onChange={(value) => update('density', value)}
-              />
-              <ControlSlider
-                label="Scale"
-                max={120}
-                min={36}
-                value={settings.scale}
-                onChange={(value) => update('scale', value)}
-              />
-              <ControlSlider
-                label="Detail"
-                max={100}
-                min={20}
-                value={settings.detail}
-                onChange={(value) => update('detail', value)}
-              />
+              <Field label="Layers">
+                <div className="layer-list">
+                  {canvasItems.length === 0 ? (
+                    <div className="empty-layer">No symbols or text</div>
+                  ) : (
+                    canvasItems.map((item, index) => (
+                      <button
+                        className="layer-row"
+                        data-active={selectedId === item.id}
+                        key={item.id}
+                        onClick={() => setSelectedId(item.id)}
+                        type="button"
+                      >
+                        <span>{String(index + 1).padStart(2, '0')}</span>
+                        {itemLabel(item, index)}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </Field>
             </Tabs.Panel>
 
             <Tabs.Panel value="style" className="tab-panel">
-              <Field label="Palette">
+              <Field label="Color">
                 <div className="palette-list">
                   {palettes.map((item, index) => (
                     <button
@@ -280,52 +285,54 @@ function App() {
                       onClick={() => update('paletteIndex', index)}
                       type="button"
                     >
-                      <span className="swatches" aria-hidden="true">
-                        <span style={{ background: item.ink }} />
-                        <span style={{ background: item.accent }} />
-                        <span style={{ background: item.second }} />
-                      </span>
+                      <span className="single-swatch" style={{ background: item.ink }} aria-hidden="true" />
                       {item.name}
                     </button>
                   ))}
                 </div>
               </Field>
+              <Field label="Uploaded background">
+                <input className="file-input" type="file" accept="image/*" onChange={(event) => uploadBackground(event.target.files?.[0])} />
+              </Field>
+              <ToggleRow label="Include background" checked={settings.showBackground} onChange={(value) => update('showBackground', value)} />
               <ToggleRow label="Show labels" checked={settings.labels} onChange={(value) => update('labels', value)} />
-              <ToggleRow label="Baseline grid" checked={settings.grid} onChange={(value) => update('grid', value)} />
+              <ToggleRow label="Construction grid" checked={settings.grid} onChange={(value) => update('grid', value)} />
               <ToggleRow label="Paper noise" checked={settings.noise} onChange={(value) => update('noise', value)} />
             </Tabs.Panel>
 
-            <Tabs.Panel value="output" className="tab-panel">
-              <Field label="Seed">
-                <input
-                  className="text-input"
-                  type="number"
-                  value={settings.seed}
-                  onChange={(event) => update('seed', clamp(Number(event.target.value), 1, 99999))}
-                />
+            <Tabs.Panel value="elements" className="tab-panel">
+              <Field label="Symbols">
+                <div className="symbol-grid">
+                  {marks.map((mark) => (
+                    <button className="symbol-button" key={mark} onClick={() => addSymbol(mark)} type="button">
+                      <svg aria-hidden="true" className="symbol-icon" viewBox="0 0 36 36">
+                        <MicroMark color="#f4f0e8" mark={mark} x={18} y={18} />
+                      </svg>
+                      {mark}
+                    </button>
+                  ))}
+                </div>
               </Field>
-              <div className="metric-grid">
-                <div>
-                  <span>{elements.length}</span>
-                  modules
+              <Field label="Text">
+                <div className="add-row">
+                  <input className="text-input" value={textDraft} onChange={(event) => setTextDraft(event.target.value)} />
+                  <button className="add-button" onClick={addText} type="button">
+                    <Type size={16} aria-hidden="true" />
+                    Add
+                  </button>
                 </div>
-                <div>
-                  <span>3:2</span>
-                  artboard
-                </div>
-                <div>
-                  <span>SVG</span>
-                  source
-                </div>
-              </div>
+              </Field>
             </Tabs.Panel>
+
           </Tabs.Root>
         </aside>
 
         <section className="preview-stage" aria-label="Micrographic preview">
           <div className="stage-header">
             <div>
-              <span className="eyebrow">Template / {templates.find((item) => item.id === settings.template)?.name}</span>
+              <span className="eyebrow">
+                Template / {settings.template === 'blank' ? 'Scratch canvas' : templates.find((item) => item.id === settings.template)?.name}
+              </span>
               <h2>{palette.name}</h2>
             </div>
             <div className="stage-chip">
@@ -334,307 +341,19 @@ function App() {
             </div>
           </div>
           <div className="artboard-wrap">
-            <MicrographicSvg ref={svgRef} elements={elements} palette={palette} settings={settings} />
+            <MicrographicSvg
+              ref={svgRef}
+              items={canvasItems}
+              onMoveItem={moveItem}
+              onSelectItem={setSelectedId}
+              palette={palette}
+              selectedId={selectedId}
+              settings={settings}
+            />
           </div>
         </section>
       </main>
     </Tooltip.Provider>
-  );
-}
-
-function Field({ children, label }: { children: ReactNode; label: string }) {
-  return (
-    <label className="field">
-      <span>{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function ControlSlider({
-  label,
-  max,
-  min,
-  onChange,
-  value,
-}: {
-  label: string;
-  max: number;
-  min: number;
-  onChange: (value: number) => void;
-  value: number;
-}) {
-  return (
-    <div className="slider-block">
-      <div className="slider-top">
-        <span>{label}</span>
-        <strong>{value}</strong>
-      </div>
-      <Slider.Root
-        className="slider-root"
-        max={max}
-        min={min}
-        step={1}
-        value={value}
-        onValueChange={(next) => onChange(Array.isArray(next) ? next[0] : next)}
-      >
-        <Slider.Control className="slider-control">
-          <Slider.Track className="slider-track">
-            <Slider.Indicator className="slider-indicator" />
-            <Slider.Thumb aria-label={label} className="slider-thumb" />
-          </Slider.Track>
-        </Slider.Control>
-      </Slider.Root>
-    </div>
-  );
-}
-
-function ToggleRow({
-  checked,
-  label,
-  onChange,
-}: {
-  checked: boolean;
-  label: string;
-  onChange: (value: boolean) => void;
-}) {
-  return (
-    <label className="toggle-row">
-      <span>{label}</span>
-      <Switch.Root checked={checked} className="switch" onCheckedChange={onChange}>
-        <Switch.Thumb className="switch-thumb" />
-      </Switch.Root>
-    </label>
-  );
-}
-
-function ToolButton({
-  children,
-  label,
-  onClick,
-}: {
-  children: ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <Tooltip.Root>
-      <Tooltip.Trigger render={<Toolbar.Button />} className="icon-button" aria-label={label} onClick={onClick}>
-        {children}
-      </Tooltip.Trigger>
-      <Tooltip.Portal>
-        <Tooltip.Positioner sideOffset={8}>
-          <Tooltip.Popup className="tooltip">
-            <Tooltip.Arrow className="tooltip-arrow" />
-            {label}
-          </Tooltip.Popup>
-        </Tooltip.Positioner>
-      </Tooltip.Portal>
-    </Tooltip.Root>
-  );
-}
-
-const MicrographicSvg = forwardRef<SVGSVGElement, {
-  elements: Array<{
-    glyph: string;
-    h: number;
-    id: number;
-    mark: string;
-    rotate: number;
-    tone: number;
-    w: number;
-    x: number;
-    y: number;
-  }>;
-  palette: Palette;
-  settings: Settings;
-}>(({ elements, palette, settings }, ref) => {
-  return (
-    <svg ref={ref} className="artboard" viewBox="0 0 1200 800" role="img">
-      <title>Generated micrographic poster</title>
-      <defs>
-        <filter id="paperNoise">
-          <feTurbulence baseFrequency="0.7" numOctaves="2" seed={settings.seed} type="fractalNoise" />
-          <feColorMatrix type="saturate" values="0" />
-          <feComponentTransfer>
-            <feFuncA slope="0.08" type="linear" />
-          </feComponentTransfer>
-        </filter>
-      </defs>
-      <rect width="1200" height="800" fill={palette.background} />
-      <rect x="52" y="48" width="1096" height="704" rx="0" fill={palette.paper} />
-      {settings.noise && <rect x="52" y="48" width="1096" height="704" filter="url(#paperNoise)" opacity="0.45" />}
-      {settings.grid && <Grid palette={palette} />}
-      <TemplateFrame template={settings.template} palette={palette} />
-      {elements.map((item) => (
-        <GraphicModule item={item} key={item.id} palette={palette} settings={settings} />
-      ))}
-      <FooterMarks palette={palette} settings={settings} />
-    </svg>
-  );
-});
-
-function Grid({ palette }: { palette: Palette }) {
-  return (
-    <g opacity="0.26">
-      {Array.from({ length: 24 }, (_, index) => (
-        <line key={`v-${index}`} x1={72 + index * 44} x2={72 + index * 44} y1="68" y2="732" stroke={palette.muted} strokeWidth="0.7" />
-      ))}
-      {Array.from({ length: 15 }, (_, index) => (
-        <line key={`h-${index}`} x1="72" x2="1128" y1={80 + index * 44} y2={80 + index * 44} stroke={palette.muted} strokeWidth="0.7" />
-      ))}
-    </g>
-  );
-}
-
-function TemplateFrame({ palette, template }: { palette: Palette; template: Template }) {
-  if (template === 'radial') {
-    return (
-      <g transform="translate(600 398)">
-        {Array.from({ length: 28 }, (_, index) => (
-          <line
-            key={index}
-            x1="0"
-            x2={index % 3 === 0 ? 320 : 250}
-            y1="0"
-            y2="0"
-            stroke={index % 5 === 0 ? palette.accent : palette.ink}
-            strokeWidth={index % 3 === 0 ? 1.8 : 0.8}
-            transform={`rotate(${index * 12.85})`}
-            opacity="0.5"
-          />
-        ))}
-        <circle r="112" fill="none" stroke={palette.second} strokeWidth="3" />
-        <circle r="178" fill="none" stroke={palette.ink} strokeDasharray="4 8" opacity="0.5" />
-      </g>
-    );
-  }
-
-  if (template === 'manifest') {
-    return (
-      <g opacity="0.76">
-        {Array.from({ length: 10 }, (_, index) => (
-          <rect
-            key={index}
-            x={96 + index * 104}
-            y={96 + (index % 3) * 36}
-            width="54"
-            height="558"
-            fill="none"
-            stroke={index % 2 ? palette.accent : palette.ink}
-            strokeWidth="1.5"
-          />
-        ))}
-      </g>
-    );
-  }
-
-  if (template === 'dashboard') {
-    return (
-      <g>
-        {Array.from({ length: 7 }, (_, index) => (
-          <rect key={index} x={116 + index * 142} y="128" width="104" height="470" fill="none" stroke={palette.muted} strokeWidth="1.4" />
-        ))}
-        <path d="M116 620 H1084 M116 180 H1084" stroke={palette.ink} strokeWidth="2.2" />
-      </g>
-    );
-  }
-
-  return (
-    <g>
-      {Array.from({ length: 5 }, (_, row) =>
-        Array.from({ length: 7 }, (_, col) => (
-          <rect
-            key={`${row}-${col}`}
-            x={104 + col * 142}
-            y={104 + row * 112}
-            width="96"
-            height="72"
-            fill="none"
-            stroke={col % 2 ? palette.second : palette.ink}
-            strokeWidth="1"
-            opacity="0.58"
-          />
-        )),
-      )}
-    </g>
-  );
-}
-
-function GraphicModule({
-  item,
-  palette,
-  settings,
-}: {
-  item: {
-    glyph: string;
-    h: number;
-    id: number;
-    mark: string;
-    rotate: number;
-    tone: number;
-    w: number;
-    x: number;
-    y: number;
-  };
-  palette: Palette;
-  settings: Settings;
-}) {
-  const color = item.tone > 0.76 ? palette.accent : item.tone > 0.5 ? palette.second : palette.ink;
-  const opacity = 0.62 + item.tone * 0.3;
-
-  return (
-    <g transform={`translate(${item.x} ${item.y}) rotate(${item.rotate})`} opacity={opacity}>
-      <rect width={item.w} height={item.h} fill="none" stroke={color} strokeWidth={item.tone > 0.8 ? 2 : 1} />
-      <line x1="0" x2={item.w * 1.25} y1={item.h + 8} y2={item.h + 8} stroke={palette.ink} strokeWidth="1" />
-      {Array.from({ length: Math.max(1, Math.round(settings.detail / 28)) }, (_, index) => (
-        <line
-          key={index}
-          x1={6 + index * 13}
-          x2={6 + index * 13}
-          y1="3"
-          y2={item.h - 3}
-          stroke={color}
-          strokeWidth="0.8"
-          opacity="0.7"
-        />
-      ))}
-      <MicroMark mark={item.mark} color={color} x={item.w + 13} y={item.h * 0.45} />
-      {settings.labels && (
-        <text x="0" y={item.h + 24} fill={palette.ink} fontFamily="IBM Plex Mono, ui-monospace, monospace" fontSize="10" letterSpacing="1.2">
-          {item.glyph}-{String(item.id).padStart(2, '0')}
-        </text>
-      )}
-    </g>
-  );
-}
-
-function MicroMark({ color, mark, x, y }: { color: string; mark: string; x: number; y: number }) {
-  if (mark === 'circle') return <circle cx={x} cy={y} r="7" fill="none" stroke={color} strokeWidth="2" />;
-  if (mark === 'square') return <rect x={x - 6} y={y - 6} width="12" height="12" fill={color} />;
-  if (mark === 'tri') return <path d={`M ${x} ${y - 8} L ${x + 8} ${y + 7} L ${x - 8} ${y + 7} Z`} fill="none" stroke={color} strokeWidth="2" />;
-  if (mark === 'bar') return <rect x={x - 3} y={y - 12} width="6" height="24" fill={color} />;
-  return (
-    <g stroke={color} strokeWidth="2">
-      <line x1={x - 8} x2={x + 8} y1={y} y2={y} />
-      <line x1={x} x2={x} y1={y - 8} y2={y + 8} />
-    </g>
-  );
-}
-
-function FooterMarks({ palette, settings }: { palette: Palette; settings: Settings }) {
-  return (
-    <g fontFamily="IBM Plex Mono, ui-monospace, monospace" fill={palette.ink}>
-      <text x="72" y="722" fontSize="13" letterSpacing="2">
-        MICROGRAPHIC / SYSTEM {settings.seed}
-      </text>
-      <text x="890" y="722" fontSize="12" letterSpacing="1.4">
-        D{settings.density} S{settings.scale} L{settings.detail}
-      </text>
-      <rect x="72" y="688" width="1056" height="1.5" fill={palette.ink} />
-      <rect x="1040" y="704" width="88" height="14" fill={palette.accent} />
-      <rect x="1004" y="704" width="28" height="14" fill={palette.second} />
-    </g>
   );
 }
 
