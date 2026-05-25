@@ -13,25 +13,9 @@ export type Palette = {
 export type Settings = {
   template: Template;
   paletteIndex: number;
-  seed: number;
   backgroundImage: string | null;
-  labels: boolean;
   grid: boolean;
-  noise: boolean;
   showBackground: boolean;
-};
-
-export type CanvasModule = {
-  glyph: string;
-  h: number;
-  id: string;
-  kind: 'module';
-  mark: string;
-  rotate: number;
-  tone: number;
-  w: number;
-  x: number;
-  y: number;
 };
 
 export type CanvasText = {
@@ -56,4 +40,4 @@ export type CanvasSymbol = {
   y: number;
 };
 
-export type CanvasItem = CanvasModule | CanvasSymbol | CanvasText;
+export type CanvasItem = CanvasSymbol | CanvasText;
