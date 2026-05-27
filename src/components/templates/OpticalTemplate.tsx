@@ -3,20 +3,18 @@ import { symbolItem, textItem } from './helpers';
 
 export function OpticalTemplate(): CanvasItem[] {
   return [
-    textItem('007-title', 'OPTICAL / 20', 486, 330, 30),
-    textItem('007-code', '43R-004585', 596, 370, 13),
-    textItem('007-asset', 'ASSET_ID 2026_MG_990X', 596, 412, 20),
-    textItem('007-xiv', 'XIV', 484, 466, 36),
-    textItem('007-index', 'LENS FIELD\nREV 04', 760, 330, 12),
-    symbolItem('007-pill', 'badge', 672, 456, 98),
-    textItem('007-pill-text', '43R-004585', 628, 462, 12),
-    symbolItem('007-warning', 'warning', 818, 342, 40),
-    symbolItem('007-waves', 'waves', 828, 462, 46),
-    symbolItem('007-orbit-a', 'orbit', 420, 407, 32),
-    symbolItem('007-orbit-b', 'orbit', 870, 406, 32),
-    symbolItem('007-line-a', 'line', 604, 486, 88),
-    symbolItem('007-line-b', 'line', 758, 486, 88),
-    symbolItem('007-tally', 'tally', 736, 372, 28),
-    symbolItem('007-ce', 'ce', 878, 504, 20),
+    textItem('007-coords', '40° 44\' 40" N, 73° 58\' 42" W', 455, 330, 20),
+    textItem('007-title', 'GLBL\nDSGN\nDEPT', 455, 396, 42),
+    symbolItem('007-world', 'world', 650, 420, 220),
+    symbolItem('007-bars', 'barcode', 522, 532, 170),
+    textItem('007-xiv', 'XIV', 705, 548, 28),
+    symbolItem('007-globe', 'globe', 766, 548, 34),
+    symbolItem('007-ce', 'ce', 812, 548, 34),
+    textItem('007-dashes', '- - -', 872, 548, 18),
+    textItem('007-meta', '1920  /  9:16  /  1 X 1', 455, 596, 22),
+    symbolItem('007-pill', 'badge', 812, 594, 120),
+    textItem('007-pill-text', '43R-004585', 765, 601, 16),
+    textItem('007-rule', '- - - - - - - - - - - - - - - - - -', 518, 627, 13),
+    textItem('007-footer', '©  2026     PROPERTY OF DSGN DEPT', 558, 656, 17),
   ];
 }

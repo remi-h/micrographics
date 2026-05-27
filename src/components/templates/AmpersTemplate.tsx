@@ -3,18 +3,14 @@ import { symbolItem, textItem } from './helpers';
 
 export function AmpersTemplate(): CanvasItem[] {
   return [
-    symbolItem('011-info', 'info', 290, 360, 34),
-    textItem('011-title', 'AMPERS', 328, 410, 64),
-    textItem('011-amp', '&', 712, 408, 84),
-    symbolItem('011-orbit', 'orbit', 746, 360, 48),
-    symbolItem('011-badge', 'badge', 376, 498, 84),
-    textItem('011-time-text', '11:6:18', 330, 504, 16),
-    textItem('011-code', 'ASSET_ID 2026_MG_990X\n_PROCESS/SV01\n©2026', 570, 482, 13),
-    symbolItem('011-grid', 'grid', 746, 508, 26),
-    symbolItem('011-target', 'target', 798, 508, 26),
-    symbolItem('011-line-a', 'line', 512, 354, 100),
-    symbolItem('011-line-b', 'line', 868, 456, 84),
-    symbolItem('011-nodes', 'nodes', 270, 486, 32),
-    symbolItem('011-quarter', 'quarter', 842, 358, 28),
+    textItem('011-coords', '51° 30\' 26" N, 0° 07\' 39" W', 458, 344, 18),
+    textItem('011-title', 'GLBL\nFORM\nDEPT', 458, 404, 38),
+    symbolItem('011-worldmap', 'world', 650, 424, 190),
+    symbolItem('011-bars', 'barcode', 526, 535, 150),
+    textItem('011-code', 'MMXXVI', 690, 548, 25),
+    symbolItem('011-globe', 'globe', 760, 548, 30),
+    symbolItem('011-ce', 'ce', 810, 548, 30),
+    textItem('011-meta', '2026  /  16:9  /  V02', 458, 594, 20),
+    textItem('011-footer', 'PROPERTY OF MICROGRAPHICS', 594, 648, 16),
   ];
 }
