@@ -107,6 +107,7 @@ h1 {
 .toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 7px;
   border: 1px solid rgba(245, 242, 234, 0.14);
@@ -634,11 +635,22 @@ h1 {
 }
 
 @media (max-width: 980px) {
+
+  html,
+  body {
+    height: auto;
+    min-height: 100%;
+    overflow: auto;
+  }
+
   .app-shell {
     height: auto;
     min-height: 100vh;
-    overflow: auto;
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "stage"
+      "controls"
+      "assets";
   }
 
   .control-panel,
@@ -650,24 +662,67 @@ h1 {
     border-bottom: 1px solid rgba(21, 21, 21, 0.14);
   }
 
+  .control-panel {
+    grid-area: controls;
+  }
+
   .asset-panel {
+    grid-area: assets;
     border-left: 0;
   }
 
+  .asset-panel-inner,
+  .panel-scroll {
+    overflow: visible;
+  }
+
   .preview-stage {
+    grid-area: stage;
     height: auto;
-    min-height: auto;
+    min-height: 60vh;
+  }
+
+  .artboard-wrap {
+    min-height: 46vh;
+  }
+
+  .stage-header {
+    align-items: flex-start;
+  }
+
+  .stage-actions {
+    max-width: 100%;
+  }
+}
+
+@media (min-width: 721px) and (max-width: 980px) {
+  .app-shell {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "stage stage"
+      "controls assets";
+  }
+
+  .control-panel {
+    border-bottom: 0;
+    border-right: 1px solid rgba(245, 242, 234, 0.12);
+  }
+
+  .asset-panel {
+    border-bottom: 0;
   }
 }
 
 @media (max-width: 560px) {
+
   .control-panel,
-  .preview-stage {
+  .preview-stage,
+  .asset-panel {
     padding: 16px;
   }
 
   .symbol-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
   }
 
   .stage-header {
@@ -679,7 +734,42 @@ h1 {
     font-size: 23px;
   }
 
+  .stage-actions {
+    justify-content: flex-start;
+  }
+
+  .stage-palette-list {
+    order: 2;
+    flex-wrap: wrap;
+  }
+
+  .stage-toggle {
+    order: 3;
+  }
+
+  .zoom-value,
+  .stage-actions>.icon-button {
+    order: 1;
+  }
+
   .artboard-wrap {
     padding: 0;
+  }
+
+  .artboard-zoom {
+    min-width: 280px;
+  }
+
+  .brand-row {
+    grid-template-columns: 36px 1fr;
+  }
+
+  .brand-mark {
+    width: 36px;
+    height: 36px;
+  }
+
+  h1 {
+    font-size: 18px;
   }
 }
