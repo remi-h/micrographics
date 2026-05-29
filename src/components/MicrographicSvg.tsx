@@ -360,15 +360,19 @@ MicrographicSvg.displayName = 'MicrographicSvg';
 function Grid({ palette }: { palette: Palette }) {
   const width = 1200;
   const height = 800;
-  const spacing = 44;
+  const spacing = 40;
+  const xLines = Array.from({ length: Math.floor(width / spacing) + 1 }, (_, index) => index * spacing);
+  const yLines = Array.from({ length: Math.floor(height / spacing) + 1 }, (_, index) => index * spacing);
+  if (xLines[xLines.length - 1] !== width) xLines.push(width);
+  if (yLines[yLines.length - 1] !== height) yLines.push(height);
 
   return (
     <g opacity="0.26">
-      {Array.from({ length: Math.floor(width / spacing) + 1 }, (_, index) => (
-        <line key={`v-${index}`} x1={index * spacing} x2={index * spacing} y1="0" y2={height} stroke={palette.muted} strokeWidth="0.7" />
+      {xLines.map((x, index) => (
+        <line key={`v-${index}`} x1={x} x2={x} y1="0" y2={height} stroke={palette.muted} strokeWidth="0.7" />
       ))}
-      {Array.from({ length: Math.floor(height / spacing) + 1 }, (_, index) => (
-        <line key={`h-${index}`} x1="0" x2={width} y1={index * spacing} y2={index * spacing} stroke={palette.muted} strokeWidth="0.7" />
+      {yLines.map((y, index) => (
+        <line key={`h-${index}`} x1="0" x2={width} y1={y} y2={y} stroke={palette.muted} strokeWidth="0.7" />
       ))}
     </g>
   );

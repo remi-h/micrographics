@@ -1,27 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Select } from '@base-ui/react/select';
-import { Toolbar } from '@base-ui/react/toolbar';
 import { Tooltip } from '@base-ui/react/tooltip';
-import {
-  Download,
-  FileCode2,
-  Check,
-  ChevronDown,
-  RefreshCcw,
-  Shuffle,
-  Sparkles,
-  Trash2,
-  Type,
-  Undo2,
-  Redo2,
-  ZoomIn,
-  ZoomOut,
-} from 'lucide-react';
-import { Field, ToggleRow, ToolButton } from './components/Controls';
+import { AssetPanel } from './components/AssetPanel';
+import { ControlPanel } from './components/ControlPanel';
 import { MicrographicSvg } from './components/MicrographicSvg';
-import { MicroMark } from './components/MicroMark';
+import { StageHeader } from './components/StageHeader';
 import { initialSettings, loadTemplateItems, palettes, symbolTabs, templates } from './data';
 import type { CanvasItem, CanvasSymbol, CanvasText, Settings, Template } from './types';
 import { clamp, downloadBlob } from './utils';
@@ -31,38 +15,6 @@ type HistorySnapshot = {
   selectedIds: string[];
   settings: Settings;
 };
-
-const symbolLabelOverrides: Record<string, string> = {
-  chatgpt: 'ChatGPT',
-  'claude-code': 'Claude Code',
-  codex: 'Codex',
-  'creative-commons': 'Creative Commons',
-  deepseek: 'DeepSeek',
-  android: 'Android',
-  ce: 'CE',
-  figma: 'Figma',
-  github: 'GitHub',
-  'github-copilot': 'GitHub Copilot',
-  ios: 'iOS',
-  kiro: 'Kiro',
-  macos: 'macOS',
-  mc: 'MC',
-  mistral: 'Mistral AI',
-  nextjs: 'Next.js',
-  openai: 'OpenAI',
-  opentui: 'OpenTUI',
-  react: 'React',
-};
-
-function formatSymbolLabel(mark: string) {
-  return (
-    symbolLabelOverrides[mark] ??
-    mark
-      .split('-')
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' ')
-  );
-}
 
 function App() {
   const [settings, setSettings] = useState<Settings>(initialSettings);
@@ -79,7 +31,6 @@ function App() {
   const stateRef = useRef<HistorySnapshot>({ canvasItems, selectedIds, settings });
   const svgRef = useRef<SVGSVGElement | null>(null);
   const palette = palettes[settings.paletteIndex];
-  const selectedIdSet = new Set(selectedIds);
   const selectedTemplateName =
     settings.template === 'blank' ? 'Start from scratch' : templates.find((item) => item.id === settings.template)?.name;
   const activeSymbolMarks = symbolTabs.find((tab) => tab.id === activeSymbolTab)?.marks ?? symbolTabs[0].marks;
@@ -537,136 +488,37 @@ function App() {
   return (
     <Tooltip.Provider>
       <main className="app-shell">
-        <aside className="control-panel">
-          <div className="brand-row">
-            <div className="brand-mark">
-              <Sparkles size={18} aria-hidden="true" />
-            </div>
-            <div>
-              <h1>Micrographics Creator</h1>
-              <p>Dense graphic systems for posters, decks, and UI texture.</p>
-            </div>
-          </div>
-
-          <Toolbar.Root className="toolbar" aria-label="Graphic actions">
-            <ToolButton label="Randomize" onClick={randomize}>
-              <Shuffle size={17} aria-hidden="true" />
-            </ToolButton>
-            <ToolButton label="Restart template" onClick={restartTemplate}>
-              <RefreshCcw size={17} aria-hidden="true" />
-            </ToolButton>
-            <ToolButton label="Start from scratch" onClick={() => chooseTemplate('blank')}>
-              <Trash2 size={17} aria-hidden="true" />
-            </ToolButton>
-            <Toolbar.Separator className="toolbar-separator" />
-            <ToolButton label="Undo" onClick={undo}>
-              <Undo2 size={17} aria-hidden="true" />
-            </ToolButton>
-            <ToolButton label="Redo" onClick={redo}>
-              <Redo2 size={17} aria-hidden="true" />
-            </ToolButton>
-            <Toolbar.Separator className="toolbar-separator" />
-            <ToolButton label="Export SVG" onClick={exportSvg}>
-              <FileCode2 size={17} aria-hidden="true" />
-            </ToolButton>
-            <ToolButton label="Export PNG" onClick={exportPng}>
-              <Download size={17} aria-hidden="true" />
-            </ToolButton>
-          </Toolbar.Root>
-
-          <div className="panel-scroll">
-            <Field label="Template">
-              <Select.Root value={settings.template} onValueChange={(value) => chooseTemplate(value as Template)}>
-                <Select.Trigger className="select-trigger">
-                  <span>{selectedTemplateName}</span>
-                  <Select.Icon className="select-icon">
-                    <ChevronDown size={16} aria-hidden="true" />
-                  </Select.Icon>
-                </Select.Trigger>
-                <Select.Portal>
-                  <Select.Positioner sideOffset={8}>
-                    <Select.Popup className="select-popup">
-                      {templates.map((template) => (
-                        <Select.Item className="select-item" key={template.id} value={template.id}>
-                          <Select.ItemText>{template.name}</Select.ItemText>
-                          <Select.ItemIndicator className="select-item-indicator">
-                            <Check size={14} aria-hidden="true" />
-                          </Select.ItemIndicator>
-                        </Select.Item>
-                      ))}
-                      <Select.Item className="select-item" value="blank">
-                        <Select.ItemText>Start from scratch</Select.ItemText>
-                        <Select.ItemIndicator className="select-item-indicator">
-                          <Check size={14} aria-hidden="true" />
-                        </Select.ItemIndicator>
-                      </Select.Item>
-                    </Select.Popup>
-                  </Select.Positioner>
-                </Select.Portal>
-              </Select.Root>
-            </Field>
-            <Field label="Layers">
-              <div className="layer-list">
-                {canvasItems.length === 0 ? (
-                  <div className="empty-layer">No symbols or text</div>
-                ) : (
-                  [...canvasItems].reverse().map((item, index) => (
-                    <button
-                      className="layer-row"
-                      data-active={selectedIdSet.has(item.id)}
-                      key={item.id}
-                      onClick={(event) => selectItem(item.id, event.shiftKey || event.metaKey || event.ctrlKey)}
-                      type="button"
-                    >
-                      <span>{String(canvasItems.length - index).padStart(2, '0')}</span>
-                      {itemLabel(item, index)}
-                    </button>
-                  ))
-                )}
-              </div>
-            </Field>
-          </div>
-        </aside>
+        <ControlPanel
+          canvasItems={canvasItems}
+          itemLabel={itemLabel}
+          selectedIds={selectedIds}
+          selectedTemplateName={selectedTemplateName}
+          template={settings.template}
+          onChooseTemplate={chooseTemplate}
+          onExportPng={exportPng}
+          onExportSvg={exportSvg}
+          onRandomize={randomize}
+          onRedo={redo}
+          onRestartTemplate={restartTemplate}
+          onSelectItem={selectItem}
+          onUndo={undo}
+        />
 
         <section className="preview-stage" aria-label="Micrographic preview">
-          <div className="stage-header">
-            <div>
-              <span className="eyebrow">
-                Template / {settings.template === 'blank' ? 'Scratch canvas' : selectedTemplateName}
-              </span>
-              <h2>{palette.name}</h2>
-            </div>
-            <div className="stage-actions">
-              <div className="stage-palette-list" aria-label="Color palette">
-                {palettes.map((item, index) => (
-                  <button
-                    aria-label={item.name}
-                    className="stage-palette-button"
-                    data-active={index === settings.paletteIndex}
-                    key={item.name}
-                    onClick={() => update('paletteIndex', index)}
-                    title={item.name}
-                    type="button"
-                  >
-                    <span className="single-swatch" style={{ background: item.ink }} aria-hidden="true" />
-                  </button>
-                ))}
-              </div>
-              <label className="stage-toggle">
-                <span>Grid</span>
-                <input checked={settings.grid} onChange={(event) => update('grid', event.target.checked)} type="checkbox" />
-              </label>
-              <button className="icon-button" onClick={() => zoomCanvas(-0.1)} title="Zoom out" type="button">
-                <ZoomOut size={17} aria-hidden="true" />
-              </button>
-              <button className="zoom-value" onClick={resetCanvasZoom} title="Reset zoom" type="button">
-                {Math.round(canvasZoom * 100)}%
-              </button>
-              <button className="icon-button" onClick={() => zoomCanvas(0.1)} title="Zoom in" type="button">
-                <ZoomIn size={17} aria-hidden="true" />
-              </button>
-            </div>
-          </div>
+          <StageHeader
+            canvasZoom={canvasZoom}
+            grid={settings.grid}
+            palette={palette}
+            paletteIndex={settings.paletteIndex}
+            palettes={palettes}
+            selectedTemplateName={selectedTemplateName}
+            settings={settings}
+            onChangeGrid={(value) => update('grid', value)}
+            onChangePalette={(index) => update('paletteIndex', index)}
+            onResetZoom={resetCanvasZoom}
+            onZoomIn={() => zoomCanvas(0.1)}
+            onZoomOut={() => zoomCanvas(-0.1)}
+          />
           <div
             className="artboard-wrap"
             onWheel={(event) => {
@@ -700,77 +552,18 @@ function App() {
             </div>
           </div>
         </section>
-        <aside className="asset-panel">
-          <div className="asset-panel-inner">
-            <Field label="Uploaded background">
-              <input className="file-input" type="file" accept="image/*" onChange={(event) => uploadBackground(event.target.files?.[0])} />
-            </Field>
-            <ToggleRow label="Include background" checked={settings.showBackground} onChange={(value) => update('showBackground', value)} />
-            <Field label="Symbols">
-              <div className="symbol-tabs" role="tablist" aria-label="Symbol groups">
-                {symbolTabs.map((tab) => (
-                  <button
-                    aria-selected={tab.id === activeSymbolTab}
-                    className="symbol-tab"
-                    data-active={tab.id === activeSymbolTab}
-                    key={tab.id}
-                    onClick={() => setActiveSymbolTab(tab.id)}
-                    role="tab"
-                    type="button"
-                  >
-                    {tab.name}
-                  </button>
-                ))}
-              </div>
-              <div className="symbol-grid">
-                {activeSymbolMarks.map((mark) => {
-                  const label = formatSymbolLabel(mark);
-                  return (
-                    <Tooltip.Root key={mark}>
-                      <Tooltip.Trigger
-                        render={<button type="button" />}
-                        aria-label={label}
-                        className="symbol-button"
-                        onClick={() => addSymbol(mark)}
-                      >
-                        <svg aria-hidden="true" className="symbol-icon" viewBox="0 0 36 36">
-                          <MicroMark color="#f4f0e8" mark={mark} x={18} y={18} />
-                        </svg>
-                      </Tooltip.Trigger>
-                      <Tooltip.Portal>
-                        <Tooltip.Positioner sideOffset={8}>
-                          <Tooltip.Popup className="tooltip">
-                            <Tooltip.Arrow className="tooltip-arrow" />
-                            {label}
-                          </Tooltip.Popup>
-                        </Tooltip.Positioner>
-                      </Tooltip.Portal>
-                    </Tooltip.Root>
-                  );
-                })}
-              </div>
-            </Field>
-            <Field label="Text">
-              <div className="add-row">
-                <input
-                  className="text-input"
-                  value={textDraft}
-                  onChange={(event) => setTextDraft(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      addText();
-                    }
-                  }}
-                />
-                <button className="add-button" onClick={addText} type="button">
-                  <Type size={16} aria-hidden="true" />
-                  Add
-                </button>
-              </div>
-            </Field>
-          </div>
-        </aside>
+        <AssetPanel
+          activeSymbolMarks={activeSymbolMarks}
+          activeSymbolTab={activeSymbolTab}
+          showBackground={settings.showBackground}
+          textDraft={textDraft}
+          onAddSymbol={addSymbol}
+          onAddText={addText}
+          onChangeShowBackground={(value) => update('showBackground', value)}
+          onChangeSymbolTab={setActiveSymbolTab}
+          onChangeTextDraft={setTextDraft}
+          onUploadBackground={uploadBackground}
+        />
       </main>
     </Tooltip.Provider>
   );

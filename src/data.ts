@@ -100,7 +100,6 @@ export const aiToolMarks = [
   'deepseek',
   'cursor',
   'gemini',
-  'openai',
   'nextjs',
   'react',
   'creative-commons',
