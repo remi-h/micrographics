@@ -9,7 +9,6 @@ import {
   FileCode2,
   Check,
   ChevronDown,
-  Github,
   RefreshCcw,
   Shuffle,
   Sparkles,
@@ -23,7 +22,7 @@ import {
 import { Field, ToggleRow, ToolButton } from './components/Controls';
 import { MicrographicSvg } from './components/MicrographicSvg';
 import { MicroMark } from './components/MicroMark';
-import { initialSettings, loadTemplateItems, palettes, symbolMarks, templates } from './data';
+import { initialSettings, loadTemplateItems, palettes, symbolTabs, templates } from './data';
 import type { CanvasItem, CanvasSymbol, CanvasText, Settings, Template } from './types';
 import { clamp, downloadBlob } from './utils';
 
@@ -32,6 +31,38 @@ type HistorySnapshot = {
   selectedIds: string[];
   settings: Settings;
 };
+
+const symbolLabelOverrides: Record<string, string> = {
+  chatgpt: 'ChatGPT',
+  'claude-code': 'Claude Code',
+  codex: 'Codex',
+  'creative-commons': 'Creative Commons',
+  deepseek: 'DeepSeek',
+  android: 'Android',
+  ce: 'CE',
+  figma: 'Figma',
+  github: 'GitHub',
+  'github-copilot': 'GitHub Copilot',
+  ios: 'iOS',
+  kiro: 'Kiro',
+  macos: 'macOS',
+  mc: 'MC',
+  mistral: 'Mistral AI',
+  nextjs: 'Next.js',
+  openai: 'OpenAI',
+  opentui: 'OpenTUI',
+  react: 'React',
+};
+
+function formatSymbolLabel(mark: string) {
+  return (
+    symbolLabelOverrides[mark] ??
+    mark
+      .split('-')
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ')
+  );
+}
 
 function App() {
   const [settings, setSettings] = useState<Settings>(initialSettings);
@@ -43,6 +74,7 @@ function App() {
   const [editingTextDraft, setEditingTextDraft] = useState('');
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [canvasZoom, setCanvasZoom] = useState(1);
+  const [activeSymbolTab, setActiveSymbolTab] = useState(symbolTabs[0].id);
   const clipboardRef = useRef<CanvasItem[]>([]);
   const stateRef = useRef<HistorySnapshot>({ canvasItems, selectedIds, settings });
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -50,6 +82,7 @@ function App() {
   const selectedIdSet = new Set(selectedIds);
   const selectedTemplateName =
     settings.template === 'blank' ? 'Start from scratch' : templates.find((item) => item.id === settings.template)?.name;
+  const activeSymbolMarks = symbolTabs.find((tab) => tab.id === activeSymbolTab)?.marks ?? symbolTabs[0].marks;
 
   useEffect(() => {
     stateRef.current = { canvasItems, selectedIds, settings };
@@ -604,6 +637,25 @@ function App() {
               <h2>{palette.name}</h2>
             </div>
             <div className="stage-actions">
+              <div className="stage-palette-list" aria-label="Color palette">
+                {palettes.map((item, index) => (
+                  <button
+                    aria-label={item.name}
+                    className="stage-palette-button"
+                    data-active={index === settings.paletteIndex}
+                    key={item.name}
+                    onClick={() => update('paletteIndex', index)}
+                    title={item.name}
+                    type="button"
+                  >
+                    <span className="single-swatch" style={{ background: item.ink }} aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+              <label className="stage-toggle">
+                <span>Grid</span>
+                <input checked={settings.grid} onChange={(event) => update('grid', event.target.checked)} type="checkbox" />
+              </label>
               <button className="icon-button" onClick={() => zoomCanvas(-0.1)} title="Zoom out" type="button">
                 <ZoomOut size={17} aria-hidden="true" />
               </button>
@@ -613,12 +665,6 @@ function App() {
               <button className="icon-button" onClick={() => zoomCanvas(0.1)} title="Zoom in" type="button">
                 <ZoomIn size={17} aria-hidden="true" />
               </button>
-              <div className="stage-chip">
-                <Github size={14} aria-hidden="true" />
-                <a href="https://github.com/remi-h/micrographics" rel="noreferrer" target="_blank" style={{ color: '#f4f0e8', textDecoration: 'none' }}>
-                  GitHub
-                </a>
-              </div>
             </div>
           </div>
           <div
@@ -656,36 +702,52 @@ function App() {
         </section>
         <aside className="asset-panel">
           <div className="asset-panel-inner">
-            <Field label="Color">
-              <div className="palette-list">
-                {palettes.map((item, index) => (
-                  <button
-                    className="palette-button"
-                    data-active={index === settings.paletteIndex}
-                    key={item.name}
-                    onClick={() => update('paletteIndex', index)}
-                    type="button"
-                  >
-                    <span className="single-swatch" style={{ background: item.ink }} aria-hidden="true" />
-                    {item.name}
-                  </button>
-                ))}
-              </div>
-            </Field>
             <Field label="Uploaded background">
               <input className="file-input" type="file" accept="image/*" onChange={(event) => uploadBackground(event.target.files?.[0])} />
             </Field>
             <ToggleRow label="Include background" checked={settings.showBackground} onChange={(value) => update('showBackground', value)} />
-            <ToggleRow label="Construction grid" checked={settings.grid} onChange={(value) => update('grid', value)} />
             <Field label="Symbols">
-              <div className="symbol-grid">
-                {symbolMarks.map((mark) => (
-                  <button aria-label={mark} className="symbol-button" key={mark} onClick={() => addSymbol(mark)} type="button">
-                    <svg aria-hidden="true" className="symbol-icon" viewBox="0 0 36 36">
-                      <MicroMark color="#f4f0e8" mark={mark} x={18} y={18} />
-                    </svg>
+              <div className="symbol-tabs" role="tablist" aria-label="Symbol groups">
+                {symbolTabs.map((tab) => (
+                  <button
+                    aria-selected={tab.id === activeSymbolTab}
+                    className="symbol-tab"
+                    data-active={tab.id === activeSymbolTab}
+                    key={tab.id}
+                    onClick={() => setActiveSymbolTab(tab.id)}
+                    role="tab"
+                    type="button"
+                  >
+                    {tab.name}
                   </button>
                 ))}
+              </div>
+              <div className="symbol-grid">
+                {activeSymbolMarks.map((mark) => {
+                  const label = formatSymbolLabel(mark);
+                  return (
+                    <Tooltip.Root key={mark}>
+                      <Tooltip.Trigger
+                        render={<button type="button" />}
+                        aria-label={label}
+                        className="symbol-button"
+                        onClick={() => addSymbol(mark)}
+                      >
+                        <svg aria-hidden="true" className="symbol-icon" viewBox="0 0 36 36">
+                          <MicroMark color="#f4f0e8" mark={mark} x={18} y={18} />
+                        </svg>
+                      </Tooltip.Trigger>
+                      <Tooltip.Portal>
+                        <Tooltip.Positioner sideOffset={8}>
+                          <Tooltip.Popup className="tooltip">
+                            <Tooltip.Arrow className="tooltip-arrow" />
+                            {label}
+                          </Tooltip.Popup>
+                        </Tooltip.Positioner>
+                      </Tooltip.Portal>
+                    </Tooltip.Root>
+                  );
+                })}
               </div>
             </Field>
             <Field label="Text">

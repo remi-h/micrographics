@@ -358,13 +358,17 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
 MicrographicSvg.displayName = 'MicrographicSvg';
 
 function Grid({ palette }: { palette: Palette }) {
+  const width = 1200;
+  const height = 800;
+  const spacing = 44;
+
   return (
     <g opacity="0.26">
-      {Array.from({ length: 24 }, (_, index) => (
-        <line key={`v-${index}`} x1={72 + index * 44} x2={72 + index * 44} y1="68" y2="732" stroke={palette.muted} strokeWidth="0.7" />
+      {Array.from({ length: Math.floor(width / spacing) + 1 }, (_, index) => (
+        <line key={`v-${index}`} x1={index * spacing} x2={index * spacing} y1="0" y2={height} stroke={palette.muted} strokeWidth="0.7" />
       ))}
-      {Array.from({ length: 15 }, (_, index) => (
-        <line key={`h-${index}`} x1="72" x2="1128" y1={80 + index * 44} y2={80 + index * 44} stroke={palette.muted} strokeWidth="0.7" />
+      {Array.from({ length: Math.floor(height / spacing) + 1 }, (_, index) => (
+        <line key={`h-${index}`} x1="0" x2={width} y1={index * spacing} y2={index * spacing} stroke={palette.muted} strokeWidth="0.7" />
       ))}
     </g>
   );

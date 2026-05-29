@@ -92,6 +92,34 @@ export const marks = [
   'grid',
 ];
 
+export const aiToolMarks = [
+  'claude-code',
+  'codex',
+  'claude',
+  'chatgpt',
+  'deepseek',
+  'cursor',
+  'gemini',
+  'openai',
+  'nextjs',
+  'react',
+  'creative-commons',
+  'figma',
+  'kiro',
+  'github-copilot',
+  'github',
+  'opentui',
+  'mistral',
+  'ios',
+  'android',
+  'macos',
+];
+
+export const symbolTabs = [
+  { id: 'symbols', name: 'Symbols', marks },
+  { id: 'ai-tools', name: 'Tech', marks: aiToolMarks },
+];
+
 export const initialSettings: Settings = {
   template: '006',
   paletteIndex: 0,
@@ -103,6 +131,7 @@ export const initialSettings: Settings = {
 export const symbolMarks = Array.from(
   new Set([
     ...marks,
+    ...aiToolMarks,
     ...Object.values(templateComponents)
       .flatMap((template) => template())
       .flatMap((item) => (item.kind === 'text' ? [] : [item.mark])),
