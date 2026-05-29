@@ -1,8 +1,9 @@
 import { Select } from '@base-ui/react/select';
 import { Toolbar } from '@base-ui/react/toolbar';
-import { Check, ChevronDown, Download, FileCode2, RefreshCcw, Shuffle, Sparkles, Trash2, Undo2, Redo2 } from 'lucide-react';
+import { Check, ChevronDown, Download, FileCode2, RefreshCcw, Shuffle, Trash2, Undo2, Redo2 } from 'lucide-react';
 import { templates } from '../data';
 import type { CanvasItem, Template } from '../types';
+import { BrandIcon } from './BrandIcon';
 import { Field, ToolButton } from './Controls';
 
 export function ControlPanel({
@@ -40,7 +41,7 @@ export function ControlPanel({
     <aside className="control-panel">
       <div className="brand-row">
         <div className="brand-mark">
-          <Sparkles size={18} aria-hidden="true" />
+          <BrandIcon />
         </div>
         <div>
           <h1>Micrographics Creator</h1>

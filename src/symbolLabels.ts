@@ -1,5 +1,10 @@
 const symbolLabelOverrides: Record<string, string> = {
   android: 'Android',
+  'airplay-audio': 'AirPlay Audio',
+  'airplay-video': 'AirPlay Video',
+  apple: 'Apple',
+  'app-store': 'App Store',
+  bluetooth: 'Bluetooth',
   bun: 'Bun',
   ce: 'CE',
   chatgpt: 'ChatGPT',
@@ -10,12 +15,17 @@ const symbolLabelOverrides: Record<string, string> = {
   'creative-commons': 'Creative Commons',
   dart: 'Dart',
   deepseek: 'DeepSeek',
+  bleach: 'Bleach',
+  'do-not-bleach': 'Do Not Bleach',
+  'do-not-wash': 'Do Not Wash',
   dotnet: '.NET',
+  'dry-clean': 'Dry Clean',
   figma: 'Figma',
   flutter: 'Flutter',
   github: 'GitHub',
   'github-copilot': 'GitHub Copilot',
   'google-cloud': 'Google Cloud',
+  'hang-dry': 'Hang Dry',
   ios: 'iOS',
   javascript: 'JavaScript',
   kiro: 'Kiro',
@@ -29,7 +39,9 @@ const symbolLabelOverrides: Record<string, string> = {
   react: 'React',
   swift: 'Swift',
   tailwind: 'Tailwind CSS',
+  'tumble-dry': 'Tumble Dry',
   typescript: 'TypeScript',
+  wash: 'Wash',
 };
 
 export function formatSymbolLabel(mark: string) {

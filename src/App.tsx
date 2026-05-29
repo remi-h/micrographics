@@ -29,6 +29,7 @@ function App() {
   const [activeSymbolTab, setActiveSymbolTab] = useState(symbolTabs[0].id);
   const clipboardRef = useRef<CanvasItem[]>([]);
   const stateRef = useRef<HistorySnapshot>({ canvasItems, selectedIds, settings });
+  const artboardWrapRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const palette = palettes[settings.paletteIndex];
   const selectedTemplateName =
@@ -126,6 +127,29 @@ function App() {
     return { x: 0, y: 0, width: 0, height: 0 };
   };
 
+  const visibleCanvasRect = () => {
+    const wrap = artboardWrapRef.current;
+    const svg = svgRef.current;
+    if (!wrap || !svg) return null;
+
+    const wrapRect = wrap.getBoundingClientRect();
+    const svgRect = svg.getBoundingClientRect();
+    if (svgRect.width === 0 || svgRect.height === 0) return null;
+
+    const left = Math.max(wrapRect.left, svgRect.left);
+    const top = Math.max(wrapRect.top, svgRect.top);
+    const right = Math.min(wrapRect.right, svgRect.right);
+    const bottom = Math.min(wrapRect.bottom, svgRect.bottom);
+    if (right <= left || bottom <= top) return null;
+
+    return {
+      x: clamp(((left - svgRect.left) / svgRect.width) * 1200, 0, 1200),
+      y: clamp(((top - svgRect.top) / svgRect.height) * 800, 0, 800),
+      width: clamp(((right - left) / svgRect.width) * 1200, 0, 1200),
+      height: clamp(((bottom - top) / svgRect.height) * 800, 0, 800),
+    };
+  };
+
   const findOpenPosition = (width: number, height: number) => {
     const existing = canvasItems.map(itemBounds);
     const overlaps = (candidate: { x: number; y: number; width: number; height: number }) =>
@@ -135,6 +159,31 @@ function App() {
         candidate.y < item.y + item.height &&
         candidate.y + candidate.height > item.y,
       );
+
+    const visible = visibleCanvasRect();
+    if (visible) {
+      const minX = clamp(visible.x + 24, 52, 1148 - width);
+      const maxX = clamp(visible.x + visible.width - width - 24, minX, 1148 - width);
+      const minY = clamp(visible.y + 24, 48, 752 - height);
+      const maxY = clamp(visible.y + visible.height - height - 24, minY, 752 - height);
+      const centerCandidate = {
+        x: clamp(visible.x + visible.width / 2 - width / 2, minX, maxX),
+        y: clamp(visible.y + visible.height / 2 - height / 2, minY, maxY),
+        width,
+        height,
+      };
+
+      if (!overlaps(centerCandidate)) return centerCandidate;
+
+      for (let y = minY; y <= maxY; y += 48) {
+        for (let x = minX; x <= maxX; x += 48) {
+          const candidate = { x, y, width, height };
+          if (!overlaps(candidate)) return candidate;
+        }
+      }
+
+      return centerCandidate;
+    }
 
     for (let y = 96; y <= 704 - height; y += 64) {
       for (let x = 96; x <= 1104 - width; x += 64) {
@@ -312,6 +361,34 @@ function App() {
       y: bounds.y + bounds.height / 2,
     };
   };
+
+  useEffect(() => {
+    if (selectedIds.length === 0) return;
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      const wrap = artboardWrapRef.current;
+      const svg = svgRef.current;
+      const selectedItems = canvasItems.filter((item) => selectedIds.includes(item.id));
+      if (!wrap || !svg || selectedItems.length === 0) return;
+
+      const centers = selectedItems.map(visualCenter);
+      const center = {
+        x: centers.reduce((sum, point) => sum + point.x, 0) / centers.length,
+        y: centers.reduce((sum, point) => sum + point.y, 0) / centers.length,
+      };
+      const svgRect = svg.getBoundingClientRect();
+      if (svgRect.width === 0 || svgRect.height === 0) return;
+
+      const targetX = wrap.scrollLeft + (center.x / 1200) * svgRect.width + svgRect.left - wrap.getBoundingClientRect().left;
+      const targetY = wrap.scrollTop + (center.y / 800) * svgRect.height + svgRect.top - wrap.getBoundingClientRect().top;
+      wrap.scrollTo({
+        left: Math.max(0, targetX - wrap.clientWidth / 2),
+        top: Math.max(0, targetY - wrap.clientHeight / 2),
+      });
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [canvasZoom]);
 
   const alignSelected = (axis: 'x' | 'y') => {
     const selected = canvasItems.filter((item) => selectedIds.includes(item.id));
@@ -520,6 +597,7 @@ function App() {
             onZoomOut={() => zoomCanvas(-0.1)}
           />
           <div
+            ref={artboardWrapRef}
             className="artboard-wrap"
             onWheel={(event) => {
               if (!event.ctrlKey && !event.metaKey) return;

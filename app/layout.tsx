@@ -5,7 +5,11 @@ import '../src/styles.css';
 
 export const metadata: Metadata = {
   title: 'Micrographic Creator',
-  description: 'A React and Base UI tool for generating dense micrographic layouts.',
+  description:
+    'Create dense technical graphics, launch visuals, README headers, wallpapers, and social assets as SVG or PNG.',
+  icons: {
+    icon: '/icon.svg',
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

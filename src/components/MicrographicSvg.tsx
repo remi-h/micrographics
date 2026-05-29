@@ -398,6 +398,14 @@ function GraphicSymbol({
 
   return (
     <g className="canvas-item" transform={`translate(${item.x} ${item.y}) rotate(${item.rotate})`} onPointerDown={onPointerDown}>
+      <rect
+        x={-half - 8}
+        y={-half - 8}
+        width={item.size + 16}
+        height={item.size + 16}
+        fill="transparent"
+        pointerEvents="all"
+      />
       {selected && (
         <rect
           x={-half - 8}
@@ -468,6 +476,14 @@ function GraphicText({
 
   return (
     <g className="canvas-item" transform={`translate(${item.x} ${item.y}) rotate(${item.rotate})`} onDoubleClick={onDoubleClick} onPointerDown={onPointerDown}>
+      <rect
+        x="-8"
+        y={-item.size - 10}
+        width={width + 16}
+        height={height}
+        fill="transparent"
+        pointerEvents="all"
+      />
       {selected && (
         <>
           <rect
