@@ -7,8 +7,13 @@ import { ControlPanel } from './components/ControlPanel';
 import { MicrographicSvg } from './components/MicrographicSvg';
 import { StageHeader } from './components/StageHeader';
 import { initialSettings, loadTemplateItems, palettes, symbolTabs, templates } from './data';
+import { loadEditorState, saveEditorState, type PersistedEditorState } from './persistence';
 import type { CanvasItem, CanvasSymbol, CanvasText, Settings, Template } from './types';
 import { clamp, downloadBlob } from './utils';
+
+// Long enough that dragging an item writes once the pointer settles rather
+// than on every pointer move, short enough to survive a quick reload.
+const SAVE_DEBOUNCE_MS = 400;
 
 type HistorySnapshot = {
   canvasItems: CanvasItem[];
@@ -27,7 +32,9 @@ function App() {
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [canvasZoom, setCanvasZoom] = useState(1);
   const [activeSymbolTab, setActiveSymbolTab] = useState(symbolTabs[0].id);
+  const [restored, setRestored] = useState(false);
   const clipboardRef = useRef<CanvasItem[]>([]);
+  const persistRef = useRef<PersistedEditorState>({ canvasItems, canvasZoom, settings });
   const stateRef = useRef<HistorySnapshot>({ canvasItems, selectedIds, settings });
   const artboardWrapRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -39,6 +46,41 @@ function App() {
   useEffect(() => {
     stateRef.current = { canvasItems, selectedIds, settings };
   }, [canvasItems, selectedIds, settings]);
+
+  // Restore after mount, not in a lazy state initializer: this component is
+  // server-rendered, and localStorage only exists on the client, so reading it
+  // during the first render would desync the two and trip a hydration error.
+  // The inline-script trick the Next docs use for flash-free persisted UI can
+  // pre-set a DOM attribute, but it cannot rebuild a canvas of SVG items.
+  useEffect(() => {
+    const saved = loadEditorState();
+    if (saved) {
+      setSettings(saved.settings);
+      setCanvasItems(saved.canvasItems);
+      setCanvasZoom(saved.canvasZoom);
+    }
+    setRestored(true);
+  }, []);
+
+  // Autosave. Only the artwork and its settings are persisted: selection, the
+  // undo/redo stacks and the clipboard are session state. Writes are debounced
+  // so a drag does not hit localStorage on every pointer move, and the pending
+  // write is flushed when the page goes away so a reload cannot outrun it.
+  useEffect(() => {
+    persistRef.current = { canvasItems, canvasZoom, settings };
+    if (!restored) return;
+
+    const timer = window.setTimeout(() => saveEditorState(persistRef.current), SAVE_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [canvasItems, canvasZoom, restored, settings]);
+
+  useEffect(() => {
+    if (!restored) return;
+
+    const flush = () => saveEditorState(persistRef.current);
+    window.addEventListener('pagehide', flush);
+    return () => window.removeEventListener('pagehide', flush);
+  }, [restored]);
 
   const currentSnapshot = (): HistorySnapshot => ({
     canvasItems: stateRef.current.canvasItems.map((item) => ({ ...item })),

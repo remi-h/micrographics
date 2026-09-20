@@ -75,6 +75,10 @@ npm run typecheck
   own background image.
 - Use the toolbar to randomize, restart the current template, undo/redo, and
   export SVG or PNG.
+- Your work is saved automatically in the browser, so closing the tab or
+  reloading brings the canvas, palette, and zoom back as you left them. Use
+  `Restart template` or `Start from scratch` in the toolbar to discard it. The
+  save is per browser and is skipped silently if the browser blocks storage.
 
 ## Stack
 
