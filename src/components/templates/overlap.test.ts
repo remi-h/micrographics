@@ -32,17 +32,40 @@ const SPARSE_MARKS = new Set(['semicircle', 'arch', 'world', 'worldmap', 'barcod
 // glyph's real footprint instead.
 function inkBounds(item: CanvasItem) {
   if (item.kind === 'symbol') return itemBounds(item);
+
   const lines = item.text.split('\n');
   const width = Math.max(...lines.map((line) => line.length)) * item.size * 0.62;
-  return { x: item.x, y: item.y - item.size, width, height: lines.length * item.size * 1.08 };
+  const height = lines.length * item.size * 1.08;
+  const box = { x: item.x, y: item.y - item.size, width, height };
+  if (!item.rotate) return box;
+
+  // Text renders inside a group rotated about (item.x, item.y), so the
+  // unrotated box above is wrong for side labels. Rotate its corners about
+  // the anchor and take the axis-aligned box around them.
+  const radians = (item.rotate * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const corners = [
+    [box.x, box.y],
+    [box.x + box.width, box.y],
+    [box.x, box.y + box.height],
+    [box.x + box.width, box.y + box.height],
+  ].map(([cx, cy]) => {
+    const dx = cx - item.x;
+    const dy = cy - item.y;
+    return [item.x + dx * cos - dy * sin, item.y + dx * sin + dy * cos];
+  });
+  const xs = corners.map(([cx]) => cx);
+  const ys = corners.map(([, cy]) => cy);
+  return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
 }
 
 describe('template layouts', () => {
   for (const [id, buildItems] of Object.entries(templateComponents)) {
     it(`template ${id} has no colliding items and no glyph outside the canvas`, () => {
       const items = buildItems();
-      const canvasCheckBounds = items.map((item) => ({ item, box: itemBounds(item) }));
-      const collisionBounds = items.map((item) => ({ item, box: inkBounds(item) }));
+      const canvasCheckBounds = items.map((item) => ({ item, box: inkBounds(item) }));
+      const collisionBounds = canvasCheckBounds;
 
       for (const { item, box } of canvasCheckBounds) {
         // The 'semicircle'/'arch' decorative background shapes are allowed to
