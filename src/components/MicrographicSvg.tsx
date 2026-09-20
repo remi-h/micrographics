@@ -1,9 +1,64 @@
-import { forwardRef, useRef, useState } from 'react';
+import { forwardRef, useEffect, useRef, useState } from 'react';
 import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalSpaceBetween, AlignVerticalSpaceBetween } from 'lucide-react';
 import type { MouseEvent, PointerEvent } from 'react';
 import { intersects, itemBounds } from '../canvasGeometry';
 import type { CanvasItem, CanvasSymbol, CanvasText, Palette, Settings } from '../types';
 import { MicroMark } from './MicroMark';
+
+type Box = { x: number; y: number; width: number; height: number };
+
+// Breathing room between the glyph and its selection outline, in canvas units.
+const SELECTION_PAD = 6;
+
+// A one-dimensional glyph (a rule, a hairline) measures zero on one axis, and a
+// zero-height outline would collapse onto the ink and put both handles in the
+// same place. Floor the outline so it stays grabbable.
+const MIN_SELECTION_SIZE = 20;
+
+// The selection outline is drawn from what the item actually renders, not from
+// an estimate of it. Estimates were wrong in both directions: symbol glyphs
+// don't fill their nominal 36-unit design box, and the text width formula
+// (chars * size * 0.62) ignores the letterSpacing="2" that <text> below
+// applies, so long strings overflowed their own outline to the right.
+function useInkBox<T extends SVGGraphicsElement>(active: boolean, deps: unknown[]) {
+  const ref = useRef<T | null>(null);
+  const [box, setBox] = useState<Box | null>(null);
+
+  useEffect(() => {
+    const node = ref.current;
+    // getBBox is unimplemented in jsdom and throws on an unrendered node.
+    if (!active || !node || typeof node.getBBox !== 'function') {
+      setBox(null);
+      return;
+    }
+
+    try {
+      const measured = node.getBBox();
+      if (measured.width === 0 && measured.height === 0) {
+        setBox(null);
+        return;
+      }
+      setBox({ x: measured.x, y: measured.y, width: measured.width, height: measured.height });
+    } catch {
+      setBox(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, ...deps]);
+
+  return [ref, box] as const;
+}
+
+// Grow a measured ink box into the outline that gets drawn around it.
+function selectionBox(ink: Box): Box {
+  const width = Math.max(ink.width + SELECTION_PAD * 2, MIN_SELECTION_SIZE);
+  const height = Math.max(ink.height + SELECTION_PAD * 2, MIN_SELECTION_SIZE);
+  return {
+    x: ink.x + ink.width / 2 - width / 2,
+    y: ink.y + ink.height / 2 - height / 2,
+    width,
+    height,
+  };
+}
 
 export const MicrographicSvg = forwardRef<SVGSVGElement, {
   items: CanvasItem[];
@@ -376,6 +431,21 @@ function GraphicSymbol({
 }) {
   const color = palette.ink;
   const half = item.size / 2;
+  const scale = item.size / 36;
+  const [glyphRef, glyphBox] = useInkBox<SVGGElement>(selected, [item.mark, item.size]);
+
+  // glyphBox is measured inside the glyph group, so it is in the mark's own
+  // 36-unit space and excludes the group's own transform. Map it through that
+  // same transform — scale(size/36) translate(-18 -18) — to reach item space.
+  const ink: Box = glyphBox
+    ? {
+        x: (glyphBox.x - 18) * scale,
+        y: (glyphBox.y - 18) * scale,
+        width: glyphBox.width * scale,
+        height: glyphBox.height * scale,
+      }
+    : { x: -half, y: -half, width: item.size, height: item.size };
+  const outline = selectionBox(ink);
 
   return (
     <g className="canvas-item" transform={`translate(${item.x} ${item.y}) rotate(${item.rotate})`} onPointerDown={onPointerDown}>
@@ -389,26 +459,31 @@ function GraphicSymbol({
       />
       {selected && (
         <rect
-          x={-half - 8}
-          y={-half - 8}
-          width={item.size + 16}
-          height={item.size + 16}
+          x={outline.x}
+          y={outline.y}
+          width={outline.width}
+          height={outline.height}
           fill="none"
           stroke={palette.accent}
           strokeDasharray="5 6"
           strokeWidth="2"
         />
       )}
-      <g transform={`scale(${item.size / 36}) translate(-18 -18)`}>
+      <g ref={glyphRef} transform={`scale(${scale}) translate(-18 -18)`}>
         <MicroMark color={color} mark={item.mark} x={18} y={18} />
       </g>
       {selected && (
         <>
-          <RotateHandle color={palette.accent} x={half + 8} y={-half - 8} onPointerDown={onRotatePointerDown} />
+          <RotateHandle
+            color={palette.accent}
+            x={outline.x + outline.width}
+            y={outline.y}
+            onPointerDown={onRotatePointerDown}
+          />
           <circle
             className="resize-handle"
-            cx={half + 8}
-            cy={half + 8}
+            cx={outline.x + outline.width}
+            cy={outline.y + outline.height}
             r="6"
             fill={palette.background}
             stroke={palette.accent}
@@ -454,6 +529,13 @@ function GraphicText({
   const height = lines.length * item.size * 1.08 + 22;
   const editorWidth = Math.max(width + 16, 180);
   const editorHeight = Math.max(height, 76);
+  const [textRef, textBox] = useInkBox<SVGTextElement>(selected && !editing, [item.text, item.size]);
+
+  // <text> sits at the item group's origin with no transform of its own, so a
+  // measured box is already in item space. The fallback is the old estimate,
+  // used only where measuring is unavailable (jsdom) or while editing.
+  const ink: Box = textBox ?? { x: 0, y: -item.size, width, height: lines.length * item.size * 1.08 };
+  const outline = selectionBox(ink);
 
   return (
     <g className="canvas-item" transform={`translate(${item.x} ${item.y}) rotate(${item.rotate})`} onDoubleClick={onDoubleClick} onPointerDown={onPointerDown}>
@@ -468,20 +550,25 @@ function GraphicText({
       {selected && (
         <>
           <rect
-            x="-8"
-            y={-item.size - 10}
-            width={width + 16}
-            height={height}
+            x={outline.x}
+            y={outline.y}
+            width={outline.width}
+            height={outline.height}
             fill="none"
             stroke={palette.accent}
             strokeDasharray="5 6"
             strokeWidth="2"
           />
-          <RotateHandle color={palette.accent} x={width + 8} y={-item.size - 10} onPointerDown={onRotatePointerDown} />
+          <RotateHandle
+            color={palette.accent}
+            x={outline.x + outline.width}
+            y={outline.y}
+            onPointerDown={onRotatePointerDown}
+          />
           <circle
             className="resize-handle"
-            cx={width + 8}
-            cy={-item.size - 10 + height}
+            cx={outline.x + outline.width}
+            cy={outline.y + outline.height}
             r="6"
             fill={palette.background}
             stroke={palette.accent}
@@ -525,6 +612,7 @@ function GraphicText({
         </foreignObject>
       ) : (
         <text
+          ref={textRef}
           fill={color}
           fontFamily="IBM Plex Mono, ui-monospace, monospace"
           fontSize={item.size}
