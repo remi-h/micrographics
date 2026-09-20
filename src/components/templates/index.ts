@@ -1,16 +1,20 @@
 import type { CanvasItem, Template } from '../../types';
-import { AmpersTemplate } from './AmpersTemplate';
-import { CoordinatesTemplate } from './CoordinatesTemplate';
-import { FormFunctionTemplate } from './FormFunctionTemplate';
-import { FunctionTemplate } from './FunctionTemplate';
-import { OpticalTemplate } from './OpticalTemplate';
-import { TenThousandTemplate } from './TenThousandTemplate';
+import { CareLabelTemplate } from './CareLabelTemplate';
+import { ExplodedTemplate } from './ExplodedTemplate';
+import { IndexPlateTemplate } from './IndexPlateTemplate';
+import { LevelsTemplate } from './LevelsTemplate';
+import { ManifestoTemplate } from './ManifestoTemplate';
+import { PlateTwoTemplate } from './PlateTwoTemplate';
+import { QuietTemplate } from './QuietTemplate';
+import { SurveyTemplate } from './SurveyTemplate';
 
 export const templateComponents: Record<Exclude<Template, 'blank'>, () => CanvasItem[]> = {
-  '006': CoordinatesTemplate,
-  '007': OpticalTemplate,
-  '008': FunctionTemplate,
-  '011': AmpersTemplate,
-  '012': TenThousandTemplate,
-  '013': FormFunctionTemplate,
+  '001': QuietTemplate,
+  '002': IndexPlateTemplate,
+  '003': PlateTwoTemplate,
+  '004': ManifestoTemplate,
+  '005': LevelsTemplate,
+  '006': CareLabelTemplate,
+  '007': SurveyTemplate,
+  '008': ExplodedTemplate,
 };
