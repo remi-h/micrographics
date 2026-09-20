@@ -1,14 +1,20 @@
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { Switch } from '@base-ui/react/switch';
 import { Toolbar } from '@base-ui/react/toolbar';
 import { Tooltip } from '@base-ui/react/tooltip';
 
+// Deliberately a group, not a <label>. These fields wrap several controls at
+// once (the symbol tabs plus their grid, the layer list), and clicking a
+// label's dead space forwards the click to its first labelable descendant.
+// That made a miss in the symbol grid re-click the first tab, and a miss in
+// the layer list select the top layer.
 export function Field({ children, label }: { children: ReactNode; label: string }) {
+  const labelId = useId();
   return (
-    <label className="field">
-      <span>{label}</span>
+    <div className="field" role="group" aria-labelledby={labelId}>
+      <span id={labelId}>{label}</span>
       {children}
-    </label>
+    </div>
   );
 }
 
