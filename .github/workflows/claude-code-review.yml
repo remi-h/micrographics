@@ -18,14 +18,7 @@ jobs:
           fetch-depth: 1
       - uses: anthropics/claude-code-action@v1
         with:
-          # Workload Identity Federation: exchanges this job's GitHub OIDC token for
-          # Claude API access via an Anthropic Console federation rule, so no static
-          # API key is stored as a repo secret. Fill these in from Console → Settings
-          # → Workload identity once the issuer, service account, and federation rule
-          # exist there (see setup notes in the PR/commit that added this).
-          anthropic_federation_rule_id: fdrl_TODO
-          anthropic_organization_id: 00000000-0000-0000-0000-000000000000
-          anthropic_service_account_id: svac_TODO
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
           plugins: "code-review@claude-code-plugins"
           prompt: "/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
