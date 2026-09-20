@@ -50,12 +50,14 @@ export const palettes: Palette[] = [
 ];
 
 export const templates: Array<{ id: Template; name: string }> = [
-  { id: '006', name: '006 Coordinates' },
-  { id: '007', name: '007 Optical' },
-  { id: '008', name: '008 Function' },
-  { id: '011', name: '011 Ampers' },
-  { id: '012', name: '012 Ten Thousand' },
-  { id: '013', name: '013 Form Function' },
+  { id: '001', name: '001 Quiet' },
+  { id: '002', name: '002 Index Plate' },
+  { id: '003', name: '003 Plate II' },
+  { id: '004', name: '004 Manifesto' },
+  { id: '005', name: '005 Levels' },
+  { id: '006', name: '006 Care Label' },
+  { id: '007', name: '007 Survey' },
+  { id: '008', name: '008 Exploded' },
 ];
 
 export const marks = [
@@ -155,7 +157,7 @@ export const symbolTabs = [
 ];
 
 export const initialSettings: Settings = {
-  template: '006',
+  template: '001',
   paletteIndex: 0,
   backgroundImage: null,
   grid: false,
