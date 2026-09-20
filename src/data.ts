@@ -50,14 +50,14 @@ export const palettes: Palette[] = [
 ];
 
 export const templates: Array<{ id: Template; name: string }> = [
-  { id: '001', name: '001 Platform Arch' },
-  { id: '002', name: '002 System Arch' },
-  { id: '003', name: '003 Global Dept' },
-  { id: '004', name: '004 Global Form' },
-  { id: '005', name: '005 Digital Labs' },
-  { id: '006', name: '006 Micro Labs' },
-  { id: '007', name: '007 Field Index' },
-  { id: '008', name: '008 Calibration Grid' },
+  { id: '001', name: '001 Transit Log' },
+  { id: '002', name: '002 Field Sample' },
+  { id: '003', name: '003 Material Spec' },
+  { id: '004', name: '004 Survey Chart' },
+  { id: '005', name: '005 Print Proof' },
+  { id: '006', name: '006 Frequency Band' },
+  { id: '007', name: '007 Assembly Guide' },
+  { id: '008', name: '008 Certification' },
 ];
 
 export const marks = [

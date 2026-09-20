@@ -1,20 +1,20 @@
 import type { CanvasItem, Template } from '../../types';
-import { CalibrationGridTemplate } from './CalibrationGridTemplate';
-import { DigitalLabsTemplate } from './DigitalLabsTemplate';
-import { FieldIndexTemplate } from './FieldIndexTemplate';
-import { GlobalDeptTemplate } from './GlobalDeptTemplate';
-import { GlobalFormTemplate } from './GlobalFormTemplate';
-import { MicroLabsTemplate } from './MicroLabsTemplate';
-import { PlatformArchTemplate } from './PlatformArchTemplate';
-import { SystemArchTemplate } from './SystemArchTemplate';
+import { AssemblyGuideTemplate } from './AssemblyGuideTemplate';
+import { CertificationTemplate } from './CertificationTemplate';
+import { FieldSampleTemplate } from './FieldSampleTemplate';
+import { FrequencyBandTemplate } from './FrequencyBandTemplate';
+import { MaterialSpecTemplate } from './MaterialSpecTemplate';
+import { PrintProofTemplate } from './PrintProofTemplate';
+import { SurveyChartTemplate } from './SurveyChartTemplate';
+import { TransitLogTemplate } from './TransitLogTemplate';
 
 export const templateComponents: Record<Exclude<Template, 'blank'>, () => CanvasItem[]> = {
-  '001': PlatformArchTemplate,
-  '002': SystemArchTemplate,
-  '003': GlobalDeptTemplate,
-  '004': GlobalFormTemplate,
-  '005': DigitalLabsTemplate,
-  '006': MicroLabsTemplate,
-  '007': FieldIndexTemplate,
-  '008': CalibrationGridTemplate,
+  '001': TransitLogTemplate,
+  '002': FieldSampleTemplate,
+  '003': MaterialSpecTemplate,
+  '004': SurveyChartTemplate,
+  '005': PrintProofTemplate,
+  '006': FrequencyBandTemplate,
+  '007': AssemblyGuideTemplate,
+  '008': CertificationTemplate,
 };
