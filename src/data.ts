@@ -152,8 +152,8 @@ export const aiToolMarks = [
 ];
 
 export const symbolTabs = [
-  { id: 'symbols', name: 'Symbols', marks },
-  { id: 'ai-tools', name: 'Tech', marks: aiToolMarks },
+  { id: 'daily', name: 'Daily', marks },
+  { id: 'tech', name: 'Tech', marks: aiToolMarks },
 ];
 
 export const initialSettings: Settings = {
