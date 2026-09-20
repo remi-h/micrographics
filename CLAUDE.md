@@ -1,6 +1,6 @@
 # Micrographics Creator — agent workflow
 
-Next.js 15 + React 19 + TypeScript app (see README.md for stack/setup).
+Next.js 16 + React 19 + TypeScript app (see README.md for stack/setup).
 
 ## Testing
 
@@ -10,6 +10,24 @@ Next.js 15 + React 19 + TypeScript app (see README.md for stack/setup).
 - Typecheck: `npm run typecheck`. `npm run build` also typechecks.
 - CI (`.github/workflows/ci.yml`) runs all of the above on every PR and on
   push to `main`. Treat a PR as mergeable only once CI is green.
+
+## Keep tests and docs current
+
+Every change ships with its tests and docs updated in the same PR — not as a
+follow-up. Specifically:
+
+- **Changed logic** → add or update its Jest test. **Changed user-visible
+  behavior or navigation** → add or update a Playwright test in `e2e/`.
+- **Added or edited a template** → `src/components/templates/overlap.test.ts`
+  covers every template in `templateComponents` automatically, so a new one is
+  tested the moment it is registered. Confirm it still passes, and render the
+  template in a browser too: that test catches collisions and off-canvas
+  items, not whether the design reads well.
+- **Changed what a control is called, where it lives, or what the app does** →
+  update `README.md` in the same change. Its "Basic Use" section names real
+  controls, so renaming or moving one makes that section wrong.
+- **Changed the stack, scripts, or workflow** → update this file and the
+  README's Setup/Testing sections to match.
 
 ## Fixing a GitHub issue end-to-end
 
