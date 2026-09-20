@@ -22,6 +22,12 @@ pnpm-debug.log*
 # typescript
 *.tsbuildinfo
 
+# testing
+/coverage/
+/playwright-report/
+/test-results/
+/blob-report/
+
 # system/editor
 .DS_Store
 .idea/
