@@ -1,16 +1,20 @@
 import type { CanvasItem, Template } from '../../types';
-import { AmpersTemplate } from './AmpersTemplate';
-import { CoordinatesTemplate } from './CoordinatesTemplate';
-import { FormFunctionTemplate } from './FormFunctionTemplate';
-import { FunctionTemplate } from './FunctionTemplate';
-import { OpticalTemplate } from './OpticalTemplate';
-import { TenThousandTemplate } from './TenThousandTemplate';
+import { CalibrationGridTemplate } from './CalibrationGridTemplate';
+import { DigitalLabsTemplate } from './DigitalLabsTemplate';
+import { FieldIndexTemplate } from './FieldIndexTemplate';
+import { GlobalDeptTemplate } from './GlobalDeptTemplate';
+import { GlobalFormTemplate } from './GlobalFormTemplate';
+import { MicroLabsTemplate } from './MicroLabsTemplate';
+import { PlatformArchTemplate } from './PlatformArchTemplate';
+import { SystemArchTemplate } from './SystemArchTemplate';
 
 export const templateComponents: Record<Exclude<Template, 'blank'>, () => CanvasItem[]> = {
-  '006': CoordinatesTemplate,
-  '007': OpticalTemplate,
-  '008': FunctionTemplate,
-  '011': AmpersTemplate,
-  '012': TenThousandTemplate,
-  '013': FormFunctionTemplate,
+  '001': PlatformArchTemplate,
+  '002': SystemArchTemplate,
+  '003': GlobalDeptTemplate,
+  '004': GlobalFormTemplate,
+  '005': DigitalLabsTemplate,
+  '006': MicroLabsTemplate,
+  '007': FieldIndexTemplate,
+  '008': CalibrationGridTemplate,
 };

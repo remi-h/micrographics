@@ -1,6 +1,7 @@
 import { forwardRef, useRef, useState } from 'react';
 import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalSpaceBetween, AlignVerticalSpaceBetween } from 'lucide-react';
 import type { MouseEvent, PointerEvent } from 'react';
+import { intersects, itemBounds } from '../canvasGeometry';
 import type { CanvasItem, CanvasSymbol, CanvasText, Palette, Settings } from '../types';
 import { MicroMark } from './MicroMark';
 
@@ -106,17 +107,6 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
     selectForPointerAction(event, item);
   };
 
-  const itemBounds = (item: CanvasItem) => {
-    if (item.kind === 'symbol') {
-      const half = item.size / 2;
-      return { x: item.x - half - 8, y: item.y - half - 8, width: item.size + 16, height: item.size + 16 };
-    }
-
-    const lines = item.text.split('\n');
-    const width = Math.max(90, Math.max(...lines.map((line) => line.length)) * item.size * 0.62) + 16;
-    return { x: item.x - 8, y: item.y - item.size - 10, width, height: lines.length * item.size * 1.08 + 22 };
-  };
-
   const selectedBounds = () => {
     const selectedItems = items.filter((item) => selectedIds.includes(item.id));
     if (selectedItems.length < 2) return null;
@@ -131,15 +121,6 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
       toolbarY: Math.max(16, top - 58),
     };
   };
-
-  const intersects = (
-    first: { x: number; y: number; width: number; height: number },
-    second: { x: number; y: number; width: number; height: number },
-  ) =>
-    first.x < second.x + second.width &&
-    first.x + first.width > second.x &&
-    first.y < second.y + second.height &&
-    first.y + first.height > second.y;
 
   const getMarqueeRect = (event: PointerEvent<SVGElement>) => {
     if (!marqueeRef.current) return null;

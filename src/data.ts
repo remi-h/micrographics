@@ -50,12 +50,14 @@ export const palettes: Palette[] = [
 ];
 
 export const templates: Array<{ id: Template; name: string }> = [
-  { id: '006', name: '006 Coordinates' },
-  { id: '007', name: '007 Optical' },
-  { id: '008', name: '008 Function' },
-  { id: '011', name: '011 Ampers' },
-  { id: '012', name: '012 Ten Thousand' },
-  { id: '013', name: '013 Form Function' },
+  { id: '001', name: '001 Platform Arch' },
+  { id: '002', name: '002 System Arch' },
+  { id: '003', name: '003 Global Dept' },
+  { id: '004', name: '004 Global Form' },
+  { id: '005', name: '005 Digital Labs' },
+  { id: '006', name: '006 Micro Labs' },
+  { id: '007', name: '007 Field Index' },
+  { id: '008', name: '008 Calibration Grid' },
 ];
 
 export const marks = [
@@ -155,7 +157,7 @@ export const symbolTabs = [
 ];
 
 export const initialSettings: Settings = {
-  template: '006',
+  template: '001',
   paletteIndex: 0,
   backgroundImage: null,
   grid: false,
