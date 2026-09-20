@@ -43,6 +43,28 @@ input {
   background: #171717;
 }
 
+@keyframes landingFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes landingHeroDrift {
+  from {
+    background-position: center, center, 50% 50%;
+  }
+
+  to {
+    background-position: center, center, 52% 48%;
+  }
+}
+
 .landing-hero {
   min-height: 94svh;
   display: grid;
@@ -52,6 +74,7 @@ input {
     linear-gradient(90deg, rgba(13, 13, 13, 0.92) 0%, rgba(13, 13, 13, 0.72) 39%, rgba(13, 13, 13, 0.18) 100%),
     linear-gradient(0deg, rgba(23, 23, 23, 0.96), rgba(23, 23, 23, 0.08) 32%),
     url('/landing-hero.png') center / cover no-repeat;
+  animation: landingHeroDrift 18s ease-in-out infinite alternate;
 }
 
 .landing-nav {
@@ -69,6 +92,7 @@ input {
   border: 1px solid rgba(244, 240, 232, 0.12);
   border-radius: 10px;
   background: rgba(13, 13, 13, 0.88);
+  transition: border-color 180ms ease, background-color 180ms ease;
 }
 
 .landing-logo,
@@ -89,6 +113,12 @@ input {
   width: 34px;
   height: 34px;
   border-radius: 6px;
+  transition: transform 180ms ease;
+}
+
+.landing-logo:hover svg,
+.landing-logo:focus-visible svg {
+  transform: rotate(-4deg) scale(1.04);
 }
 
 .landing-nav-links {
@@ -128,6 +158,7 @@ input {
   width: min(1180px, 100%);
   margin: 0 auto;
   padding-top: 24vh;
+  animation: landingFadeUp 620ms ease both;
 }
 
 .landing-kicker {
@@ -174,11 +205,13 @@ input {
   font-size: 13px;
   font-weight: 900;
   backdrop-filter: blur(10px);
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
 }
 
 .landing-button:hover,
 .landing-button:focus-visible {
   border-color: #f4f0e8;
+  transform: translateY(-1px);
   outline: none;
 }
 
@@ -186,6 +219,11 @@ input {
   border-color: #f4f0e8;
   color: #171717;
   background: #f4f0e8;
+}
+
+.landing-button-primary:hover,
+.landing-button-primary:focus-visible {
+  box-shadow: 0 10px 28px rgba(85, 240, 220, 0.16);
 }
 
 .landing-proof {
@@ -203,6 +241,15 @@ input {
   background: rgba(23, 23, 23, 0.42);
   font-size: 12px;
   font-weight: 800;
+  animation: landingFadeUp 520ms ease both;
+}
+
+.landing-proof span:nth-child(2) {
+  animation-delay: 80ms;
+}
+
+.landing-proof span:nth-child(3) {
+  animation-delay: 160ms;
 }
 
 .landing-section {
@@ -461,6 +508,17 @@ input {
   .landing-intro h2,
   .landing-pricing h2 {
     font-size: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
   }
 }
 
