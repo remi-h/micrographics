@@ -17,6 +17,9 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: {
+          // Optional override for sandboxes with a pre-installed Chromium build that
+          // doesn't match the pinned @playwright/test version. Unset in CI, where
+          // `npx playwright install --with-deps chromium` provides a matching binary.
           executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH,
         },
       },
