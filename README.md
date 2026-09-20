@@ -40,6 +40,26 @@ Run the production server after building:
 npm run start
 ```
 
+## Testing
+
+Run unit tests (Jest + React Testing Library):
+
+```bash
+npm run test
+```
+
+Run end-to-end tests (Playwright):
+
+```bash
+npm run test:e2e
+```
+
+Typecheck the project:
+
+```bash
+npm run typecheck
+```
+
 ## Basic Use
 
 - Pick a layout template in the `Layout` tab.
