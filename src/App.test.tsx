@@ -76,3 +76,53 @@ describe('App scroll-to-selection', () => {
     expect(scrollTo).not.toHaveBeenCalled();
   });
 });
+
+// Ids are internal, but a collision is not: every operation finds its item by
+// id, so two items sharing one makes the editor act on the wrong item. This
+// exercises the consequence rather than the string — with the old
+// `${kind}-${Date.now()}` ids, both symbols below take the same id and the
+// delete lands on the wrong one.
+describe('App item ids', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    // Modern fake timers freeze Date.now, so both adds land in one millisecond.
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('deletes only the selected one of two symbols added in the same millisecond', () => {
+    const { container } = render(<App />);
+    // The row's leading number is its position in the stack, which shifts as
+    // items come and go; the rest of the label names the item.
+    const labels = () =>
+      Array.from(container.querySelectorAll('.layer-row')).map((row) => (row.textContent ?? '').replace(/^\d+/, ''));
+    const occurrences = (label: string) => labels().filter((entry) => entry === label).length;
+    const before = labels().length;
+
+    const symbolButtons = container.querySelectorAll('.symbol-button');
+    expect(symbolButtons.length).toBeGreaterThan(1);
+
+    act(() => {
+      fireEvent.click(symbolButtons[0]);
+      fireEvent.click(symbolButtons[1]);
+    });
+
+    expect(labels().length).toBe(before + 2);
+    // The layer list is newest first, so [0] is the second symbol — the one
+    // adding left selected — and [1] is the first.
+    const [selectedLabel, keptLabel] = labels();
+    const selectedBefore = occurrences(selectedLabel);
+    const keptBefore = occurrences(keptLabel);
+
+    act(() => {
+      fireEvent.keyDown(window, { key: 'Delete' });
+    });
+
+    expect(labels().length).toBe(before + 1);
+    expect(occurrences(selectedLabel)).toBe(selectedBefore - 1);
+    expect(occurrences(keptLabel)).toBe(keptBefore);
+  });
+});

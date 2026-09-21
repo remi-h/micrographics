@@ -15,6 +15,7 @@ import {
   exportPixelSize,
   type ExportScale,
 } from './exportMarkup';
+import { createItemId } from './itemIds';
 import { loadEditorState, saveEditorState, type PersistedEditorState } from './persistence';
 import type { CanvasItem, CanvasSymbol, CanvasText, Settings, Template } from './types';
 import { clamp, downloadBlob } from './utils';
@@ -273,7 +274,7 @@ function App() {
     const size = 42;
     const position = findOpenPosition(size + 20, size + 20);
     const item: CanvasSymbol = {
-      id: `symbol-${Date.now()}`,
+      id: createItemId('symbol'),
       kind: 'symbol',
       x: position.x + position.width / 2,
       y: position.y + position.height / 2,
@@ -295,7 +296,7 @@ function App() {
     const height = size + 22;
     const position = findOpenPosition(width, height);
     const item: CanvasText = {
-      id: `text-${Date.now()}`,
+      id: createItemId('text'),
       kind: 'text',
       x: position.x + 8,
       y: position.y + size + 10,
@@ -393,9 +394,9 @@ function App() {
   };
 
   const duplicateItems = (items: CanvasItem[]) =>
-    items.map((item, index) => ({
+    items.map((item) => ({
       ...item,
-      id: `${item.kind}-${Date.now()}-${index}`,
+      id: createItemId(item.kind),
       x: clamp(item.x + 28, 52, 1148),
       y: clamp(item.y + 28, 48, 752),
     }));
