@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Tooltip } from '@base-ui/react/tooltip';
+import { hitBounds } from './canvasGeometry';
 import { AssetPanel } from './components/AssetPanel';
 import { ControlPanel } from './components/ControlPanel';
 import { ExportStatus, type ExportStatusMessage } from './components/ExportStatus';
@@ -29,23 +30,21 @@ function reason(error: unknown) {
   return error instanceof Error && error.message ? error.message : 'an unknown error';
 }
 
+// Auto-placement and align/distribute work from the same padded interaction
+// box the pointer uses, so the gap the user sees when dragging an item next to
+// another is the gap the app leaves when it places one for them.
+//
+// This file used to carry its own copy of that box with a 10-unit symbol pad
+// against canvasGeometry's 8, so placement and hit-testing disagreed by two
+// units on every symbol. 8 is the one that is true: MicrographicSvg draws the
+// symbol's hit rect at (-size/2 - 8, size + 16), so 8 is a measurable fact
+// about the rendered canvas, while the 10 matched nothing on screen. Adopting
+// it lets newly added items sit two units closer to existing symbols.
+//
 // Pure geometry, so it lives outside the component: nothing here reads state,
 // which lets effects call it without listing it as a dependency.
-function itemBounds(item: CanvasItem) {
-  if (item.kind === 'symbol') {
-    const pad = 10;
-    return { x: item.x - item.size / 2 - pad, y: item.y - item.size / 2 - pad, width: item.size + pad * 2, height: item.size + pad * 2 };
-  }
-  if (item.kind === 'text') {
-    const lines = item.text.split('\n');
-    const width = Math.max(90, Math.max(...lines.map((line) => line.length)) * item.size * 0.62);
-    return { x: item.x - 8, y: item.y - item.size - 10, width: width + 16, height: lines.length * item.size * 1.08 + 22 };
-  }
-  return { x: 0, y: 0, width: 0, height: 0 };
-}
-
 function visualCenter(item: CanvasItem) {
-  const bounds = itemBounds(item);
+  const bounds = hitBounds(item);
   return {
     x: bounds.x + bounds.width / 2,
     y: bounds.y + bounds.height / 2,
@@ -225,7 +224,7 @@ function App() {
   };
 
   const findOpenPosition = (width: number, height: number) => {
-    const existing = canvasItems.map(itemBounds);
+    const existing = canvasItems.map(hitBounds);
     const overlaps = (candidate: { x: number; y: number; width: number; height: number }) =>
       existing.some((item) =>
         candidate.x < item.x + item.width &&

@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useRef, useState } from 'react';
 import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalSpaceBetween, AlignVerticalSpaceBetween } from 'lucide-react';
 import type { MouseEvent, PointerEvent } from 'react';
-import { intersects, itemBounds } from '../canvasGeometry';
+import { hitBounds, intersects } from '../canvasGeometry';
 import type { CanvasItem, CanvasSymbol, CanvasText, Palette, Settings } from '../types';
 import { MicroMark } from './MicroMark';
 
@@ -171,7 +171,7 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
     const selectedItems = items.filter((item) => selectedIds.includes(item.id));
     if (selectedItems.length < 2) return null;
 
-    const bounds = selectedItems.map(itemBounds);
+    const bounds = selectedItems.map(hitBounds);
     const left = Math.min(...bounds.map((item) => item.x));
     const top = Math.min(...bounds.map((item) => item.y));
     const right = Math.max(...bounds.map((item) => item.x + item.width));
@@ -213,7 +213,7 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
       const rect = getMarqueeRect(event);
       if (!rect) return;
       setMarqueeRect(rect);
-      const ids = items.filter((item) => intersects(rect, itemBounds(item))).map((item) => item.id);
+      const ids = items.filter((item) => intersects(rect, hitBounds(item))).map((item) => item.id);
       onSelectItems(marqueeRef.current.additive ? Array.from(new Set([...selectedIds, ...ids])) : ids);
       return;
     }
@@ -283,7 +283,7 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
     const point = getSvgPoint(event);
     const ids = selectedIds.includes(item.id) ? selectedIds : [item.id];
     const selectedItems = items.filter((entry) => ids.includes(entry.id));
-    const bounds = selectedItems.map(itemBounds);
+    const bounds = selectedItems.map(hitBounds);
     const left = Math.min(...bounds.map((entry) => entry.x));
     const top = Math.min(...bounds.map((entry) => entry.y));
     const right = Math.max(...bounds.map((entry) => entry.x + entry.width));

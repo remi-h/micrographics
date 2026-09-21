@@ -1,5 +1,4 @@
-import { intersects, itemBounds } from '../../canvasGeometry';
-import type { CanvasItem } from '../../types';
+import { inkBounds, intersects } from '../../canvasGeometry';
 import { templateComponents } from './index';
 
 const CANVAS = { x: 0, y: 0, width: 1200, height: 800 };
@@ -23,42 +22,6 @@ const OVERLAP_THRESHOLD = 0.15;
 // - 'barcode'/'badge': both draw a thin shape (16 of 36 local units tall)
 //   inside a full square bounding box, well short of its edges.
 const SPARSE_MARKS = new Set(['semicircle', 'arch', 'world', 'worldmap', 'barcode', 'badge']);
-
-// itemBounds() is the editor's interactive click/selection target, padded and
-// floored at a 90-unit minimum width so short strings stay easy to grab with
-// a mouse. That floor makes short all-caps labels like "XIV" or "CE" look far
-// wider than their actual glyphs, which would make this test flag adjacent
-// icons that don't really touch on screen. For collision purposes we want the
-// glyph's real footprint instead.
-function inkBounds(item: CanvasItem) {
-  if (item.kind === 'symbol') return itemBounds(item);
-
-  const lines = item.text.split('\n');
-  const width = Math.max(...lines.map((line) => line.length)) * item.size * 0.62;
-  const height = lines.length * item.size * 1.08;
-  const box = { x: item.x, y: item.y - item.size, width, height };
-  if (!item.rotate) return box;
-
-  // Text renders inside a group rotated about (item.x, item.y), so the
-  // unrotated box above is wrong for side labels. Rotate its corners about
-  // the anchor and take the axis-aligned box around them.
-  const radians = (item.rotate * Math.PI) / 180;
-  const cos = Math.cos(radians);
-  const sin = Math.sin(radians);
-  const corners = [
-    [box.x, box.y],
-    [box.x + box.width, box.y],
-    [box.x, box.y + box.height],
-    [box.x + box.width, box.y + box.height],
-  ].map(([cx, cy]) => {
-    const dx = cx - item.x;
-    const dy = cy - item.y;
-    return [item.x + dx * cos - dy * sin, item.y + dx * sin + dy * cos];
-  });
-  const xs = corners.map(([cx]) => cx);
-  const ys = corners.map(([, cy]) => cy);
-  return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
-}
 
 describe('template layouts', () => {
   for (const [id, buildItems] of Object.entries(templateComponents)) {
