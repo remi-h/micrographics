@@ -12,8 +12,8 @@ import type { CanvasItem } from './types';
 const palette = palettes[0];
 
 const canvasItems: CanvasItem[] = [
-  { id: 'symbol-1', kind: 'symbol', mark: 'orbit', rotate: 15, size: 42, tone: 0.9, x: 100, y: 200 },
-  { id: 'text-1', kind: 'text', rotate: 0, size: 42, text: 'MICRO', tone: 0.82, x: 300, y: 400 },
+  { id: 'symbol-1', kind: 'symbol', mark: 'orbit', rotate: 15, size: 42, x: 100, y: 200 },
+  { id: 'text-1', kind: 'text', rotate: 0, size: 42, text: 'MICRO', x: 300, y: 400 },
 ];
 
 const settings = { ...initialSettings, grid: true, showBackground: true };

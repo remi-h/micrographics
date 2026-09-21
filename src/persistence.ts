@@ -62,22 +62,26 @@ function parseSettings(value: unknown): Settings | null {
   };
 }
 
+// Only the fields the current shape defines are read, and the item is rebuilt
+// from them: a save written by an older version carrying fields that no longer
+// exist (such as the removed per-item `tone`) still restores, minus those
+// fields, rather than being thrown away with the rest of the canvas.
 function parseCanvasItem(value: unknown): CanvasItem | null {
   if (!isRecord(value)) return null;
 
-  const { id, kind, rotate, size, tone, x, y } = value;
+  const { id, kind, rotate, size, x, y } = value;
   if (typeof id !== 'string' || id.length === 0) return null;
-  if (!isFiniteNumber(rotate) || !isFiniteNumber(size) || !isFiniteNumber(tone)) return null;
+  if (!isFiniteNumber(rotate) || !isFiniteNumber(size)) return null;
   if (!isFiniteNumber(x) || !isFiniteNumber(y)) return null;
 
   if (kind === 'symbol') {
     if (typeof value.mark !== 'string' || value.mark.length === 0) return null;
-    return { id, kind, mark: value.mark, rotate, size, tone, x, y };
+    return { id, kind, mark: value.mark, rotate, size, x, y };
   }
 
   if (kind === 'text') {
     if (typeof value.text !== 'string') return null;
-    return { id, kind, rotate, size, text: value.text, tone, x, y };
+    return { id, kind, rotate, size, text: value.text, x, y };
   }
 
   return null;

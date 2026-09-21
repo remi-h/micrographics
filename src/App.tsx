@@ -281,7 +281,6 @@ function App() {
       size,
       rotate: 0,
       mark,
-      tone: 0.9,
     };
     setCanvasItems((current) => [...current, item]);
     setSelectedIds([item.id]);
@@ -303,7 +302,6 @@ function App() {
       rotate: 0,
       size,
       text,
-      tone: 0.82,
     };
     setCanvasItems((current) => [...current, item]);
     setSelectedIds([item.id]);

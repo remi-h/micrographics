@@ -3,8 +3,8 @@ import { STORAGE_KEY, STORAGE_VERSION, loadEditorState, saveEditorState, type Pe
 import type { CanvasItem } from './types';
 
 const canvasItems: CanvasItem[] = [
-  { id: 'symbol-1', kind: 'symbol', mark: 'ring', rotate: 15, size: 42, tone: 0.9, x: 100, y: 200 },
-  { id: 'text-1', kind: 'text', rotate: 0, size: 42, text: 'MICRO', tone: 0.82, x: 300, y: 400 },
+  { id: 'symbol-1', kind: 'symbol', mark: 'ring', rotate: 15, size: 42, x: 100, y: 200 },
+  { id: 'text-1', kind: 'text', rotate: 0, size: 42, text: 'MICRO', x: 300, y: 400 },
 ];
 
 const state: PersistedEditorState = {
@@ -83,6 +83,45 @@ describe('saveEditorState / loadEditorState', () => {
       writeRaw(JSON.stringify({ version: STORAGE_VERSION, settings: state.settings, canvasItems: items }));
       expect(loadEditorState()).toBeNull();
     }
+  });
+
+  it('restores a save written before a field was removed from the item shape', () => {
+    // The shape of a save from before per-item `tone` was removed, written out
+    // by hand so this test keeps describing the old save even as the current
+    // types move on. The canvas must come back, not be discarded as malformed.
+    const legacyItems = [
+      { id: 'symbol-1', kind: 'symbol', mark: 'ring', rotate: 15, size: 42, tone: 0.9, x: 100, y: 200 },
+      { id: 'text-1', kind: 'text', rotate: 0, size: 42, text: 'MICRO', tone: 0.82, x: 300, y: 400 },
+    ];
+    writeRaw(
+      JSON.stringify({
+        version: STORAGE_VERSION,
+        settings: state.settings,
+        canvasItems: legacyItems,
+        canvasZoom: 1.5,
+      }),
+    );
+
+    const restored = loadEditorState();
+
+    expect(restored).toEqual(state);
+    // The dead field is dropped rather than carried forward into the editor.
+    for (const item of restored?.canvasItems ?? []) {
+      expect(item).not.toHaveProperty('tone');
+    }
+  });
+
+  it('restores a save whose items carry unknown extra fields', () => {
+    writeRaw(
+      JSON.stringify({
+        version: STORAGE_VERSION,
+        settings: state.settings,
+        canvasItems: canvasItems.map((item) => ({ ...item, somethingNew: 'ignored' })),
+        canvasZoom: 1.5,
+      }),
+    );
+
+    expect(loadEditorState()).toEqual(state);
   });
 
   it('clamps an out-of-range zoom instead of discarding the save', () => {

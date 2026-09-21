@@ -2,11 +2,11 @@ import { hitBounds, inkBounds, intersects } from './canvasGeometry';
 import type { CanvasSymbol, CanvasText } from './types';
 
 function symbol(overrides: Partial<CanvasSymbol> = {}): CanvasSymbol {
-  return { id: 's1', kind: 'symbol', mark: 'star', rotate: 0, size: 42, tone: 0.9, x: 100, y: 100, ...overrides };
+  return { id: 's1', kind: 'symbol', mark: 'star', rotate: 0, size: 42, x: 100, y: 100, ...overrides };
 }
 
 function text(overrides: Partial<CanvasText> = {}): CanvasText {
-  return { id: 't1', kind: 'text', rotate: 0, size: 50, text: 'MICRO', tone: 0.82, x: 200, y: 300, ...overrides };
+  return { id: 't1', kind: 'text', rotate: 0, size: 50, text: 'MICRO', x: 200, y: 300, ...overrides };
 }
 
 function expectBox(actual: { x: number; y: number; width: number; height: number }, expected: number[]) {

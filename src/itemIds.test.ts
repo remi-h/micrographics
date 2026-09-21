@@ -74,7 +74,6 @@ describe('createItemId', () => {
       mark: 'ring',
       rotate: 0,
       size: 42,
-      tone: 0.9,
       x: 100,
       y: 100,
     });

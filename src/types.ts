@@ -6,7 +6,6 @@ export type Palette = {
   ink: string;
   muted: string;
   accent: string;
-  second: string;
   paper: string;
 };
 
@@ -24,7 +23,6 @@ export type CanvasText = {
   rotate: number;
   size: number;
   text: string;
-  tone: number;
   x: number;
   y: number;
 };
@@ -35,7 +33,6 @@ export type CanvasSymbol = {
   mark: string;
   rotate: number;
   size: number;
-  tone: number;
   x: number;
   y: number;
 };
