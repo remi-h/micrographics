@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import { BrandIcon } from './components/BrandIcon';
 
 const useCases = [
@@ -113,7 +114,13 @@ export default function LandingPage() {
             {examples.map((example, index) => (
               <article className="landing-example" key={example.name}>
                 <div className="landing-example-art" data-variant={index} aria-hidden="true">
-                  {example.image ? <img src={example.image} alt="" /> : <span>{example.placeholder}</span>}
+                  {example.image ? (
+                    // `fill` because the art frame already sets the aspect ratio and
+                    // `.landing-example-art img` in styles.css does the object-fit.
+                    <Image src={example.image} alt="" fill sizes="(max-width: 900px) 100vw, 33vw" />
+                  ) : (
+                    <span>{example.placeholder}</span>
+                  )}
                 </div>
                 <h3>{example.name}</h3>
                 <p>{example.tone}</p>

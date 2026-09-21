@@ -4,75 +4,145 @@ import { useEffect, useRef, useState } from 'react';
 import { Tooltip } from '@base-ui/react/tooltip';
 import { AssetPanel } from './components/AssetPanel';
 import { ControlPanel } from './components/ControlPanel';
+import { ExportStatus } from './components/ExportStatus';
 import { MicrographicSvg } from './components/MicrographicSvg';
 import { StageHeader } from './components/StageHeader';
 import { initialSettings, loadTemplateItems, palettes, symbolTabs, templates } from './data';
-import type { CanvasItem, CanvasSymbol, CanvasText, Settings, Template } from './types';
-import { clamp, downloadBlob } from './utils';
+import { loadEditorState, saveEditorState, type PersistedEditorState } from './persistence';
+import type { CanvasItem, Settings, Template } from './types';
+import { useCanvasItems, visualCenter } from './useCanvasItems';
+import { useExport } from './useExport';
+import { useHistory } from './useHistory';
+import { useKeyboardShortcuts } from './useKeyboardShortcuts';
+import { clamp } from './utils';
 
-type HistorySnapshot = {
-  canvasItems: CanvasItem[];
-  selectedIds: string[];
-  settings: Settings;
-};
+// Long enough that dragging an item writes once the pointer settles rather
+// than on every pointer move, short enough to survive a quick reload.
+const SAVE_DEBOUNCE_MS = 400;
 
 function App() {
   const [settings, setSettings] = useState<Settings>(initialSettings);
   const [canvasItems, setCanvasItems] = useState<CanvasItem[]>(() => loadTemplateItems(initialSettings.template));
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [undoStack, setUndoStack] = useState<HistorySnapshot[]>([]);
-  const [redoStack, setRedoStack] = useState<HistorySnapshot[]>([]);
-  const [textDraft, setTextDraft] = useState('MICRO');
-  const [editingTextDraft, setEditingTextDraft] = useState('');
-  const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [canvasZoom, setCanvasZoom] = useState(1);
   const [activeSymbolTab, setActiveSymbolTab] = useState(symbolTabs[0].id);
-  const clipboardRef = useRef<CanvasItem[]>([]);
-  const stateRef = useRef<HistorySnapshot>({ canvasItems, selectedIds, settings });
+  const [restored, setRestored] = useState(false);
+  const persistRef = useRef<PersistedEditorState>({ canvasItems, canvasZoom, settings });
+  const { beginHistoryAction, redo, stateRef, undo } = useHistory({
+    canvasItems,
+    selectedIds,
+    settings,
+    setCanvasItems,
+    setSelectedIds,
+    setSettings,
+  });
   const artboardWrapRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  // Measured from the refs above, so it stays with the layout that owns them
+  // and is handed to useCanvasItems, which places new items inside it.
+  const visibleCanvasRect = () => {
+    const wrap = artboardWrapRef.current;
+    const svg = svgRef.current;
+    if (!wrap || !svg) return null;
+
+    const wrapRect = wrap.getBoundingClientRect();
+    const svgRect = svg.getBoundingClientRect();
+    if (svgRect.width === 0 || svgRect.height === 0) return null;
+
+    const left = Math.max(wrapRect.left, svgRect.left);
+    const top = Math.max(wrapRect.top, svgRect.top);
+    const right = Math.min(wrapRect.right, svgRect.right);
+    const bottom = Math.min(wrapRect.bottom, svgRect.bottom);
+    if (right <= left || bottom <= top) return null;
+
+    return {
+      x: clamp(((left - svgRect.left) / svgRect.width) * 1200, 0, 1200),
+      y: clamp(((top - svgRect.top) / svgRect.height) * 800, 0, 800),
+      width: clamp(((right - left) / svgRect.width) * 1200, 0, 1200),
+      height: clamp(((bottom - top) / svgRect.height) * 800, 0, 800),
+    };
+  };
+
+  const {
+    addSymbol,
+    addText,
+    alignSelected,
+    beginTextEdit,
+    cancelTextEdit,
+    commitTextEdit,
+    copySelected,
+    cutSelected,
+    distributeSelected,
+    duplicateSelected,
+    editingTextDraft,
+    editingTextId,
+    moveItem,
+    nudgeSelected,
+    pasteClipboard,
+    removeSelected,
+    rotateItems,
+    scaleItems,
+    selectItem,
+    setEditingTextDraft,
+    setTextDraft,
+    textDraft,
+  } = useCanvasItems({
+    beginHistoryAction,
+    canvasItems,
+    selectedIds,
+    setCanvasItems,
+    setSelectedIds,
+    visibleCanvasRect,
+  });
   const palette = palettes[settings.paletteIndex];
+  const { exportPng, exportScale, exportStatus, exportSvg, setExportScale } = useExport({
+    canvasItems,
+    palette,
+    settings,
+  });
   const selectedTemplateName =
     settings.template === 'blank' ? 'Start from scratch' : templates.find((item) => item.id === settings.template)?.name;
   const activeSymbolMarks = symbolTabs.find((tab) => tab.id === activeSymbolTab)?.marks ?? symbolTabs[0].marks;
 
+  // Restore after mount, not in a lazy state initializer: this component is
+  // server-rendered, and localStorage only exists on the client, so reading it
+  // during the first render would desync the two and trip a hydration error.
+  // The inline-script trick the Next docs use for flash-free persisted UI can
+  // pre-set a DOM attribute, but it cannot rebuild a canvas of SVG items.
+  // react-hooks/set-state-in-effect is suppressed rather than obeyed here for
+  // that reason: localStorage is an external store that only exists after
+  // mount, so the one cascading render this causes is the price of correct
+  // hydration. It runs once, on mount, not on every render.
   useEffect(() => {
-    stateRef.current = { canvasItems, selectedIds, settings };
-  }, [canvasItems, selectedIds, settings]);
+    const saved = loadEditorState();
+    if (saved) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
+      setSettings(saved.settings);
+      setCanvasItems(saved.canvasItems);
+      setCanvasZoom(saved.canvasZoom);
+    }
+    setRestored(true);
+  }, []);
 
-  const currentSnapshot = (): HistorySnapshot => ({
-    canvasItems: stateRef.current.canvasItems.map((item) => ({ ...item })),
-    selectedIds: [...stateRef.current.selectedIds],
-    settings: { ...stateRef.current.settings },
-  });
+  // Autosave. Only the artwork and its settings are persisted: selection, the
+  // undo/redo stacks and the clipboard are session state. Writes are debounced
+  // so a drag does not hit localStorage on every pointer move, and the pending
+  // write is flushed when the page goes away so a reload cannot outrun it.
+  useEffect(() => {
+    persistRef.current = { canvasItems, canvasZoom, settings };
+    if (!restored) return;
 
-  const beginHistoryAction = () => {
-    const snapshot = currentSnapshot();
-    setUndoStack((current) => [...current.slice(-49), snapshot]);
-    setRedoStack([]);
-  };
+    const timer = window.setTimeout(() => saveEditorState(persistRef.current), SAVE_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [canvasItems, canvasZoom, restored, settings]);
 
-  const restoreSnapshot = (snapshot: HistorySnapshot) => {
-    setSettings(snapshot.settings);
-    setCanvasItems(snapshot.canvasItems);
-    setSelectedIds(snapshot.selectedIds);
-  };
+  useEffect(() => {
+    if (!restored) return;
 
-  const undo = () => {
-    if (undoStack.length === 0) return;
-    const previous = undoStack[undoStack.length - 1];
-    setUndoStack((current) => current.slice(0, -1));
-    setRedoStack((current) => [...current.slice(-49), currentSnapshot()]);
-    restoreSnapshot(previous);
-  };
-
-  const redo = () => {
-    if (redoStack.length === 0) return;
-    const next = redoStack[redoStack.length - 1];
-    setRedoStack((current) => current.slice(0, -1));
-    setUndoStack((current) => [...current.slice(-49), currentSnapshot()]);
-    restoreSnapshot(next);
-  };
+    const flush = () => saveEditorState(persistRef.current);
+    window.addEventListener('pagehide', flush);
+    return () => window.removeEventListener('pagehide', flush);
+  }, [restored]);
 
   const update = <K extends keyof Settings>(key: K, value: Settings[K]) => {
     beginHistoryAction();
@@ -114,261 +184,19 @@ function App() {
     setSelectedIds([]);
   };
 
-  const itemBounds = (item: CanvasItem) => {
-    if (item.kind === 'symbol') {
-      const pad = 10;
-      return { x: item.x - item.size / 2 - pad, y: item.y - item.size / 2 - pad, width: item.size + pad * 2, height: item.size + pad * 2 };
-    }
-    if (item.kind === 'text') {
-      const lines = item.text.split('\n');
-      const width = Math.max(90, Math.max(...lines.map((line) => line.length)) * item.size * 0.62);
-      return { x: item.x - 8, y: item.y - item.size - 10, width: width + 16, height: lines.length * item.size * 1.08 + 22 };
-    }
-    return { x: 0, y: 0, width: 0, height: 0 };
-  };
-
-  const visibleCanvasRect = () => {
-    const wrap = artboardWrapRef.current;
-    const svg = svgRef.current;
-    if (!wrap || !svg) return null;
-
-    const wrapRect = wrap.getBoundingClientRect();
-    const svgRect = svg.getBoundingClientRect();
-    if (svgRect.width === 0 || svgRect.height === 0) return null;
-
-    const left = Math.max(wrapRect.left, svgRect.left);
-    const top = Math.max(wrapRect.top, svgRect.top);
-    const right = Math.min(wrapRect.right, svgRect.right);
-    const bottom = Math.min(wrapRect.bottom, svgRect.bottom);
-    if (right <= left || bottom <= top) return null;
-
-    return {
-      x: clamp(((left - svgRect.left) / svgRect.width) * 1200, 0, 1200),
-      y: clamp(((top - svgRect.top) / svgRect.height) * 800, 0, 800),
-      width: clamp(((right - left) / svgRect.width) * 1200, 0, 1200),
-      height: clamp(((bottom - top) / svgRect.height) * 800, 0, 800),
-    };
-  };
-
-  const findOpenPosition = (width: number, height: number) => {
-    const existing = canvasItems.map(itemBounds);
-    const overlaps = (candidate: { x: number; y: number; width: number; height: number }) =>
-      existing.some((item) =>
-        candidate.x < item.x + item.width &&
-        candidate.x + candidate.width > item.x &&
-        candidate.y < item.y + item.height &&
-        candidate.y + candidate.height > item.y,
-      );
-
-    const visible = visibleCanvasRect();
-    if (visible) {
-      const minX = clamp(visible.x + 24, 52, 1148 - width);
-      const maxX = clamp(visible.x + visible.width - width - 24, minX, 1148 - width);
-      const minY = clamp(visible.y + 24, 48, 752 - height);
-      const maxY = clamp(visible.y + visible.height - height - 24, minY, 752 - height);
-      const centerCandidate = {
-        x: clamp(visible.x + visible.width / 2 - width / 2, minX, maxX),
-        y: clamp(visible.y + visible.height / 2 - height / 2, minY, maxY),
-        width,
-        height,
-      };
-
-      if (!overlaps(centerCandidate)) return centerCandidate;
-
-      for (let y = minY; y <= maxY; y += 48) {
-        for (let x = minX; x <= maxX; x += 48) {
-          const candidate = { x, y, width, height };
-          if (!overlaps(candidate)) return candidate;
-        }
-      }
-
-      return centerCandidate;
-    }
-
-    for (let y = 96; y <= 704 - height; y += 64) {
-      for (let x = 96; x <= 1104 - width; x += 64) {
-        const candidate = { x, y, width, height };
-        if (!overlaps(candidate)) return candidate;
-      }
-    }
-
-    return { x: 600 - width / 2, y: 400 - height / 2, width, height };
-  };
-
-  const addSymbol = (mark: string) => {
-    beginHistoryAction();
-    const size = 42;
-    const position = findOpenPosition(size + 20, size + 20);
-    const item: CanvasSymbol = {
-      id: `symbol-${Date.now()}`,
-      kind: 'symbol',
-      x: position.x + position.width / 2,
-      y: position.y + position.height / 2,
-      size,
-      rotate: 0,
-      mark,
-      tone: 0.9,
-    };
-    setCanvasItems((current) => [...current, item]);
-    setSelectedIds([item.id]);
-  };
-
-  const addText = () => {
-    const text = textDraft.trim();
-    if (!text) return;
-    beginHistoryAction();
-    const size = 42;
-    const width = Math.max(90, text.length * size * 0.62) + 16;
-    const height = size + 22;
-    const position = findOpenPosition(width, height);
-    const item: CanvasText = {
-      id: `text-${Date.now()}`,
-      kind: 'text',
-      x: position.x + 8,
-      y: position.y + size + 10,
-      rotate: 0,
-      size,
-      text,
-      tone: 0.82,
-    };
-    setCanvasItems((current) => [...current, item]);
-    setSelectedIds([item.id]);
-  };
-
-  const beginTextEdit = (item: CanvasText) => {
-    setEditingTextId(item.id);
-    setEditingTextDraft(item.text);
-    setSelectedIds([item.id]);
-  };
-
-  const cancelTextEdit = () => {
-    setEditingTextId(null);
-    setEditingTextDraft('');
-  };
-
-  const commitTextEdit = () => {
-    if (!editingTextId) return;
-    const nextText = editingTextDraft.trim();
-    const currentItem = canvasItems.find((item): item is CanvasText => item.id === editingTextId && item.kind === 'text');
-
-    if (!currentItem || !nextText || currentItem.text === nextText) {
-      cancelTextEdit();
-      return;
-    }
-
-    beginHistoryAction();
-    setCanvasItems((current) => current.map((item) => (item.id === editingTextId && item.kind === 'text' ? { ...item, text: nextText } : item)));
-    cancelTextEdit();
-  };
-
-  const moveItem = (id: string, x: number, y: number) => {
-    setCanvasItems((current) => {
-      const active = current.find((item) => item.id === id);
-      if (!active) return current;
-      const idsToMove = selectedIds.includes(id) ? selectedIds : [id];
-      const dx = clamp(x, 52, 1148) - active.x;
-      const dy = clamp(y, 48, 752) - active.y;
-
-      return current.map((item) =>
-        idsToMove.includes(item.id) ? { ...item, x: clamp(item.x + dx, 52, 1148), y: clamp(item.y + dy, 48, 752) } : item,
-      );
-    });
-  };
-
-  const scaleItems = (updates: Array<{ id: string; size: number; x: number; y: number }>) => {
-    setCanvasItems((current) =>
-      current.map((item) => {
-        const update = updates.find((entry) => entry.id === item.id);
-        if (!update) return item;
-
-        return {
-          ...item,
-          size: clamp(update.size, item.kind === 'text' ? 10 : 16, item.kind === 'text' ? 180 : 240),
-          x: clamp(update.x, 52, 1148),
-          y: clamp(update.y, 48, 752),
-        };
-      }),
-    );
-  };
-
-  const rotateItems = (updates: Array<{ id: string; rotate: number }>) => {
-    setCanvasItems((current) =>
-      current.map((item) => {
-        const update = updates.find((entry) => entry.id === item.id);
-        return update ? { ...item, rotate: (update.rotate + 360) % 360 } : item;
-      }),
-    );
-  };
-
-  const removeSelected = () => {
-    if (selectedIds.length === 0) return;
-    beginHistoryAction();
-    setCanvasItems((current) => current.filter((item) => !selectedIds.includes(item.id)));
-    setSelectedIds([]);
-  };
-
-  const selectItem = (id: string | null, additive = false) => {
-    if (!id) {
-      setSelectedIds([]);
-      return;
-    }
-
-    setSelectedIds((current) => {
-      if (!additive) return [id];
-      return current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
-    });
-  };
-
-  const duplicateItems = (items: CanvasItem[]) =>
-    items.map((item, index) => ({
-      ...item,
-      id: `${item.kind}-${Date.now()}-${index}`,
-      x: clamp(item.x + 28, 52, 1148),
-      y: clamp(item.y + 28, 48, 752),
-    }));
-
-  const copySelected = () => {
-    clipboardRef.current = canvasItems.filter((item) => selectedIds.includes(item.id));
-  };
-
-  const pasteClipboard = () => {
-    if (clipboardRef.current.length === 0) return;
-    beginHistoryAction();
-    const pasted = duplicateItems(clipboardRef.current);
-    clipboardRef.current = pasted;
-    setCanvasItems((current) => [...current, ...pasted]);
-    setSelectedIds(pasted.map((item) => item.id));
-  };
-
-  const duplicateSelected = () => {
-    const selected = canvasItems.filter((item) => selectedIds.includes(item.id));
-    if (selected.length === 0) return;
-    beginHistoryAction();
-    const duplicated = duplicateItems(selected);
-    setCanvasItems((current) => [...current, ...duplicated]);
-    setSelectedIds(duplicated.map((item) => item.id));
-  };
-
-  const cutSelected = () => {
-    copySelected();
-    removeSelected();
-  };
-
-  const visualCenter = (item: CanvasItem) => {
-    const bounds = itemBounds(item);
-    return {
-      x: bounds.x + bounds.width / 2,
-      y: bounds.y + bounds.height / 2,
-    };
-  };
-
+  // Re-centre the artboard on the selection when the zoom changes, and only
+  // then. Zoom is the trigger; the selection and the items are what the effect
+  // reads to work out where to scroll, not something it should react to —
+  // depending on them would drag the viewport around on every click, nudge and
+  // drag. They are therefore read from useHistory's stateRef, which that hook
+  // keeps current. The ref object itself never changes identity, so listing it
+  // alongside `[canvasZoom]` still leaves the zoom as the only real trigger.
   useEffect(() => {
-    if (selectedIds.length === 0) return;
-
     const animationFrame = window.requestAnimationFrame(() => {
       const wrap = artboardWrapRef.current;
       const svg = svgRef.current;
-      const selectedItems = canvasItems.filter((item) => selectedIds.includes(item.id));
+      const { canvasItems: items, selectedIds: selection } = stateRef.current;
+      const selectedItems = items.filter((item) => selection.includes(item.id));
       if (!wrap || !svg || selectedItems.length === 0) return;
 
       const centers = selectedItems.map(visualCenter);
@@ -388,138 +216,25 @@ function App() {
     });
 
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [canvasZoom]);
+  }, [canvasZoom, stateRef]);
 
-  const alignSelected = (axis: 'x' | 'y') => {
-    const selected = canvasItems.filter((item) => selectedIds.includes(item.id));
-    if (selected.length < 2) return;
-
-    beginHistoryAction();
-    const target = selected.reduce((sum, item) => sum + visualCenter(item)[axis], 0) / selected.length;
-    setCanvasItems((current) =>
-      current.map((item) => {
-        if (!selectedIds.includes(item.id)) return item;
-        const center = visualCenter(item);
-        const dx = axis === 'x' ? target - center.x : 0;
-        const dy = axis === 'y' ? target - center.y : 0;
-        return { ...item, x: clamp(item.x + dx, 52, 1148), y: clamp(item.y + dy, 48, 752) };
-      }),
-    );
-  };
-
-  const distributeSelected = (axis: 'x' | 'y') => {
-    const selected = canvasItems
-      .filter((item) => selectedIds.includes(item.id))
-      .map((item) => ({ item, center: visualCenter(item) }))
-      .sort((a, b) => a.center[axis] - b.center[axis]);
-
-    if (selected.length < 3) return;
-
-    beginHistoryAction();
-    const first = selected[0].center[axis];
-    const last = selected[selected.length - 1].center[axis];
-    const step = (last - first) / (selected.length - 1);
-    const updates = new Map(selected.map((entry, index) => [entry.item.id, first + step * index]));
-
-    setCanvasItems((current) =>
-      current.map((item) => {
-        const target = updates.get(item.id);
-        if (target === undefined) return item;
-        const center = visualCenter(item);
-        const dx = axis === 'x' ? target - center.x : 0;
-        const dy = axis === 'y' ? target - center.y : 0;
-        return { ...item, x: clamp(item.x + dx, 52, 1148), y: clamp(item.y + dy, 48, 752) };
-      }),
-    );
-  };
-
-  const nudgeSelected = (dx: number, dy: number) => {
-    if (selectedIds.length === 0) return;
-    beginHistoryAction();
-    setCanvasItems((current) =>
-      current.map((item) =>
-        selectedIds.includes(item.id) ? { ...item, x: clamp(item.x + dx, 52, 1148), y: clamp(item.y + dy, 48, 752) } : item,
-      ),
-    );
-  };
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const isEditing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.tagName === 'SELECT';
-      if (isEditing) return;
-
-      const modifier = event.metaKey || event.ctrlKey;
-      if (modifier && event.key.toLowerCase() === 'z') {
-        event.preventDefault();
-        if (event.shiftKey) redo();
-        else undo();
-      } else if (modifier && event.key.toLowerCase() === 'y') {
-        event.preventDefault();
-        redo();
-      } else if (event.key === 'Delete' || event.key === 'Backspace') {
-        event.preventDefault();
-        removeSelected();
-      } else if (event.key === 'Escape') {
-        setSelectedIds([]);
-      } else if (modifier && event.key.toLowerCase() === 'a') {
-        event.preventDefault();
-        setSelectedIds(canvasItems.map((item) => item.id));
-      } else if (modifier && event.key.toLowerCase() === 'c') {
-        event.preventDefault();
-        copySelected();
-      } else if (modifier && event.key.toLowerCase() === 'x') {
-        event.preventDefault();
-        cutSelected();
-      } else if (modifier && event.key.toLowerCase() === 'v') {
-        event.preventDefault();
-        pasteClipboard();
-      } else if (modifier && event.key.toLowerCase() === 'd') {
-        event.preventDefault();
-        duplicateSelected();
-      } else if (modifier && (event.key === '=' || event.key === '+')) {
-        event.preventDefault();
-        zoomCanvas(0.1);
-      } else if (modifier && (event.key === '-' || event.key === '_')) {
-        event.preventDefault();
-        zoomCanvas(-0.1);
-      } else if (modifier && event.key === '0') {
-        event.preventDefault();
-        resetCanvasZoom();
-      } else if (event.key === '[') {
-        event.preventDefault();
-        beginHistoryAction();
-        rotateItems(
-          canvasItems
-            .filter((item) => selectedIds.includes(item.id))
-            .map((item) => ({ id: item.id, rotate: item.rotate + (event.shiftKey ? -45 : -15) })),
-        );
-      } else if (event.key === ']') {
-        event.preventDefault();
-        beginHistoryAction();
-        rotateItems(
-          canvasItems
-            .filter((item) => selectedIds.includes(item.id))
-            .map((item) => ({ id: item.id, rotate: item.rotate + (event.shiftKey ? 45 : 15) })),
-        );
-      } else if (event.key === 'ArrowLeft') {
-        event.preventDefault();
-        nudgeSelected(event.shiftKey ? -10 : -1, 0);
-      } else if (event.key === 'ArrowRight') {
-        event.preventDefault();
-        nudgeSelected(event.shiftKey ? 10 : 1, 0);
-      } else if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        nudgeSelected(0, event.shiftKey ? -10 : -1);
-      } else if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        nudgeSelected(0, event.shiftKey ? 10 : 1);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [canvasItems, redoStack, selectedIds, settings.template, undoStack]);
+  useKeyboardShortcuts({
+    beginHistoryAction,
+    canvasItems,
+    copySelected,
+    cutSelected,
+    duplicateSelected,
+    nudgeSelected,
+    pasteClipboard,
+    redo,
+    removeSelected,
+    resetCanvasZoom,
+    rotateItems,
+    selectedIds,
+    setSelectedIds,
+    undo,
+    zoomCanvas,
+  });
 
   const itemLabel = (item: CanvasItem, index: number) => {
     if (item.kind === 'text') return item.text.split('\n')[0] || `Text ${index + 1}`;
@@ -536,41 +251,17 @@ function App() {
     reader.readAsDataURL(file);
   };
 
-  const exportSvg = () => {
-    if (!svgRef.current) return;
-    const markup = new XMLSerializer().serializeToString(svgRef.current);
-    downloadBlob(new Blob([markup], { type: 'image/svg+xml;charset=utf-8' }), 'micrographic.svg');
-  };
-
-  const exportPng = async () => {
-    if (!svgRef.current) return;
-    const markup = new XMLSerializer().serializeToString(svgRef.current);
-    const blob = new Blob([markup], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const image = new Image();
-    image.decoding = 'async';
-    image.src = url;
-    await image.decode();
-    const canvas = document.createElement('canvas');
-    canvas.width = 2400;
-    canvas.height = 1600;
-    const context = canvas.getContext('2d');
-    context?.drawImage(image, 0, 0, canvas.width, canvas.height);
-    URL.revokeObjectURL(url);
-    canvas.toBlob((png) => {
-      if (png) downloadBlob(png, 'micrographic.png');
-    }, 'image/png');
-  };
-
   return (
     <Tooltip.Provider>
       <main className="app-shell">
         <ControlPanel
           canvasItems={canvasItems}
+          exportScale={exportScale}
           itemLabel={itemLabel}
           selectedIds={selectedIds}
           selectedTemplateName={selectedTemplateName}
           template={settings.template}
+          onChangeExportScale={setExportScale}
           onChooseTemplate={chooseTemplate}
           onExportPng={exportPng}
           onExportSvg={exportSvg}
@@ -642,6 +333,7 @@ function App() {
           onChangeTextDraft={setTextDraft}
           onUploadBackground={uploadBackground}
         />
+        <ExportStatus message={exportStatus} />
       </main>
     </Tooltip.Provider>
   );

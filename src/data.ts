@@ -9,7 +9,6 @@ export const palettes: Palette[] = [
     ink: '#f5f2ea',
     muted: '#f5f2ea',
     accent: '#f5f2ea',
-    second: '#f5f2ea',
   },
   {
     name: 'Bone black',
@@ -18,7 +17,6 @@ export const palettes: Palette[] = [
     ink: '#171717',
     muted: '#171717',
     accent: '#171717',
-    second: '#171717',
   },
   {
     name: 'Signal red',
@@ -27,7 +25,6 @@ export const palettes: Palette[] = [
     ink: '#ff4f3d',
     muted: '#ff4f3d',
     accent: '#ff4f3d',
-    second: '#ff4f3d',
   },
   {
     name: 'Electric cyan',
@@ -36,7 +33,6 @@ export const palettes: Palette[] = [
     ink: '#55f0dc',
     muted: '#55f0dc',
     accent: '#55f0dc',
-    second: '#55f0dc',
   },
   {
     name: 'Purple pulse',
@@ -45,7 +41,6 @@ export const palettes: Palette[] = [
     ink: '#c7a6ff',
     muted: '#c7a6ff',
     accent: '#c7a6ff',
-    second: '#c7a6ff',
   },
 ];
 
@@ -163,16 +158,6 @@ export const initialSettings: Settings = {
   grid: false,
   showBackground: true,
 };
-
-export const symbolMarks = Array.from(
-  new Set([
-    ...marks,
-    ...aiToolMarks,
-    ...Object.values(templateComponents)
-      .flatMap((template) => template())
-      .flatMap((item) => (item.kind === 'text' ? [] : [item.mark])),
-  ]),
-);
 
 export function loadTemplateItems(template: Template): CanvasItem[] {
   if (template === 'blank') return [];
