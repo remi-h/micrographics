@@ -1,5 +1,6 @@
 import { act, fireEvent, render } from '@testing-library/react';
 import App from './App';
+import { initialSettings } from './data';
 
 // The artboard re-centres on the selection when the zoom changes, and only
 // then. Selecting, nudging or editing an item must leave the viewport alone,
@@ -124,5 +125,107 @@ describe('App item ids', () => {
     expect(labels().length).toBe(before + 1);
     expect(occurrences(selectedLabel)).toBe(selectedBefore - 1);
     expect(occurrences(keptLabel)).toBe(keptBefore);
+  });
+});
+
+// App wires persistence.ts into three effects: restore once on mount, save on
+// a debounce, and flush the pending save on pagehide. persistence.test.ts
+// covers the module and e2e/persistence.spec.ts covers the user-visible round
+// trip, but the wiring between them had no unit test — so a broken gate or a
+// dropped listener would only surface in the slow suite, or not at all.
+jest.mock('./persistence', () => {
+  const actual = jest.requireActual('./persistence');
+  return { ...actual, loadEditorState: jest.fn(), saveEditorState: jest.fn(() => true) };
+});
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- the mock above is only visible through a runtime require
+const persistence = require('./persistence') as {
+  loadEditorState: jest.Mock;
+  saveEditorState: jest.Mock;
+};
+
+describe('App persistence wiring', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    persistence.loadEditorState.mockReset().mockReturnValue(null);
+    persistence.saveEditorState.mockReset().mockReturnValue(true);
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    // Base UI schedules transition state in animation frames; draining them
+    // outside act() logs a React warning even though the assertions are done.
+    act(() => {
+      jest.runOnlyPendingTimers();
+    });
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  it('restores a saved canvas on mount instead of the default template', () => {
+    persistence.loadEditorState.mockReturnValue({
+      settings: { ...initialSettings, template: 'blank', grid: true },
+      canvasItems: [
+        { id: 'text-restored', kind: 'text', rotate: 0, size: 42, text: 'RESTORED', x: 300, y: 400 },
+      ],
+      canvasZoom: 1,
+    });
+
+    const { container } = render(<App />);
+
+    expect(persistence.loadEditorState).toHaveBeenCalledTimes(1);
+    const layers = [...container.querySelectorAll('.layer-row')].map((row) => row.textContent ?? '');
+    expect(layers).toHaveLength(1);
+    expect(layers[0]).toContain('RESTORED');
+  });
+
+  it('does not save until the restore has run, then saves on a debounce', () => {
+    const { container } = render(<App />);
+
+    // Nothing is written just for mounting: a save here would persist the
+    // defaults over a real saved canvas before the restore could read it.
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+    persistence.saveEditorState.mockClear();
+
+    const symbol = container.querySelector('.symbol-button');
+    if (!symbol) throw new Error('expected a symbol button');
+    act(() => {
+      fireEvent.click(symbol);
+    });
+
+    // Still nothing before the debounce elapses.
+    act(() => {
+      jest.advanceTimersByTime(399);
+    });
+    expect(persistence.saveEditorState).not.toHaveBeenCalled();
+
+    act(() => {
+      jest.advanceTimersByTime(1);
+    });
+    expect(persistence.saveEditorState).toHaveBeenCalled();
+  });
+
+  it('flushes the pending save when the page goes away', () => {
+    const { container } = render(<App />);
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+
+    const symbol = container.querySelector('.symbol-button');
+    if (!symbol) throw new Error('expected a symbol button');
+    act(() => {
+      fireEvent.click(symbol);
+    });
+    persistence.saveEditorState.mockClear();
+
+    // pagehide arrives inside the debounce window: without the flush listener
+    // the edit would be lost, because the timer never fires.
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'));
+    });
+
+    expect(persistence.saveEditorState).toHaveBeenCalled();
   });
 });

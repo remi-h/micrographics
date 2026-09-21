@@ -32,6 +32,11 @@ const TEMPLATE_IDS: Record<Template, true> = {
   blank: true,
 };
 
+// Object.keys returns own enumerable keys only, so nothing inherited from
+// Object.prototype can reach this set. Derived from the record above so the
+// exhaustiveness guarantee there still holds.
+const TEMPLATE_ID_SET = new Set<string>(Object.keys(TEMPLATE_IDS));
+
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 2.5;
 
@@ -47,7 +52,13 @@ function parseSettings(value: unknown): Settings | null {
   if (!isRecord(value)) return null;
 
   const { template, paletteIndex, backgroundImage, grid, showBackground } = value;
-  if (typeof template !== 'string' || !(template in TEMPLATE_IDS)) return null;
+  // A Set of own keys, not `template in TEMPLATE_IDS`: `in` walks the
+  // prototype chain, so 'toString', 'constructor' and every other
+  // Object.prototype key passed validation. Such a value reaches
+  // templateComponents[template]() in loadTemplateItems, which then returns a
+  // string instead of an array and throws on the .map() after it — a corrupted
+  // or hand-edited save was enough to crash the editor on load.
+  if (typeof template !== 'string' || !TEMPLATE_ID_SET.has(template)) return null;
   if (!isFiniteNumber(paletteIndex) || !Number.isInteger(paletteIndex)) return null;
   if (paletteIndex < 0 || paletteIndex >= palettes.length) return null;
   if (backgroundImage !== null && typeof backgroundImage !== 'string') return null;

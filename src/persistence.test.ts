@@ -132,6 +132,27 @@ describe('saveEditorState / loadEditorState', () => {
     expect(loadEditorState()?.canvasZoom).toBe(1);
   });
 
+  // `in` walks the prototype chain, so a plain-object lookup table accepts
+  // every Object.prototype key as a valid template id. Such a value survives
+  // validation, reaches templateComponents[template]() in loadTemplateItems,
+  // and crashes the editor there: the call returns a string, and .map() on it
+  // throws. A corrupted or hand-edited save is enough to reach this.
+  it.each(['toString', 'constructor', 'valueOf', 'hasOwnProperty', '__proto__'])(
+    'rejects the inherited Object key %p as a template id',
+    (template) => {
+      writeRaw(
+        JSON.stringify({
+          version: STORAGE_VERSION,
+          settings: { ...state.settings, template },
+          canvasItems: [],
+          canvasZoom: 1,
+        }),
+      );
+
+      expect(loadEditorState()).toBeNull();
+    },
+  );
+
   it('survives a localStorage that throws on write', () => {
     jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new DOMException('QuotaExceededError');
