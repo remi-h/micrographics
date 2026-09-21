@@ -18,6 +18,7 @@ import { loadEditorState, saveEditorState, type PersistedEditorState } from './p
 import type { CanvasItem, Settings, Template } from './types';
 import { useCanvasItems, visualCenter } from './useCanvasItems';
 import { useHistory } from './useHistory';
+import { useKeyboardShortcuts } from './useKeyboardShortcuts';
 import { clamp, downloadBlob } from './utils';
 
 // Long enough that dragging an item writes once the pointer settles rather
@@ -42,7 +43,7 @@ function App() {
   const exportStatusId = useRef(0);
   const [restored, setRestored] = useState(false);
   const persistRef = useRef<PersistedEditorState>({ canvasItems, canvasZoom, settings });
-  const { beginHistoryAction, redo, redoStack, stateRef, undo, undoStack } = useHistory({
+  const { beginHistoryAction, redo, stateRef, undo } = useHistory({
     canvasItems,
     selectedIds,
     settings,
@@ -227,89 +228,23 @@ function App() {
     return () => window.cancelAnimationFrame(animationFrame);
   }, [canvasZoom, stateRef]);
 
-  // Keyboard shortcuts. The handler calls this component's action helpers,
-  // which are new function objects on every render, so listing them would
-  // re-bind the window listener on every keystroke and every drag frame. The
-  // dependency array instead names the state those helpers read, which is what
-  // actually has to be fresh inside the listener.
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const isEditing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.tagName === 'SELECT';
-      if (isEditing) return;
-
-      const modifier = event.metaKey || event.ctrlKey;
-      if (modifier && event.key.toLowerCase() === 'z') {
-        event.preventDefault();
-        if (event.shiftKey) redo();
-        else undo();
-      } else if (modifier && event.key.toLowerCase() === 'y') {
-        event.preventDefault();
-        redo();
-      } else if (event.key === 'Delete' || event.key === 'Backspace') {
-        event.preventDefault();
-        removeSelected();
-      } else if (event.key === 'Escape') {
-        setSelectedIds([]);
-      } else if (modifier && event.key.toLowerCase() === 'a') {
-        event.preventDefault();
-        setSelectedIds(canvasItems.map((item) => item.id));
-      } else if (modifier && event.key.toLowerCase() === 'c') {
-        event.preventDefault();
-        copySelected();
-      } else if (modifier && event.key.toLowerCase() === 'x') {
-        event.preventDefault();
-        cutSelected();
-      } else if (modifier && event.key.toLowerCase() === 'v') {
-        event.preventDefault();
-        pasteClipboard();
-      } else if (modifier && event.key.toLowerCase() === 'd') {
-        event.preventDefault();
-        duplicateSelected();
-      } else if (modifier && (event.key === '=' || event.key === '+')) {
-        event.preventDefault();
-        zoomCanvas(0.1);
-      } else if (modifier && (event.key === '-' || event.key === '_')) {
-        event.preventDefault();
-        zoomCanvas(-0.1);
-      } else if (modifier && event.key === '0') {
-        event.preventDefault();
-        resetCanvasZoom();
-      } else if (event.key === '[') {
-        event.preventDefault();
-        beginHistoryAction();
-        rotateItems(
-          canvasItems
-            .filter((item) => selectedIds.includes(item.id))
-            .map((item) => ({ id: item.id, rotate: item.rotate + (event.shiftKey ? -45 : -15) })),
-        );
-      } else if (event.key === ']') {
-        event.preventDefault();
-        beginHistoryAction();
-        rotateItems(
-          canvasItems
-            .filter((item) => selectedIds.includes(item.id))
-            .map((item) => ({ id: item.id, rotate: item.rotate + (event.shiftKey ? 45 : 15) })),
-        );
-      } else if (event.key === 'ArrowLeft') {
-        event.preventDefault();
-        nudgeSelected(event.shiftKey ? -10 : -1, 0);
-      } else if (event.key === 'ArrowRight') {
-        event.preventDefault();
-        nudgeSelected(event.shiftKey ? 10 : 1, 0);
-      } else if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        nudgeSelected(0, event.shiftKey ? -10 : -1);
-      } else if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        nudgeSelected(0, event.shiftKey ? 10 : 1);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- see the note above this effect
-  }, [canvasItems, redoStack, selectedIds, settings.template, undoStack]);
+  useKeyboardShortcuts({
+    beginHistoryAction,
+    canvasItems,
+    copySelected,
+    cutSelected,
+    duplicateSelected,
+    nudgeSelected,
+    pasteClipboard,
+    redo,
+    removeSelected,
+    resetCanvasZoom,
+    rotateItems,
+    selectedIds,
+    setSelectedIds,
+    undo,
+    zoomCanvas,
+  });
 
   const itemLabel = (item: CanvasItem, index: number) => {
     if (item.kind === 'text') return item.text.split('\n')[0] || `Text ${index + 1}`;

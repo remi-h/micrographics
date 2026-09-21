@@ -33,8 +33,11 @@ export type History = {
   redo: () => void;
   /**
    * The stacks, for reading only: what is on them decides whether undo and
-   * redo do anything, so a caller whose handlers close over `undo`/`redo`
-   * (the keyboard listener does) has to re-read them when they change.
+   * redo do anything. `undo` and `redo` close over the stacks of the render
+   * that created them, so anything holding on to one of them past that render
+   * — a listener bound once, say — has to call the latest render's copy and
+   * not the one it captured. `useKeyboardShortcuts` does that with an effect
+   * event.
    */
   undoStack: HistorySnapshot[];
   redoStack: HistorySnapshot[];
