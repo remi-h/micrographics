@@ -1,5 +1,12 @@
 import { initialSettings, palettes } from './data';
-import { buildExportMarkup } from './exportMarkup';
+import {
+  ARTBOARD_HEIGHT,
+  ARTBOARD_WIDTH,
+  buildExportMarkup,
+  DEFAULT_EXPORT_SCALE,
+  EXPORT_SCALES,
+  exportPixelSize,
+} from './exportMarkup';
 import type { CanvasItem } from './types';
 
 const palette = palettes[0];
@@ -22,6 +29,27 @@ describe('buildExportMarkup', () => {
 
     expect(markup).toContain('xmlns="http://www.w3.org/2000/svg"');
     expect(markup.startsWith('<svg')).toBe(true);
+    expect(markup).toContain('viewBox="0 0 1200 800"');
+  });
+
+  // A viewBox with no width/height leaves the file without an intrinsic size.
+  // Chromium guesses one when it loads the blob through an <img>; Firefox
+  // refuses to rasterize it, which is what broke PNG export there.
+  it('gives the root an explicit size at the artboard scale by default', () => {
+    const markup = buildExportMarkup({ items: canvasItems, palette, settings });
+
+    expect(markup).toContain('width="1200"');
+    expect(markup).toContain('height="800"');
+  });
+
+  it.each(EXPORT_SCALES)('sizes the root for a %sx export and keeps the viewBox', (scale) => {
+    const markup = buildExportMarkup({ items: canvasItems, palette, settings, scale });
+    const { width, height } = exportPixelSize(scale);
+
+    expect(markup).toContain(`width="${width}"`);
+    expect(markup).toContain(`height="${height}"`);
+    // The viewBox is what keeps the drawing resolution-independent: a consumer
+    // that overrides width/height still gets the whole artboard, scaled.
     expect(markup).toContain('viewBox="0 0 1200 800"');
   });
 
@@ -59,6 +87,17 @@ describe('buildExportMarkup', () => {
     }
   });
 
+  it('still keeps the editor chrome out at every export scale', () => {
+    for (const scale of EXPORT_SCALES) {
+      const markup = buildExportMarkup({ items: canvasItems, palette, settings, scale });
+
+      for (const chrome of EDITOR_CHROME) {
+        expect(`${scale}x: ${markup}`).not.toContain(chrome);
+      }
+      expect(markup).not.toContain('textarea');
+    }
+  });
+
   it('exports the committed text of an item, not an editing textarea', () => {
     const markup = buildExportMarkup({ items: canvasItems, palette, settings });
 
@@ -79,5 +118,22 @@ describe('buildExportMarkup', () => {
 
     expect(document.body.innerHTML).toBe(before);
     expect(document.querySelector('svg.artboard')).toBeNull();
+  });
+});
+
+describe('exportPixelSize', () => {
+  it('multiplies the artboard, so 1x is the artboard itself', () => {
+    expect(exportPixelSize(1)).toEqual({ width: ARTBOARD_WIDTH, height: ARTBOARD_HEIGHT });
+  });
+
+  it('scales both axes together', () => {
+    expect(exportPixelSize(2)).toEqual({ width: 2400, height: 1600 });
+    expect(exportPixelSize(4)).toEqual({ width: 4800, height: 3200 });
+  });
+
+  it('offers screen, retina and print scales, defaulting to what PNG export always produced', () => {
+    expect(EXPORT_SCALES).toEqual([1, 2, 4]);
+    expect(DEFAULT_EXPORT_SCALE).toBe(2);
+    expect(exportPixelSize(DEFAULT_EXPORT_SCALE)).toEqual({ width: 2400, height: 1600 });
   });
 });

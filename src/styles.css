@@ -929,6 +929,43 @@ h1 {
   color: #f4f0e8;
 }
 
+/* The PNG size sits in the toolbar, so it matches the icon buttons beside it
+   rather than the full-width selects down in the panel. */
+.export-scale-trigger {
+  width: auto;
+  height: 36px;
+  gap: 4px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+/* Export results: a fixed, always-mounted live region (see ExportStatus) with
+   the message as its only child, so an empty one occupies nothing. */
+.export-status {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 40;
+  max-width: 320px;
+}
+
+.export-status-message {
+  padding: 10px 12px;
+  border: 1px solid rgba(245, 242, 234, 0.18);
+  border-radius: 8px;
+  color: #f4f0e8;
+  background: #171717;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.38);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.export-status-message[data-tone='error'] {
+  border-color: #d9542b;
+  color: #ffd9c9;
+}
+
 .preview-stage {
   min-width: 0;
   min-height: 0;

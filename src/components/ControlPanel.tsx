@@ -2,16 +2,19 @@ import { Select } from '@base-ui/react/select';
 import { Toolbar } from '@base-ui/react/toolbar';
 import { Check, ChevronDown, Download, FileCode2, RefreshCcw, Shuffle, Trash2, Undo2, Redo2 } from 'lucide-react';
 import { templates } from '../data';
+import { EXPORT_SCALES, exportPixelSize, type ExportScale } from '../exportMarkup';
 import type { CanvasItem, Template } from '../types';
 import { BrandIcon } from './BrandIcon';
 import { Field, ToolButton } from './Controls';
 
 export function ControlPanel({
   canvasItems,
+  exportScale,
   itemLabel,
   selectedIds,
   selectedTemplateName,
   template,
+  onChangeExportScale,
   onChooseTemplate,
   onExportPng,
   onExportSvg,
@@ -22,10 +25,12 @@ export function ControlPanel({
   onUndo,
 }: {
   canvasItems: CanvasItem[];
+  exportScale: ExportScale;
   itemLabel: (item: CanvasItem, index: number) => string;
   selectedIds: string[];
   selectedTemplateName: string | undefined;
   template: Template;
+  onChangeExportScale: (scale: ExportScale) => void;
   onChooseTemplate: (template: Template) => void;
   onExportPng: () => void;
   onExportSvg: () => void;
@@ -73,6 +78,43 @@ export function ControlPanel({
         <ToolButton label="Export PNG" onClick={onExportPng}>
           <Download size={17} aria-hidden="true" />
         </ToolButton>
+        {/* Next to the button it governs, not buried in the panel below: the
+            size is part of the act of exporting a PNG, not a document setting. */}
+        <Select.Root
+          value={exportScale}
+          onValueChange={(value) => onChangeExportScale(value as ExportScale)}
+        >
+          <Select.Trigger
+            render={<Toolbar.Button />}
+            className="select-trigger export-scale-trigger"
+            aria-label="PNG size"
+          >
+            {/* The toolbar wraps at this panel width, so the size can end up a
+                row below the button it belongs to: name it, don't just show a
+                bare multiplier. */}
+            <span>PNG {exportScale}&times;</span>
+            <Select.Icon className="select-icon">
+              <ChevronDown size={14} aria-hidden="true" />
+            </Select.Icon>
+          </Select.Trigger>
+          <Select.Portal>
+            <Select.Positioner sideOffset={8}>
+              <Select.Popup className="select-popup">
+                {EXPORT_SCALES.map((scale) => {
+                  const { width, height } = exportPixelSize(scale);
+                  return (
+                    <Select.Item className="select-item" key={scale} value={scale}>
+                      <Select.ItemText>{`${scale}× · ${width} × ${height}`}</Select.ItemText>
+                      <Select.ItemIndicator className="select-item-indicator">
+                        <Check size={14} aria-hidden="true" />
+                      </Select.ItemIndicator>
+                    </Select.Item>
+                  );
+                })}
+              </Select.Popup>
+            </Select.Positioner>
+          </Select.Portal>
+        </Select.Root>
       </Toolbar.Root>
 
       <div className="panel-scroll">

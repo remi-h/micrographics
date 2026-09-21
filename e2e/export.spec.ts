@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 // Exports used to be serialized off the live canvas, so anything the editor was
 // drawing at the time -- the dashed outline, the handles, the alignment toolbar
@@ -80,4 +80,88 @@ test('the PNG export rasterizes with items selected', async ({ page }) => {
   // SVG and drawing it to a canvas.
   expect([...png.subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
   expect(png.byteLength).toBeGreaterThan(1000);
+});
+
+// The PNG used to be a hardcoded 2400x1600 with no way to ask for anything
+// else, and every failure along the way was silent. Both are user-visible, so
+// check them the way a user meets them: pick a size, export, read the file.
+function pngSize(png: Buffer) {
+  // IHDR is the first chunk of every PNG: width and height as big-endian
+  // uint32s at byte 16 and byte 20.
+  return { width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
+}
+
+async function downloadPng(page: Page) {
+  const download = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Export PNG' }).click(),
+  ]).then(([event]) => event);
+
+  expect(download.suggestedFilename()).toBe('micrographic.png');
+  return readFile(await download.path());
+}
+
+test('the PNG export size is selectable and the default is unchanged', async ({ page }) => {
+  await page.goto('/creator');
+  await page.locator('.symbol-button').first().click();
+
+  const defaultPng = await downloadPng(page);
+  expect(pngSize(defaultPng)).toEqual({ width: 2400, height: 1600 });
+  // Success is confirmed, naming the file that was written -- exports used to
+  // say nothing at all, whether they worked or not.
+  await expect(page.getByRole('status')).toHaveText('Saved micrographic.png (2400 × 1600).');
+
+  await page.getByRole('combobox', { name: 'PNG size' }).click();
+  await page.getByRole('option', { name: '4× · 4800 × 3200' }).click();
+
+  const largePng = await downloadPng(page);
+  expect(pngSize(largePng)).toEqual({ width: 4800, height: 3200 });
+  expect(largePng.byteLength).toBeGreaterThan(defaultPng.byteLength);
+  await expect(page.getByRole('status')).toHaveText('Saved micrographic.png (4800 × 3200).');
+
+  // The smallest option is there too, and it really is smaller.
+  await page.getByRole('combobox', { name: 'PNG size' }).click();
+  await page.getByRole('option', { name: '1× · 1200 × 800' }).click();
+
+  const smallPng = await downloadPng(page);
+  expect(pngSize(smallPng)).toEqual({ width: 1200, height: 800 });
+});
+
+// Firefox will not rasterize an SVG loaded through an <img> unless its root
+// carries width and height, so the PNG path depends on these being written.
+// That cannot be exercised here -- this suite runs Chromium only -- but the
+// attributes themselves can be, and they ride along in the downloaded .svg.
+test('the exported SVG declares its own size alongside the viewBox', async ({ page }) => {
+  await page.goto('/creator');
+
+  const download = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Export SVG' }).click(),
+  ]).then(([event]) => event);
+
+  const markup = await readFile(await download.path(), 'utf8');
+
+  expect(markup).toContain('width="1200"');
+  expect(markup).toContain('height="800"');
+  expect(markup).toContain('viewBox="0 0 1200 800"');
+  await expect(page.getByRole('status')).toHaveText('Saved micrographic.svg (1200 × 800).');
+});
+
+// A PNG export has several steps that genuinely fail in the wild -- a browser
+// that will not decode the SVG, a refused 2D context, an encode that gives up
+// on a 4800 x 3200 canvas. Each one used to leave the user with no file and
+// nothing said. Stand in for that by refusing the context.
+test('a PNG export that fails says so instead of going quiet', async ({ page }) => {
+  await page.addInitScript(() => {
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function patched(this: HTMLCanvasElement, ...args: unknown[]) {
+      if (args[0] === '2d') return null;
+      return (getContext as (...a: unknown[]) => unknown).apply(this, args);
+    } as typeof HTMLCanvasElement.prototype.getContext;
+  });
+
+  await page.goto('/creator');
+  await page.getByRole('button', { name: 'Export PNG' }).click();
+
+  await expect(page.getByRole('status')).toHaveText('Could not export the PNG: this browser gave no 2D canvas to draw into.');
 });

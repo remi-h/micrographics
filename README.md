@@ -76,6 +76,13 @@ npm run typecheck
 - Use the toolbar to randomize, restart the current template, undo/redo, and
   export SVG or PNG. Exports hold the artwork only: selection outlines, the
   rotate and resize handles, and the alignment toolbar stay in the editor.
+- Choose the PNG resolution from the size menu in the toolbar, which reads
+  `PNG 2x` until you change it: `1x`, `2x` or `4x` of the 1200 x 800 artboard,
+  so 1200 x 800, 2400 x 1600 or 4800 x 3200 pixels. `2x` is the default.
+  `Export SVG` always writes the artboard size, and that file scales to any
+  size wherever it is placed.
+- Each export reports back in the corner of the window, naming the file it
+  wrote, or saying what went wrong if the browser could not produce it.
 - Your work is saved automatically in the browser, so closing the tab or
   reloading brings the canvas, palette, and zoom back as you left them. Use
   `Restart template` or `Start from scratch` in the toolbar to discard it. The
