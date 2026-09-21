@@ -4,33 +4,21 @@ import { useEffect, useRef, useState } from 'react';
 import { Tooltip } from '@base-ui/react/tooltip';
 import { AssetPanel } from './components/AssetPanel';
 import { ControlPanel } from './components/ControlPanel';
-import { ExportStatus, type ExportStatusMessage } from './components/ExportStatus';
+import { ExportStatus } from './components/ExportStatus';
 import { MicrographicSvg } from './components/MicrographicSvg';
 import { StageHeader } from './components/StageHeader';
 import { initialSettings, loadTemplateItems, palettes, symbolTabs, templates } from './data';
-import {
-  buildExportMarkup,
-  DEFAULT_EXPORT_SCALE,
-  exportPixelSize,
-  type ExportScale,
-} from './exportMarkup';
 import { loadEditorState, saveEditorState, type PersistedEditorState } from './persistence';
 import type { CanvasItem, Settings, Template } from './types';
 import { useCanvasItems, visualCenter } from './useCanvasItems';
+import { useExport } from './useExport';
 import { useHistory } from './useHistory';
 import { useKeyboardShortcuts } from './useKeyboardShortcuts';
-import { clamp, downloadBlob } from './utils';
+import { clamp } from './utils';
 
 // Long enough that dragging an item writes once the pointer settles rather
 // than on every pointer move, short enough to survive a quick reload.
 const SAVE_DEBOUNCE_MS = 400;
-
-// Every export failure ends up here, so the user is told which step went wrong
-// instead of being handed nothing. A thrown Error carries its own sentence; a
-// browser can also reject with something that is not an Error at all.
-function reason(error: unknown) {
-  return error instanceof Error && error.message ? error.message : 'an unknown error';
-}
 
 function App() {
   const [settings, setSettings] = useState<Settings>(initialSettings);
@@ -38,9 +26,6 @@ function App() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [canvasZoom, setCanvasZoom] = useState(1);
   const [activeSymbolTab, setActiveSymbolTab] = useState(symbolTabs[0].id);
-  const [exportScale, setExportScale] = useState<ExportScale>(DEFAULT_EXPORT_SCALE);
-  const [exportStatus, setExportStatus] = useState<ExportStatusMessage | null>(null);
-  const exportStatusId = useRef(0);
   const [restored, setRestored] = useState(false);
   const persistRef = useRef<PersistedEditorState>({ canvasItems, canvasZoom, settings });
   const { beginHistoryAction, redo, stateRef, undo } = useHistory({
@@ -110,6 +95,11 @@ function App() {
     visibleCanvasRect,
   });
   const palette = palettes[settings.paletteIndex];
+  const { exportPng, exportScale, exportStatus, exportSvg, setExportScale } = useExport({
+    canvasItems,
+    palette,
+    settings,
+  });
   const selectedTemplateName =
     settings.template === 'blank' ? 'Start from scratch' : templates.find((item) => item.id === settings.template)?.name;
   const activeSymbolMarks = symbolTabs.find((tab) => tab.id === activeSymbolTab)?.marks ?? symbolTabs[0].marks;
@@ -259,74 +249,6 @@ function App() {
       update('showBackground', true);
     };
     reader.readAsDataURL(file);
-  };
-
-  // Both exporters serialize a fresh, unselected render of the canvas rather
-  // than the live node, so the editor's own chrome stays out of the file. See
-  // buildExportMarkup.
-  const exportMarkup = (scale: number) => buildExportMarkup({ items: canvasItems, palette, settings, scale });
-
-  const announceExport = (tone: ExportStatusMessage['tone'], text: string) => {
-    exportStatusId.current += 1;
-    setExportStatus({ id: exportStatusId.current, text, tone });
-  };
-
-  const exportSvg = () => {
-    try {
-      // Vector: the artboard's own size, with the scale control left to the
-      // PNG. A viewBox is along for the ride, so it still scales anywhere.
-      const { width, height } = exportPixelSize(1);
-      downloadBlob(new Blob([exportMarkup(1)], { type: 'image/svg+xml;charset=utf-8' }), 'micrographic.svg');
-      announceExport('success', `Saved micrographic.svg (${width} × ${height}).`);
-    } catch (error) {
-      announceExport('error', `Could not export the SVG: ${reason(error)}.`);
-    }
-  };
-
-  const exportPng = async () => {
-    const { width, height } = exportPixelSize(exportScale);
-    let url: string | null = null;
-
-    // Every step here can fail for real -- a browser that will not decode the
-    // SVG, a refused 2D context, an encode that runs out of memory at 4x -- and
-    // each one used to end with no file and no word about it.
-    try {
-      const blob = new Blob([exportMarkup(exportScale)], { type: 'image/svg+xml;charset=utf-8' });
-      url = URL.createObjectURL(blob);
-      const image = new Image();
-      image.decoding = 'async';
-      image.src = url;
-
-      try {
-        await image.decode();
-      } catch {
-        throw new Error('this browser could not read the generated image');
-      }
-
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const context = canvas.getContext('2d');
-      if (!context) throw new Error('this browser gave no 2D canvas to draw into');
-      context.drawImage(image, 0, 0, width, height);
-
-      const png = await new Promise<Blob>((resolve, reject) => {
-        // toBlob hands back null when it cannot encode -- most plausibly
-        // because the canvas is too large, which is exactly what the 4x option
-        // makes reachable.
-        canvas.toBlob((result) => {
-          if (result) resolve(result);
-          else reject(new Error(`this browser could not encode a ${width} × ${height} PNG`));
-        }, 'image/png');
-      });
-
-      downloadBlob(png, 'micrographic.png');
-      announceExport('success', `Saved micrographic.png (${width} × ${height}).`);
-    } catch (error) {
-      announceExport('error', `Could not export the PNG: ${reason(error)}.`);
-    } finally {
-      if (url) URL.revokeObjectURL(url);
-    }
   };
 
   return (
