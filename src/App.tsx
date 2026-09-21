@@ -18,6 +18,7 @@ import {
 import { createItemId } from './itemIds';
 import { loadEditorState, saveEditorState, type PersistedEditorState } from './persistence';
 import type { CanvasItem, CanvasSymbol, CanvasText, Settings, Template } from './types';
+import { useHistory } from './useHistory';
 import { clamp, downloadBlob } from './utils';
 
 // Long enough that dragging an item writes once the pointer settles rather
@@ -52,18 +53,10 @@ function visualCenter(item: CanvasItem) {
   };
 }
 
-type HistorySnapshot = {
-  canvasItems: CanvasItem[];
-  selectedIds: string[];
-  settings: Settings;
-};
-
 function App() {
   const [settings, setSettings] = useState<Settings>(initialSettings);
   const [canvasItems, setCanvasItems] = useState<CanvasItem[]>(() => loadTemplateItems(initialSettings.template));
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [undoStack, setUndoStack] = useState<HistorySnapshot[]>([]);
-  const [redoStack, setRedoStack] = useState<HistorySnapshot[]>([]);
   const [textDraft, setTextDraft] = useState('MICRO');
   const [editingTextDraft, setEditingTextDraft] = useState('');
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
@@ -75,17 +68,20 @@ function App() {
   const [restored, setRestored] = useState(false);
   const clipboardRef = useRef<CanvasItem[]>([]);
   const persistRef = useRef<PersistedEditorState>({ canvasItems, canvasZoom, settings });
-  const stateRef = useRef<HistorySnapshot>({ canvasItems, selectedIds, settings });
+  const { beginHistoryAction, redo, redoStack, stateRef, undo, undoStack } = useHistory({
+    canvasItems,
+    selectedIds,
+    settings,
+    setCanvasItems,
+    setSelectedIds,
+    setSettings,
+  });
   const artboardWrapRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const palette = palettes[settings.paletteIndex];
   const selectedTemplateName =
     settings.template === 'blank' ? 'Start from scratch' : templates.find((item) => item.id === settings.template)?.name;
   const activeSymbolMarks = symbolTabs.find((tab) => tab.id === activeSymbolTab)?.marks ?? symbolTabs[0].marks;
-
-  useEffect(() => {
-    stateRef.current = { canvasItems, selectedIds, settings };
-  }, [canvasItems, selectedIds, settings]);
 
   // Restore after mount, not in a lazy state initializer: this component is
   // server-rendered, and localStorage only exists on the client, so reading it
@@ -126,40 +122,6 @@ function App() {
     window.addEventListener('pagehide', flush);
     return () => window.removeEventListener('pagehide', flush);
   }, [restored]);
-
-  const currentSnapshot = (): HistorySnapshot => ({
-    canvasItems: stateRef.current.canvasItems.map((item) => ({ ...item })),
-    selectedIds: [...stateRef.current.selectedIds],
-    settings: { ...stateRef.current.settings },
-  });
-
-  const beginHistoryAction = () => {
-    const snapshot = currentSnapshot();
-    setUndoStack((current) => [...current.slice(-49), snapshot]);
-    setRedoStack([]);
-  };
-
-  const restoreSnapshot = (snapshot: HistorySnapshot) => {
-    setSettings(snapshot.settings);
-    setCanvasItems(snapshot.canvasItems);
-    setSelectedIds(snapshot.selectedIds);
-  };
-
-  const undo = () => {
-    if (undoStack.length === 0) return;
-    const previous = undoStack[undoStack.length - 1];
-    setUndoStack((current) => current.slice(0, -1));
-    setRedoStack((current) => [...current.slice(-49), currentSnapshot()]);
-    restoreSnapshot(previous);
-  };
-
-  const redo = () => {
-    if (redoStack.length === 0) return;
-    const next = redoStack[redoStack.length - 1];
-    setRedoStack((current) => current.slice(0, -1));
-    setUndoStack((current) => [...current.slice(-49), currentSnapshot()]);
-    restoreSnapshot(next);
-  };
 
   const update = <K extends keyof Settings>(key: K, value: Settings[K]) => {
     beginHistoryAction();
@@ -430,8 +392,9 @@ function App() {
   // then. Zoom is the trigger; the selection and the items are what the effect
   // reads to work out where to scroll, not something it should react to —
   // depending on them would drag the viewport around on every click, nudge and
-  // drag. They are therefore read from stateRef, which the effect above keeps
-  // current, so `[canvasZoom]` is genuinely the full dependency list.
+  // drag. They are therefore read from useHistory's stateRef, which that hook
+  // keeps current. The ref object itself never changes identity, so listing it
+  // alongside `[canvasZoom]` still leaves the zoom as the only real trigger.
   useEffect(() => {
     const animationFrame = window.requestAnimationFrame(() => {
       const wrap = artboardWrapRef.current;
@@ -457,7 +420,7 @@ function App() {
     });
 
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [canvasZoom]);
+  }, [canvasZoom, stateRef]);
 
   const alignSelected = (axis: 'x' | 'y') => {
     const selected = canvasItems.filter((item) => selectedIds.includes(item.id));
