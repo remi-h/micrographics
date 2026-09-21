@@ -7,6 +7,7 @@ import { ControlPanel } from './components/ControlPanel';
 import { MicrographicSvg } from './components/MicrographicSvg';
 import { StageHeader } from './components/StageHeader';
 import { initialSettings, loadTemplateItems, palettes, symbolTabs, templates } from './data';
+import { buildExportMarkup } from './exportMarkup';
 import { loadEditorState, saveEditorState, type PersistedEditorState } from './persistence';
 import type { CanvasItem, CanvasSymbol, CanvasText, Settings, Template } from './types';
 import { clamp, downloadBlob } from './utils';
@@ -578,16 +579,17 @@ function App() {
     reader.readAsDataURL(file);
   };
 
+  // Both exporters serialize a fresh, unselected render of the canvas rather
+  // than the live node, so the editor's own chrome stays out of the file. See
+  // buildExportMarkup.
+  const exportMarkup = () => buildExportMarkup({ items: canvasItems, palette, settings });
+
   const exportSvg = () => {
-    if (!svgRef.current) return;
-    const markup = new XMLSerializer().serializeToString(svgRef.current);
-    downloadBlob(new Blob([markup], { type: 'image/svg+xml;charset=utf-8' }), 'micrographic.svg');
+    downloadBlob(new Blob([exportMarkup()], { type: 'image/svg+xml;charset=utf-8' }), 'micrographic.svg');
   };
 
   const exportPng = async () => {
-    if (!svgRef.current) return;
-    const markup = new XMLSerializer().serializeToString(svgRef.current);
-    const blob = new Blob([markup], { type: 'image/svg+xml;charset=utf-8' });
+    const blob = new Blob([exportMarkup()], { type: 'image/svg+xml;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const image = new Image();
     image.decoding = 'async';

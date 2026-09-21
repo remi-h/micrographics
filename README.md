@@ -74,7 +74,8 @@ npm run typecheck
 - Toggle `Grid` and `Include background` in the right panel, or upload your
   own background image.
 - Use the toolbar to randomize, restart the current template, undo/redo, and
-  export SVG or PNG.
+  export SVG or PNG. Exports hold the artwork only: selection outlines, the
+  rotate and resize handles, and the alignment toolbar stay in the editor.
 - Your work is saved automatically in the browser, so closing the tab or
   reloading brings the canvas, palette, and zoom back as you left them. Use
   `Restart template` or `Start from scratch` in the toolbar to discard it. The
