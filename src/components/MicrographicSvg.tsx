@@ -47,6 +47,9 @@ function useInkBox<T extends SVGGraphicsElement>(active: boolean, deps: unknown[
     } catch {
       setBox(null);
     }
+    // The dependency list spreads `deps`, a parameter, so its contents are not
+    // statically known and exhaustive-deps cannot verify them. Callers pass the
+    // values the measurement depends on; see the two call sites below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, ...deps]);
 
