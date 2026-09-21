@@ -8,8 +8,22 @@ Next.js 16 + React 19 + TypeScript app (see README.md for stack/setup).
 - E2E tests: Playwright, in `e2e/`. Run `npm run test:e2e` (spins up its own dev
   server on port 3100).
 - Typecheck: `npm run typecheck`. `npm run build` also typechecks.
-- CI (`.github/workflows/ci.yml`) runs all of the above on every PR and on
-  push to `main`. Treat a PR as mergeable only once CI is green.
+- Lint: ESLint. Run `npm run lint`. The config is flat config in
+  `eslint.config.mjs` (`next lint` was removed in Next 16), built from
+  `eslint-config-next/core-web-vitals` and `eslint-config-next/typescript`,
+  which bring the React Hooks rules with them. The script uses
+  `--max-warnings 0`, so a warning fails the run like an error does.
+- Formatting: Prettier, configured in `.prettierrc.json` to match the style
+  already in the tree. `eslint-config-prettier` is applied last in the ESLint
+  config so ESLint never enforces formatting. `npm run format -- <paths>`
+  formats the files you name; the repository is not Prettier-formatted end to
+  end, so there is no repo-wide format check and CI does not run one.
+- CI (`.github/workflows/ci.yml`) runs lint, typecheck, build, unit tests and
+  the Playwright suite on every PR and on push to `main`. Treat a PR as
+  mergeable only once CI is green.
+- Suppressing a lint rule is a targeted `eslint-disable-next-line` with a
+  comment saying why. Never turn a rule off across the project to get a clean
+  run.
 
 ## Keep tests and docs current
 

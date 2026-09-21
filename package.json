@@ -7,6 +7,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write",
     "typecheck": "tsc --noEmit",
     "test": "jest",
     "test:e2e": "playwright test"
@@ -28,8 +30,12 @@
     "@types/node": "^20.17.6",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.3.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.5",
+    "eslint-config-prettier": "^10.1.8",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",
+    "prettier": "^3.9.8",
     "typescript": "^5.7.2"
   }
 }

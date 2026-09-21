@@ -32,9 +32,14 @@ function useInkBox<T extends SVGGraphicsElement>(active: boolean, deps: unknown[
       return;
     }
 
+    // The measurement only exists once the node is in the DOM, so storing it is
+    // a genuine render-measure-render: react-hooks/set-state-in-effect is
+    // suppressed rather than obeyed. The state settles after one extra render
+    // because the effect re-runs only when `active` or `deps` change.
     try {
       const measured = node.getBBox();
       if (measured.width === 0 && measured.height === 0) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
         setBox(null);
         return;
       }

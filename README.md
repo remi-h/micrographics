@@ -60,6 +60,32 @@ Typecheck the project:
 npm run typecheck
 ```
 
+Lint the project (ESLint with `eslint-config-next` and the React Hooks rules):
+
+```bash
+npm run lint
+```
+
+`npm run lint` fails on warnings as well as errors, and CI runs it on every pull
+request.
+
+## Formatting
+
+Prettier owns formatting; its settings live in `.prettierrc.json` and match the
+style the codebase already uses (two spaces, single quotes, semicolons, a
+generous 120-column width). `eslint-config-prettier` switches off ESLint's own
+formatting rules, so the two never disagree about the same line.
+
+Format the files you are working on by passing them to the script:
+
+```bash
+npm run format -- src/App.tsx e2e/navigation.spec.ts
+```
+
+The repository predates Prettier and is not formatted end to end yet, so there
+is deliberately no repo-wide formatting check in CI: running Prettier over
+everything is a reformatting change of its own.
+
 ## Basic Use
 
 - Pick a starting point from the `Template` dropdown in the left panel, or
@@ -94,3 +120,4 @@ npm run typecheck
 - Next.js
 - Base UI
 - Lucide React icons
+- ESLint + Prettier

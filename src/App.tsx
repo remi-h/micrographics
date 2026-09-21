@@ -29,6 +29,29 @@ function reason(error: unknown) {
   return error instanceof Error && error.message ? error.message : 'an unknown error';
 }
 
+// Pure geometry, so it lives outside the component: nothing here reads state,
+// which lets effects call it without listing it as a dependency.
+function itemBounds(item: CanvasItem) {
+  if (item.kind === 'symbol') {
+    const pad = 10;
+    return { x: item.x - item.size / 2 - pad, y: item.y - item.size / 2 - pad, width: item.size + pad * 2, height: item.size + pad * 2 };
+  }
+  if (item.kind === 'text') {
+    const lines = item.text.split('\n');
+    const width = Math.max(90, Math.max(...lines.map((line) => line.length)) * item.size * 0.62);
+    return { x: item.x - 8, y: item.y - item.size - 10, width: width + 16, height: lines.length * item.size * 1.08 + 22 };
+  }
+  return { x: 0, y: 0, width: 0, height: 0 };
+}
+
+function visualCenter(item: CanvasItem) {
+  const bounds = itemBounds(item);
+  return {
+    x: bounds.x + bounds.width / 2,
+    y: bounds.y + bounds.height / 2,
+  };
+}
+
 type HistorySnapshot = {
   canvasItems: CanvasItem[];
   selectedIds: string[];
@@ -69,9 +92,14 @@ function App() {
   // during the first render would desync the two and trip a hydration error.
   // The inline-script trick the Next docs use for flash-free persisted UI can
   // pre-set a DOM attribute, but it cannot rebuild a canvas of SVG items.
+  // react-hooks/set-state-in-effect is suppressed rather than obeyed here for
+  // that reason: localStorage is an external store that only exists after
+  // mount, so the one cascading render this causes is the price of correct
+  // hydration. It runs once, on mount, not on every render.
   useEffect(() => {
     const saved = loadEditorState();
     if (saved) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
       setSettings(saved.settings);
       setCanvasItems(saved.canvasItems);
       setCanvasZoom(saved.canvasZoom);
@@ -171,19 +199,6 @@ function App() {
     beginHistoryAction();
     setCanvasItems(loadTemplateItems(settings.template));
     setSelectedIds([]);
-  };
-
-  const itemBounds = (item: CanvasItem) => {
-    if (item.kind === 'symbol') {
-      const pad = 10;
-      return { x: item.x - item.size / 2 - pad, y: item.y - item.size / 2 - pad, width: item.size + pad * 2, height: item.size + pad * 2 };
-    }
-    if (item.kind === 'text') {
-      const lines = item.text.split('\n');
-      const width = Math.max(90, Math.max(...lines.map((line) => line.length)) * item.size * 0.62);
-      return { x: item.x - 8, y: item.y - item.size - 10, width: width + 16, height: lines.length * item.size * 1.08 + 22 };
-    }
-    return { x: 0, y: 0, width: 0, height: 0 };
   };
 
   const visibleCanvasRect = () => {
@@ -413,21 +428,18 @@ function App() {
     removeSelected();
   };
 
-  const visualCenter = (item: CanvasItem) => {
-    const bounds = itemBounds(item);
-    return {
-      x: bounds.x + bounds.width / 2,
-      y: bounds.y + bounds.height / 2,
-    };
-  };
-
+  // Re-centre the artboard on the selection when the zoom changes, and only
+  // then. Zoom is the trigger; the selection and the items are what the effect
+  // reads to work out where to scroll, not something it should react to —
+  // depending on them would drag the viewport around on every click, nudge and
+  // drag. They are therefore read from stateRef, which the effect above keeps
+  // current, so `[canvasZoom]` is genuinely the full dependency list.
   useEffect(() => {
-    if (selectedIds.length === 0) return;
-
     const animationFrame = window.requestAnimationFrame(() => {
       const wrap = artboardWrapRef.current;
       const svg = svgRef.current;
-      const selectedItems = canvasItems.filter((item) => selectedIds.includes(item.id));
+      const { canvasItems: items, selectedIds: selection } = stateRef.current;
+      const selectedItems = items.filter((item) => selection.includes(item.id));
       if (!wrap || !svg || selectedItems.length === 0) return;
 
       const centers = selectedItems.map(visualCenter);
@@ -502,6 +514,11 @@ function App() {
     );
   };
 
+  // Keyboard shortcuts. The handler calls this component's action helpers,
+  // which are new function objects on every render, so listing them would
+  // re-bind the window listener on every keystroke and every drag frame. The
+  // dependency array instead names the state those helpers read, which is what
+  // actually has to be fresh inside the listener.
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -578,6 +595,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see the note above this effect
   }, [canvasItems, redoStack, selectedIds, settings.template, undoStack]);
 
   const itemLabel = (item: CanvasItem, index: number) => {
