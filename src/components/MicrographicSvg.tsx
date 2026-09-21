@@ -5,22 +5,22 @@ import { hitBounds, intersects } from '../canvasGeometry';
 import type { CanvasItem, CanvasSymbol, CanvasText, Palette, Settings } from '../types';
 import { MicroMark } from './MicroMark';
 
-type Box = { x: number; y: number; width: number; height: number };
+export type Box = { x: number; y: number; width: number; height: number };
 
 // Breathing room between the glyph and its selection outline, in canvas units.
-const SELECTION_PAD = 6;
+export const SELECTION_PAD = 6;
 
 // A one-dimensional glyph (a rule, a hairline) measures zero on one axis, and a
 // zero-height outline would collapse onto the ink and put both handles in the
 // same place. Floor the outline so it stays grabbable.
-const MIN_SELECTION_SIZE = 20;
+export const MIN_SELECTION_SIZE = 20;
 
 // The selection outline is drawn from what the item actually renders, not from
 // an estimate of it. Estimates were wrong in both directions: symbol glyphs
 // don't fill their nominal 36-unit design box, and the text width formula
 // (chars * size * 0.62) ignores the letterSpacing="2" that <text> below
 // applies, so long strings overflowed their own outline to the right.
-function useInkBox<T extends SVGGraphicsElement>(active: boolean, deps: unknown[]) {
+export function useInkBox<T extends SVGGraphicsElement>(active: boolean, deps: unknown[]) {
   const ref = useRef<T | null>(null);
   const [box, setBox] = useState<Box | null>(null);
 
@@ -57,7 +57,7 @@ function useInkBox<T extends SVGGraphicsElement>(active: boolean, deps: unknown[
 }
 
 // Grow a measured ink box into the outline that gets drawn around it.
-function selectionBox(ink: Box): Box {
+export function selectionBox(ink: Box): Box {
   const width = Math.max(ink.width + SELECTION_PAD * 2, MIN_SELECTION_SIZE);
   const height = Math.max(ink.height + SELECTION_PAD * 2, MIN_SELECTION_SIZE);
   return {
