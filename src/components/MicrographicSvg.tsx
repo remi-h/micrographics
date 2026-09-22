@@ -532,26 +532,31 @@ function GraphicText({
   selected: boolean;
 }) {
   const color = palette.ink;
-  const lines = item.text.split('\n');
-  const width = Math.max(90, Math.max(...lines.map((line) => line.length)) * item.size * 0.62);
-  const height = lines.length * item.size * 1.08 + 22;
-  const editorWidth = Math.max(width + 16, 180);
-  const editorHeight = Math.max(height, 76);
-  const [textRef, textBox] = useInkBox<SVGTextElement>(selected && !editing, [item.text, item.size]);
+
+  // Editing shows the draft, not the committed text, so the item on the canvas
+  // is what the user is typing. The <text> below renders this in both states —
+  // an item mid-edit and the same item deselected draw from the same element
+  // with the same metrics, so they cannot look different.
+  const displayText = editing ? editingValue : item.text;
+  const lines = displayText.split('\n');
+  const estimatedWidth = Math.max(...lines.map((line) => line.length)) * item.size * 0.62;
+  const estimatedHeight = lines.length * item.size * 1.08;
+  const [textRef, textBox] = useInkBox<SVGTextElement>(selected || editing, [displayText, item.size]);
 
   // <text> sits at the item group's origin with no transform of its own, so a
-  // measured box is already in item space. The fallback is the old estimate,
-  // used only where measuring is unavailable (jsdom) or while editing.
-  const ink: Box = textBox ?? { x: 0, y: -item.size, width, height: lines.length * item.size * 1.08 };
+  // measured box is already in item space. Measuring while editing too is what
+  // lets the outline grow as lines are added; the estimate is the fallback for
+  // where measuring is unavailable, such as jsdom.
+  const ink: Box = textBox ?? { x: 0, y: -item.size, width: estimatedWidth, height: estimatedHeight };
   const outline = selectionBox(ink);
 
   return (
     <g className="canvas-item" transform={`translate(${item.x} ${item.y}) rotate(${item.rotate})`} onDoubleClick={onDoubleClick} onPointerDown={onPointerDown}>
       <rect
-        x="-8"
-        y={-item.size - 10}
-        width={width + 16}
-        height={height}
+        x={outline.x}
+        y={outline.y}
+        width={outline.width}
+        height={outline.height}
         fill="transparent"
         pointerEvents="all"
       />
@@ -585,24 +590,35 @@ function GraphicText({
           />
         </>
       )}
-      {editing ? (
+      {editing && (
+        // An input layer, not a second rendering of the text. The <text> below
+        // stays visible and draws the draft, so what is on the canvas while
+        // editing is the same element, in the same font at the same size, that
+        // draws once the edit is committed. The textarea only carries the
+        // caret, the selection and the keystrokes: its own glyphs are
+        // transparent, and it does not wrap, because <text> does not either —
+        // a wrapping textarea was why a long line filled the width while being
+        // edited and then rendered as one long line afterwards.
         <foreignObject
-          x="-8"
-          y={-item.size - 10}
-          width={editorWidth}
-          height={editorHeight}
+          x={outline.x}
+          y={outline.y}
+          width={outline.width}
+          height={outline.height}
           onPointerDown={(event) => event.stopPropagation()}
         >
           <textarea
             autoFocus
             className="canvas-text-editor"
+            wrap="off"
             style={{
-              color,
+              caretColor: color,
               fontFamily: 'IBM Plex Mono, ui-monospace, monospace',
               fontSize: item.size,
               fontWeight: 800,
               letterSpacing: 2,
               lineHeight: 1.08,
+              paddingTop: SELECTION_PAD,
+              paddingLeft: SELECTION_PAD,
             }}
             value={editingValue}
             onBlur={onCommitEdit}
@@ -618,22 +634,22 @@ function GraphicText({
             }}
           />
         </foreignObject>
-      ) : (
-        <text
-          ref={textRef}
-          fill={color}
-          fontFamily="IBM Plex Mono, ui-monospace, monospace"
-          fontSize={item.size}
-          fontWeight="800"
-          letterSpacing="2"
-        >
-          {lines.map((line, index) => (
-            <tspan key={`${item.id}-${index}`} x="0" dy={index === 0 ? 0 : item.size * 1.08}>
-              {line}
-            </tspan>
-          ))}
-        </text>
       )}
+      <text
+        ref={textRef}
+        fill={color}
+        fontFamily="IBM Plex Mono, ui-monospace, monospace"
+        fontSize={item.size}
+        fontWeight="800"
+        letterSpacing="2"
+        xmlSpace="preserve"
+      >
+        {lines.map((line, index) => (
+          <tspan key={`${item.id}-${index}`} x="0" dy={index === 0 ? 0 : item.size * 1.08}>
+            {line}
+          </tspan>
+        ))}
+      </text>
     </g>
   );
 }
