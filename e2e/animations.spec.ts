@@ -274,3 +274,28 @@ test('a copy of an animated item does not play its entrance by itself', async ({
   );
   expect(opacities, 'nothing should animate unless Play was pressed').toEqual(['1', '1']);
 });
+
+test('the Layers list fits its panel, however long a layer is named', async ({ page }) => {
+  await page.goto('/creator');
+
+  // The row is a grid item, and the layer name does not wrap, so without an
+  // explicit minimum the list's single column grows to the longest name and
+  // scrolls sideways -- carrying the animation control off the panel.
+  const fit = await page.evaluate(() => {
+    const list = document.querySelector('.layer-list') as HTMLElement;
+    const edge = list.getBoundingClientRect().right;
+    const controls = [...document.querySelectorAll('.layer-animate')] as HTMLElement[];
+    const names = [...document.querySelectorAll('.layer-name')] as HTMLElement[];
+    return {
+      overflow: list.scrollWidth - list.clientWidth,
+      controlsOffPanel: controls.filter((node) => node.getBoundingClientRect().right > edge + 0.5).length,
+      truncatedSomething: names.some((node) => node.scrollWidth > node.clientWidth),
+    };
+  });
+
+  expect(fit.overflow).toBe(0);
+  expect(fit.controlsOffPanel, 'every layer must be able to reach its animation control').toBe(0);
+  // The default template has a label long enough to need it, so this also
+  // pins that the name truncates rather than pushing the row wider.
+  expect(fit.truncatedSomething).toBe(true);
+});

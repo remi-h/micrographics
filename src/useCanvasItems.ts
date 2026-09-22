@@ -62,7 +62,6 @@ export type CanvasItems = {
   rotateItems: (updates: Array<{ id: string; rotate: number }>) => void;
   scaleItems: (updates: Array<{ id: string; size: number; x: number; y: number }>) => void;
   selectItem: (id: string | null, additive?: boolean) => void;
-  /** Gives one item an entrance, or takes its entrance away with `null`. */
   /**
    * Gives one item an entrance, or takes its entrance away with `null`.
    *

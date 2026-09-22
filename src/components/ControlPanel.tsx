@@ -11,7 +11,6 @@ import {
   MIN_DELAY,
   MIN_DURATION,
   animationLabel,
-  type AnimationKind,
   type ItemAnimation,
 } from '../animations';
 import { templates } from '../data';
@@ -235,6 +234,8 @@ function AnimationControl({
   // the pointer or the key comes up. That is the same shape as dragging an
   // item on the canvas, which snapshots once at pointer-down.
   const midGesture = useRef(false);
+  // Pointer up, key up, blur, or a gesture the browser cancels out from under
+  // a touch drag -- any of which mean the next change starts a new undo step.
   const endGesture = () => {
     midGesture.current = false;
   };
@@ -268,7 +269,7 @@ function AnimationControl({
                 className="size-option"
                 data-active={animation ? kind === animation.kind : undefined}
                 key={kind}
-                onClick={() => onChange({ ...current, kind: kind as AnimationKind })}
+                onClick={() => onChange({ ...current, kind })}
                 type="button"
               >
                 <span className="size-option-scale">{animationLabel(kind)}</span>
@@ -287,6 +288,7 @@ function AnimationControl({
               onBlur={endGesture}
               onChange={(event) => slide({ ...current, duration: Number(event.target.value) })}
               onKeyUp={endGesture}
+              onPointerCancel={endGesture}
               onPointerUp={endGesture}
               step={0.1}
               type="range"
@@ -304,6 +306,7 @@ function AnimationControl({
               onBlur={endGesture}
               onChange={(event) => slide({ ...current, delay: Number(event.target.value) })}
               onKeyUp={endGesture}
+              onPointerCancel={endGesture}
               onPointerUp={endGesture}
               step={0.1}
               type="range"

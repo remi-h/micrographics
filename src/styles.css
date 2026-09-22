@@ -809,8 +809,14 @@ h1 {
 
 /* The row is a container now: the layer's name selects it, and the control on
    the right opens its animation settings. The padding moves onto the two
-   buttons so both fill the row and neither leaves a dead strip. */
+   buttons so both fill the row and neither leaves a dead strip.
+   min-width: 0 because the row is a grid item, whose automatic minimum is its
+   min-content -- and the name below is `white-space: nowrap`, so that minimum
+   is the whole label. Without this the list's single auto column grows to the
+   longest layer name and scrolls sideways, carrying the animation control off
+   the edge of the panel. */
 .layer-row {
+  min-width: 0;
   padding: 0;
   gap: 0;
 }
@@ -833,11 +839,16 @@ h1 {
 
 /* On the label rather than on .layer-select: text-overflow does not apply to a
    flex container's anonymous items, so a long layer name clipped without ever
-   showing an ellipsis. */
+   showing an ellipsis.
+   The colour and size are restated because wrapping the label in a <span>
+   brings it under `.layer-row span`, which styles the small muted index
+   number -- without these the name reads as another index. */
 .layer-select .layer-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: #f4f0e8;
+  font-size: 13px;
 }
 
 .layer-animate {
