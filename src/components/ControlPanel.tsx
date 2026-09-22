@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { Dialog } from '@base-ui/react/dialog';
 import { Select } from '@base-ui/react/select';
 import { Toolbar } from '@base-ui/react/toolbar';
 import { Check, ChevronDown, Download, FileCode2, RefreshCcw, Shuffle, Trash2, Undo2, Redo2 } from 'lucide-react';
@@ -14,7 +16,6 @@ export function ControlPanel({
   selectedIds,
   selectedTemplateName,
   template,
-  onChangeExportScale,
   onChooseTemplate,
   onExportPng,
   onExportSvg,
@@ -30,9 +31,8 @@ export function ControlPanel({
   selectedIds: string[];
   selectedTemplateName: string | undefined;
   template: Template;
-  onChangeExportScale: (scale: ExportScale) => void;
   onChooseTemplate: (template: Template) => void;
-  onExportPng: () => void;
+  onExportPng: (scale?: ExportScale) => void;
   onExportSvg: () => void;
   onRandomize: () => void;
   onRedo: () => void;
@@ -41,6 +41,7 @@ export function ControlPanel({
   onUndo: () => void;
 }) {
   const selectedIdSet = new Set(selectedIds);
+  const [sizeOpen, setSizeOpen] = useState(false);
 
   return (
     <aside className="control-panel">
@@ -75,46 +76,56 @@ export function ControlPanel({
         <ToolButton label="Export SVG" onClick={onExportSvg}>
           <FileCode2 size={17} aria-hidden="true" />
         </ToolButton>
-        <ToolButton label="Export PNG" onClick={onExportPng}>
-          <Download size={17} aria-hidden="true" />
-        </ToolButton>
-        {/* Next to the button it governs, not buried in the panel below: the
-            size is part of the act of exporting a PNG, not a document setting. */}
-        <Select.Root
-          value={exportScale}
-          onValueChange={(value) => onChangeExportScale(value as ExportScale)}
-        >
-          <Select.Trigger
+        {/* The size is asked for in a dialog rather than shown as a second
+            control, so the toolbar stays one row at this panel width. Choosing
+            a size exports at it immediately -- picking a size and then hunting
+            for a second button to press would be a worse trade than the wrap
+            it replaces. */}
+        <Dialog.Root open={sizeOpen} onOpenChange={setSizeOpen}>
+          <Dialog.Trigger
             render={<Toolbar.Button />}
-            className="select-trigger export-scale-trigger"
-            aria-label="PNG size"
+            className="icon-button"
+            aria-label="Export PNG"
           >
-            {/* The toolbar wraps at this panel width, so the size can end up a
-                row below the button it belongs to: name it, don't just show a
-                bare multiplier. */}
-            <span>PNG {exportScale}&times;</span>
-            <Select.Icon className="select-icon">
-              <ChevronDown size={14} aria-hidden="true" />
-            </Select.Icon>
-          </Select.Trigger>
-          <Select.Portal>
-            <Select.Positioner sideOffset={8}>
-              <Select.Popup className="select-popup">
+            <Download size={17} aria-hidden="true" />
+          </Dialog.Trigger>
+          <Dialog.Portal>
+            <Dialog.Backdrop className="dialog-backdrop" />
+            <Dialog.Popup className="dialog-popup">
+              <Dialog.Title className="dialog-title">Export PNG</Dialog.Title>
+              <Dialog.Description className="dialog-description">
+                Pick a size. The artboard is 1200 × 800.
+              </Dialog.Description>
+              <div className="size-options">
                 {EXPORT_SCALES.map((scale) => {
                   const { width, height } = exportPixelSize(scale);
                   return (
-                    <Select.Item className="select-item" key={scale} value={scale}>
-                      <Select.ItemText>{`${scale}× · ${width} × ${height}`}</Select.ItemText>
-                      <Select.ItemIndicator className="select-item-indicator">
-                        <Check size={14} aria-hidden="true" />
-                      </Select.ItemIndicator>
-                    </Select.Item>
+                    <button
+                      className="size-option"
+                      data-active={scale === exportScale}
+                      key={scale}
+                      onClick={() => {
+                        setSizeOpen(false);
+                        // The scale goes to the exporter directly: setting it
+                        // as state here and exporting in the same click would
+                        // rasterize at the previously chosen size.
+                        void onExportPng(scale);
+                      }}
+                      type="button"
+                    >
+                      <span className="size-option-scale">{scale}&times;</span>
+                      <span className="size-option-pixels">
+                        {width} &times; {height}
+                      </span>
+                      {scale === exportScale && <Check size={14} aria-hidden="true" />}
+                    </button>
                   );
                 })}
-              </Select.Popup>
-            </Select.Positioner>
-          </Select.Portal>
-        </Select.Root>
+              </div>
+              <Dialog.Close className="dialog-close">Cancel</Dialog.Close>
+            </Dialog.Popup>
+          </Dialog.Portal>
+        </Dialog.Root>
       </Toolbar.Root>
 
       <div className="panel-scroll">

@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { initialSettings, palettes } from './data';
 import * as exportMarkup from './exportMarkup';
+import type { ExportScale } from './exportMarkup';
 import type { CanvasItem } from './types';
 import { useExport } from './useExport';
 
@@ -101,9 +102,9 @@ function setUp() {
   return renderHook(() => useExport({ canvasItems, palette: palettes[0], settings: initialSettings }));
 }
 
-async function exportPng(result: { current: ReturnType<typeof useExport> }) {
+async function exportPng(result: { current: ReturnType<typeof useExport> }, scale?: ExportScale) {
   await act(async () => {
-    await result.current.exportPng();
+    await result.current.exportPng(scale);
   });
 }
 
@@ -189,6 +190,31 @@ describe('useExport PNG', () => {
     expect(stubs.canvases[0].width).toBe(4800);
     expect(stubs.canvases[0].height).toBe(3200);
     expect(result.current.exportStatus?.text).toBe('Saved micrographic.png (4800 × 3200).');
+  });
+
+  // The size picker sets the scale and exports in one click. Reading the scale
+  // off state would rasterize at the previous one, because state is not updated
+  // until the next render, so the scale is passed in instead.
+  it('rasterizes at a scale passed in, not the one still in state', async () => {
+    const { result } = setUp();
+    expect(result.current.exportScale).toBe(2);
+
+    await exportPng(result, 4);
+
+    expect(buildExportMarkup).toHaveBeenCalledWith(expect.objectContaining({ scale: 4 }));
+    expect(stubs.canvases[0].width).toBe(4800);
+    expect(result.current.exportStatus?.text).toBe('Saved micrographic.png (4800 × 3200).');
+  });
+
+  it('remembers a scale passed in as the new default', async () => {
+    const { result } = setUp();
+
+    await exportPng(result, 1);
+    expect(result.current.exportScale).toBe(1);
+
+    // A later export with no scale uses what the picker last chose.
+    await exportPng(result);
+    expect(stubs.canvases[1].width).toBe(1200);
   });
 
   // 1 of 4: the serializer itself throws, before there is anything to decode.

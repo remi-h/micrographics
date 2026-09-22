@@ -931,12 +931,97 @@ h1 {
 
 /* The PNG size sits in the toolbar, so it matches the icon buttons beside it
    rather than the full-width selects down in the panel. */
-.export-scale-trigger {
-  width: auto;
-  height: 36px;
-  gap: 4px;
-  padding: 0 8px;
+/* The PNG size dialog. It replaced an inline size control in the toolbar:
+   at the panel's width that control pushed the row to wrap, which put it a
+   line below the button it belonged to. */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 10, 10, 0.62);
+}
+
+.dialog-popup {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(360px, calc(100vw - 32px));
+  padding: 20px;
+  border: 1px solid rgba(245, 242, 234, 0.16);
+  border-radius: 12px;
+  background: #171717;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+.dialog-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.dialog-description {
+  margin: 6px 0 16px;
+  font-size: 13px;
+  color: rgba(244, 240, 232, 0.62);
+}
+
+.size-options {
+  display: grid;
+  gap: 8px;
+}
+
+.size-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 13px;
+  border: 1px solid rgba(245, 242, 234, 0.14);
+  border-radius: 8px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.size-option:hover,
+.size-option:focus-visible {
+  border-color: rgba(245, 242, 234, 0.4);
+  outline: none;
+}
+
+.size-option[data-active='true'] {
+  border-color: rgba(245, 242, 234, 0.55);
+}
+
+.size-option-scale {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.size-option-pixels {
+  flex: 1;
   font-size: 12px;
+  color: rgba(244, 240, 232, 0.6);
+  font-variant-numeric: tabular-nums;
+}
+
+.dialog-close {
+  margin-top: 14px;
+  width: 100%;
+  padding: 9px;
+  border: 0;
+  border-radius: 8px;
+  color: rgba(244, 240, 232, 0.72);
+  background: transparent;
+  cursor: pointer;
+}
+
+.dialog-close:hover,
+.dialog-close:focus-visible {
+  color: #f4f0e8;
+  background: rgba(245, 242, 234, 0.08);
+  outline: none;
 }
 
 /* Export results: a fixed, always-mounted live region (see ExportStatus) with
@@ -1136,16 +1221,26 @@ h1 {
   cursor: grabbing;
 }
 
+/* The on-canvas text editor is an input layer over the SVG <text>, not a
+   second rendering of it: the glyphs here are transparent and only the caret
+   and the selection show, so the text the user sees is always the real one.
+   white-space: pre with wrap="off" keeps it from wrapping, which <text> never
+   does either. */
 .canvas-text-editor {
   width: 100%;
   height: 100%;
   padding: 0;
   border: 0;
   outline: 0;
-  color: #f4f0e8;
+  color: transparent;
   background: transparent;
   resize: none;
   overflow: hidden;
+  white-space: pre;
+}
+
+.canvas-text-editor::selection {
+  background: rgba(244, 240, 232, 0.28);
 }
 
 .resize-handle,

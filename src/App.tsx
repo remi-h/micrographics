@@ -95,7 +95,7 @@ function App() {
     visibleCanvasRect,
   });
   const palette = palettes[settings.paletteIndex];
-  const { exportPng, exportScale, exportStatus, exportSvg, setExportScale } = useExport({
+  const { exportPng, exportScale, exportStatus, exportSvg } = useExport({
     canvasItems,
     palette,
     settings,
@@ -261,7 +261,6 @@ function App() {
           selectedIds={selectedIds}
           selectedTemplateName={selectedTemplateName}
           template={settings.template}
-          onChangeExportScale={setExportScale}
           onChooseTemplate={chooseTemplate}
           onExportPng={exportPng}
           onExportSvg={exportSvg}

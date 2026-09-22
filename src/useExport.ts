@@ -43,8 +43,13 @@ export type UseExportOptions = {
 export type Export = {
   /** Downloads the artboard as a standalone .svg, at the artboard's own size. */
   exportSvg: () => void;
-  /** Rasterizes the artboard to a .png at `exportScale`. */
-  exportPng: () => Promise<void>;
+  /**
+   * Rasterizes the artboard to a .png. Pass a scale to export at that size and
+   * make it the new default; the size picker does, because setting state and
+   * exporting in one call would otherwise rasterize at the previous scale --
+   * state is not updated until the next render.
+   */
+  exportPng: (scale?: ExportScale) => Promise<void>;
   /** The multiplier the PNG export rasterizes at. Session state; never persisted. */
   exportScale: ExportScale;
   setExportScale: Dispatch<SetStateAction<ExportScale>>;
@@ -86,15 +91,17 @@ export function useExport({ canvasItems, palette, settings }: UseExportOptions):
     }
   };
 
-  const exportPng = async () => {
-    const { width, height } = exportPixelSize(exportScale);
+  const exportPng = async (scaleOverride?: ExportScale) => {
+    const scale = scaleOverride ?? exportScale;
+    if (scaleOverride !== undefined) setExportScale(scaleOverride);
+    const { width, height } = exportPixelSize(scale);
     let url: string | null = null;
 
     // Every step here can fail for real -- a browser that will not decode the
     // SVG, a refused 2D context, an encode that runs out of memory at 4x -- and
     // each one used to end with no file and no word about it.
     try {
-      const blob = new Blob([exportMarkup(exportScale)], { type: 'image/svg+xml;charset=utf-8' });
+      const blob = new Blob([exportMarkup(scale)], { type: 'image/svg+xml;charset=utf-8' });
       url = URL.createObjectURL(blob);
       const image = new Image();
       image.decoding = 'async';
