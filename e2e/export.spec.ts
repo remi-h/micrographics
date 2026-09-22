@@ -65,10 +65,10 @@ test('the PNG export rasterizes with items selected', async ({ page }) => {
   await page.keyboard.press('ControlOrMeta+a');
   await expect(page.locator('.artboard foreignObject')).toHaveCount(1);
 
-  const download = await Promise.all([
-    page.waitForEvent('download'),
-    page.getByRole('button', { name: 'Export PNG' }).click(),
-  ]).then(([event]) => event);
+  const sizeOption = await choosePngSize(page);
+  const download = await Promise.all([page.waitForEvent('download'), sizeOption.click()]).then(
+    ([event]) => event,
+  );
 
   expect(download.suggestedFilename()).toBe('micrographic.png');
   const png = await readFile(await download.path());
@@ -91,11 +91,24 @@ function pngSize(png: Buffer) {
   return { width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
 }
 
-async function downloadPng(page: Page) {
-  const download = await Promise.all([
-    page.waitForEvent('download'),
-    page.getByRole('button', { name: 'Export PNG' }).click(),
-  ]).then(([event]) => event);
+// Export PNG opens a size dialog rather than exporting straight away, so a
+// download is two steps: open it, then choose a size. Passing no scale picks
+// whichever option is already marked current.
+async function choosePngSize(page: Page, scale?: 1 | 2 | 4) {
+  await page.getByRole('button', { name: 'Export PNG' }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  const option =
+    scale === undefined
+      ? page.locator('.size-option[data-active="true"]')
+      : page.locator('.size-option').filter({ hasText: new RegExp(`^${scale}×`) });
+  return option;
+}
+
+async function downloadPng(page: Page, scale?: 1 | 2 | 4) {
+  const option = await choosePngSize(page, scale);
+  const download = await Promise.all([page.waitForEvent('download'), option.click()]).then(
+    ([event]) => event,
+  );
 
   expect(download.suggestedFilename()).toBe('micrographic.png');
   return readFile(await download.path());
@@ -111,19 +124,13 @@ test('the PNG export size is selectable and the default is unchanged', async ({ 
   // say nothing at all, whether they worked or not.
   await expect(page.getByRole('status')).toHaveText('Saved micrographic.png (2400 × 1600).');
 
-  await page.getByRole('combobox', { name: 'PNG size' }).click();
-  await page.getByRole('option', { name: '4× · 4800 × 3200' }).click();
-
-  const largePng = await downloadPng(page);
+  const largePng = await downloadPng(page, 4);
   expect(pngSize(largePng)).toEqual({ width: 4800, height: 3200 });
   expect(largePng.byteLength).toBeGreaterThan(defaultPng.byteLength);
   await expect(page.getByRole('status')).toHaveText('Saved micrographic.png (4800 × 3200).');
 
   // The smallest option is there too, and it really is smaller.
-  await page.getByRole('combobox', { name: 'PNG size' }).click();
-  await page.getByRole('option', { name: '1× · 1200 × 800' }).click();
-
-  const smallPng = await downloadPng(page);
+  const smallPng = await downloadPng(page, 1);
   expect(pngSize(smallPng)).toEqual({ width: 1200, height: 800 });
 });
 
@@ -161,7 +168,28 @@ test('a PNG export that fails says so instead of going quiet', async ({ page }) 
   });
 
   await page.goto('/creator');
-  await page.getByRole('button', { name: 'Export PNG' }).click();
+  await (await choosePngSize(page)).click();
 
   await expect(page.getByRole('status')).toHaveText('Could not export the PNG: this browser gave no 2D canvas to draw into.');
+});
+
+// The PNG size used to be a second control sitting in the toolbar. At the
+// left panel's width that pushed the row to wrap, so the size ended up a line
+// below the button it belonged to. It is a dialog now; this pins the row.
+test('the toolbar stays on one row', async ({ page }) => {
+  await page.goto('/creator');
+  const toolbar = page.locator('.toolbar');
+  await expect(toolbar).toBeVisible();
+
+  const layout = await toolbar.evaluate((bar) => {
+    const children = [...bar.children].map((child) => child.getBoundingClientRect());
+    const tallest = Math.max(...children.map((box) => box.height));
+    const top = Math.min(...children.map((box) => box.top));
+    const bottom = Math.max(...children.map((box) => box.bottom));
+    return { spread: bottom - top, tallest };
+  });
+
+  // Everything fits inside one control's height: a wrapped row would span at
+  // least two of them.
+  expect(layout.spread).toBeLessThan(layout.tallest * 1.5);
 });
