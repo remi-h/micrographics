@@ -396,6 +396,33 @@ describe('useCanvasItems animation', () => {
     expect(Object.hasOwnProperty.call(item, 'animation')).toBe(false);
   });
 
+  it('records nothing when the entrance offered is the one already set', () => {
+    // Clicking the kind that is already chosen, or dragging a slider back to
+    // where it started, would otherwise cost an undo step that changes nothing.
+    const { result, beginHistoryAction } = setUp({ canvasItems: [symbol('symbol-1')] });
+    act(() => result.current.setItemAnimation('symbol-1', slide));
+    beginHistoryAction.mockClear();
+
+    act(() => result.current.setItemAnimation('symbol-1', { ...slide }));
+
+    expect(beginHistoryAction).not.toHaveBeenCalled();
+  });
+
+  it('takes one history entry for a whole slider drag, not one per step', () => {
+    // A range input fires a change per step. The delay slider spans 0 to 10 at
+    // 0.1, so a single drag is a hundred changes against a history that holds
+    // fifty -- every real edit the user had made would be pushed out of it.
+    const { result, beginHistoryAction } = setUp({ canvasItems: [symbol('symbol-1')] });
+
+    act(() => result.current.setItemAnimation('symbol-1', { ...slide, delay: 0.1 }));
+    for (let step = 2; step <= 100; step += 1) {
+      act(() => result.current.setItemAnimation('symbol-1', { ...slide, delay: step / 10 }, false));
+    }
+
+    expect(beginHistoryAction).toHaveBeenCalledTimes(1);
+    expect(itemById(result.current.canvasItems, 'symbol-1').animation?.delay).toBeCloseTo(10);
+  });
+
   it('records no history entry for removing an entrance that was never there', () => {
     const { result, beginHistoryAction } = setUp({ canvasItems: [symbol('symbol-1')] });
 

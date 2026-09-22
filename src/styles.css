@@ -829,6 +829,13 @@ h1 {
   text-align: left;
   cursor: pointer;
   overflow: hidden;
+}
+
+/* On the label rather than on .layer-select: text-overflow does not apply to a
+   flex container's anonymous items, so a long layer name clipped without ever
+   showing an ellipsis. */
+.layer-select .layer-name {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

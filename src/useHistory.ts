@@ -74,7 +74,11 @@ export function useHistory({
   }, [canvasItems, selectedIds, settings]);
 
   // Copied one level deep: the arrays are rebuilt and every item is cloned, so
-  // an edit that mutates an item in place cannot reach back into a snapshot
+  // an edit that replaces a field on an item cannot reach back into a snapshot.
+  // A nested value an item holds -- today only `animation` -- is still shared
+  // by reference, which is safe only because every mutator rebuilds those too
+  // rather than editing one in place. A mutator that ever edits one directly
+  // would have to deep-clone here
   // already on a stack and rewrite what undo will restore.
   const currentSnapshot = (): HistorySnapshot => ({
     canvasItems: stateRef.current.canvasItems.map((item) => ({ ...item })),

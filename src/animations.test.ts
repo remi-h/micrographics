@@ -99,19 +99,22 @@ describe('animationTiming', () => {
 });
 
 describe('animationStyleSheet', () => {
+  // The scope is the id of the root the rules are written for.
+  const sheetFor = (items: CanvasItem[]) => animationStyleSheet(items, 'mg-test')?.css ?? null;
+
   it('writes nothing at all when no item is animated', () => {
-    expect(animationStyleSheet([symbol('a'), symbol('b')])).toBeNull();
+    expect(animationStyleSheet([symbol('a'), symbol('b')], 'mg-test')).toBeNull();
   });
 
   it('keys the rule to the item’s position, which is what the canvas classes it by', () => {
-    const sheet = animationStyleSheet([symbol('a'), symbol('b', slide)]);
+    const sheet = sheetFor([symbol('a'), symbol('b', slide)]);
 
     expect(sheet).toContain(`.${animationClassName(1)} {`);
     expect(sheet).not.toContain(`.${animationClassName(0)} {`);
   });
 
   it('writes the timing the preview runs on', () => {
-    const sheet = animationStyleSheet([symbol('a', slide)]);
+    const sheet = sheetFor([symbol('a', slide)]);
 
     expect(sheet).toContain('0.6s');
     expect(sheet).toContain('0.2s');
@@ -120,14 +123,14 @@ describe('animationStyleSheet', () => {
   });
 
   it('carries only the entrances actually used', () => {
-    const sheet = animationStyleSheet([symbol('a', slide)]);
+    const sheet = sheetFor([symbol('a', slide)]);
 
     expect(sheet).toContain('@keyframes mg-slide-left');
     expect(sheet).not.toContain('@keyframes mg-pop');
   });
 
   it('writes one keyframes block for two items sharing an entrance', () => {
-    const sheet = animationStyleSheet([symbol('a', slide), symbol('b', slide)]) ?? '';
+    const sheet = sheetFor([symbol('a', slide), symbol('b', slide)]) ?? '';
 
     expect(sheet.match(/@keyframes mg-slide-left/g)).toHaveLength(1);
     expect(sheet).toContain(`.${animationClassName(0)} {`);
@@ -137,14 +140,26 @@ describe('animationStyleSheet', () => {
   it('namespaces the keyframes, so inlining the file cannot collide with the page', () => {
     // An exported SVG is often pasted into a document, and `@keyframes fade`
     // is a name plenty of stylesheets already define.
-    const sheet = animationStyleSheet([symbol('a', { ...slide, kind: 'fade' })]) ?? '';
+    const sheet = sheetFor([symbol('a', { ...slide, kind: 'fade' })]) ?? '';
 
     expect(sheet).toContain('@keyframes mg-fade');
     expect(sheet).not.toMatch(/@keyframes fade\b/);
   });
 
+  it('qualifies every rule with the root it was written for', () => {
+    // Two exported files inlined in one page have document-global styles, so
+    // unqualified `.mg-anim-0` rules would fight and the later one would win
+    // for both drawings.
+    const sheet = animationStyleSheet([symbol('a', slide), symbol('b', slide)], 'mg-abc123');
+
+    for (const rule of (sheet?.css ?? '').split('\n').filter((line) => line.startsWith('.') || line.startsWith('#'))) {
+      expect(rule).toMatch(/^#mg-abc123 /);
+    }
+    expect(sheet?.scope).toBe('mg-abc123');
+  });
+
   it('ends every entrance back at the item’s own state', () => {
-    const sheet = animationStyleSheet([symbol('a', slide)]) ?? '';
+    const sheet = sheetFor([symbol('a', slide)]) ?? '';
 
     expect(sheet).toContain('to { opacity: 1; transform: none; }');
   });

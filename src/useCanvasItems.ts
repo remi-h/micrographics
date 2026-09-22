@@ -63,7 +63,15 @@ export type CanvasItems = {
   scaleItems: (updates: Array<{ id: string; size: number; x: number; y: number }>) => void;
   selectItem: (id: string | null, additive?: boolean) => void;
   /** Gives one item an entrance, or takes its entrance away with `null`. */
-  setItemAnimation: (id: string, animation: ItemAnimation | null) => void;
+  /**
+   * Gives one item an entrance, or takes its entrance away with `null`.
+   *
+   * `record` is how a continuous gesture stays one undo step. A slider fires a
+   * change per step of the drag, and every other continuous gesture in the
+   * editor -- drag, rotate, resize -- takes one snapshot as it begins and none
+   * after. Pass false for the steps after the first.
+   */
+  setItemAnimation: (id: string, animation: ItemAnimation | null, record?: boolean) => void;
   setEditingTextDraft: Dispatch<SetStateAction<string>>;
   setTextDraft: Dispatch<SetStateAction<string>>;
   textDraft: string;
@@ -88,6 +96,15 @@ export function visualCenter(item: CanvasItem) {
     x: bounds.x + bounds.width / 2,
     y: bounds.y + bounds.height / 2,
   };
+}
+
+// Two entrances are the same entrance when they would play the same way. Used
+// to keep a no-op out of the undo stack; an `ItemAnimation` is three flat
+// fields, so this is the whole of it.
+function sameAnimation(left: ItemAnimation | undefined, right: ItemAnimation | null) {
+  if (!left && !right) return true;
+  if (!left || !right) return false;
+  return left.kind === right.kind && left.duration === right.duration && left.delay === right.delay;
 }
 
 // A copy of each item, nudged clear of the original so the user can see that
@@ -281,14 +298,15 @@ export function useCanvasItems({
     });
   };
 
-  const setItemAnimation = (id: string, animation: ItemAnimation | null) => {
+  const setItemAnimation = (id: string, animation: ItemAnimation | null, record = true) => {
     const target = canvasItems.find((item) => item.id === id);
     if (!target) return;
-    // Nothing to record when the item already has exactly this entrance, or
-    // already has none: an undo entry for a no-op reads as a broken undo.
-    if (!animation && !target.animation) return;
+    // Nothing to do at all when the item already has exactly this entrance, or
+    // already has none: an undo entry for a no-op reads as a broken undo, and
+    // clicking the entrance that is already chosen is an easy way to make one.
+    if (sameAnimation(target.animation, animation)) return;
 
-    beginHistoryAction();
+    if (record) beginHistoryAction();
     setCanvasItems((current) =>
       current.map((item) => {
         if (item.id !== id) return item;

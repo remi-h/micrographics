@@ -125,9 +125,12 @@ function frameCss(frame: { opacity: number; transform?: string }): string {
  *
  * The rules are keyed by class rather than by item id because ids come from
  * templates and from the id minter and are not guaranteed to be valid CSS
- * identifiers; an index is.
+ * identifiers; an index is. `scope` is the id of the root the rules belong to,
+ * which they are qualified by: an exported SVG inlined into a page has
+ * document-global styles, so two of them would otherwise both claim
+ * `.mg-anim-0` and the second would win for both.
  */
-export function animationStyleSheet(items: CanvasItem[]): string | null {
+export function animationStyleSheet(items: CanvasItem[], scope: string): { css: string; scope: string } | null {
   const animated = items.map((item, index) => ({ animation: item.animation, index })).filter((entry) => entry.animation);
   if (animated.length === 0) return null;
 
@@ -143,12 +146,12 @@ export function animationStyleSheet(items: CanvasItem[]): string | null {
   const rules = animated.map((entry) => {
     const { delay, duration, kind } = entry.animation!;
     return (
-      `.${animationClassName(entry.index)} { animation: ${keyframesName(kind)}` +
+      `#${scope} .${animationClassName(entry.index)} { animation: ${keyframesName(kind)}` +
       ` ${Math.max(MIN_DURATION, duration)}s ${ANIMATION_EASING} ${Math.max(0, delay)}s both; }`
     );
   });
 
-  return [...keyframes, ...rules].join('\n');
+  return { css: [...keyframes, ...rules].join('\n'), scope };
 }
 
 /** How long the whole sequence runs, in seconds. Zero when nothing animates. */

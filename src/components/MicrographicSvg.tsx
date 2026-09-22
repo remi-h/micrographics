@@ -439,11 +439,18 @@ function AnimatedLayer({
   playToken: number;
 }) {
   const ref = useRef<SVGGElement | null>(null);
+  // The token this layer last played. An effect runs on mount as well as on a
+  // change, so without this a layer mounting *after* Play was pressed -- the
+  // copy from a duplicate or paste, or an item brought back by undo -- would
+  // play its entrance on its own, while nothing else on the canvas moved.
+  const playedToken = useRef(playToken);
 
   const play = useEffectEvent(() => {
     const node = ref.current;
     // Absent in jsdom, and there is nothing to play before the first request.
     if (!node || !animation || playToken === 0 || typeof node.animate !== 'function') return;
+    if (playedToken.current === playToken) return;
+    playedToken.current = playToken;
 
     node.getAnimations().forEach((running) => running.cancel());
     node.animate(animationFrames(animation.kind), animationTiming(animation));

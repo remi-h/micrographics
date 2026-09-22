@@ -43,6 +43,13 @@ export type ExportInput = {
 
 const noop = () => {};
 
+// A fresh id for each exported file, so its stylesheet can be scoped to it.
+let exportCount = 0;
+function exportScopeId() {
+  exportCount += 1;
+  return `mg-${Math.random().toString(36).slice(2, 8)}-${exportCount}`;
+}
+
 // Exports used to be serialized straight off the live canvas node, so whatever
 // the editor was drawing at the time went into the file: the dashed selection
 // outline, the rotate and resize handles, the marquee, the multi-select
@@ -121,11 +128,23 @@ export function buildExportMarkup({ animate = false, items, palette, settings, s
     // frame: items stacked transparently off the left edge instead of the
     // poster. Every entrance animates from an offset back to the item's own
     // attributes, so without CSS the file is simply the finished artwork.
-    const stylesheet = animate ? animationStyleSheet(items) : null;
+    //
+    // The rules are scoped to this file's own root id. An exported SVG is often
+    // inlined into a page, where its styles are document-global -- two of them
+    // in one page would otherwise both define `.mg-anim-0` and the second would
+    // win for both. This is the same exposure the `mg-` prefix on the keyframes
+    // names guards against, which those already handle by being identical
+    // wherever they collide; the per-item timings are not.
+    const stylesheet = animate ? animationStyleSheet(items, exportScopeId()) : null;
     if (stylesheet) {
       const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
-      style.textContent = stylesheet;
-      svg.insertBefore(style, svg.firstChild);
+      style.setAttribute('type', 'text/css');
+      style.textContent = stylesheet.css;
+      svg.setAttribute('id', stylesheet.scope);
+      // After <title>, which is the element's accessible name and is expected
+      // to come first.
+      const title = svg.querySelector('title');
+      svg.insertBefore(style, title ? title.nextSibling : svg.firstChild);
     }
 
     // XMLSerializer, not markup built by hand: it declares the SVG namespace on

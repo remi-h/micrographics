@@ -221,3 +221,56 @@ test('two entrances can be ordered by their delays', async ({ page }) => {
     )
     .toBe(true);
 });
+
+test('a slider drag is one undo step, not one per step of the drag', async ({ page }) => {
+  await page.goto('/creator');
+  await giveTopLayerAnEntrance(page, 'Slide in from left');
+
+  await animateButtons(page).first().click();
+  const field = page.locator('.animation-field').filter({ hasText: 'Starts after' });
+  await expect(field).toContainText('0.0s');
+
+  // A real drag, not fill(): a range input fires a change per step, and the
+  // delay slider spans 0 to 10 at 0.1, so this is about a hundred of them --
+  // against a history that holds fifty. One entry per step would push every
+  // real edit out of the undo stack before the thumb reached the other end.
+  const slider = field.locator('input');
+  const box = await slider.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + 2, box!.y + box!.height / 2);
+  await page.mouse.down();
+  for (let step = 1; step <= 20; step += 1) {
+    await page.mouse.move(box!.x + (box!.width * step) / 20, box!.y + box!.height / 2);
+  }
+  await page.mouse.up();
+  await expect(field).toContainText('10.0s');
+
+  await page.getByRole('button', { name: 'Done' }).click();
+  await expect(page.locator('.dialog-popup')).toHaveCount(0);
+
+  // One undo puts the delay back where the drag started, rather than stepping
+  // it back a tenth of a second at a time.
+  await page.keyboard.press('ControlOrMeta+z');
+  await animateButtons(page).first().click();
+  await expect(page.locator('.animation-field').filter({ hasText: 'Starts after' })).toContainText('0.0s');
+});
+
+test('a copy of an animated item does not play its entrance by itself', async ({ page }) => {
+  await page.goto('/creator');
+  await giveTopLayerAnEntrance(page, 'Slide in from left');
+
+  // Play once, so the token is past zero. A layer mounting after that -- the
+  // copy below, or an item brought back by undo -- must not take the token as
+  // an instruction meant for it.
+  await playButton(page).click();
+  await expect.poll(async () => (await animatedGeometry(page))!.opacity).toBe('1');
+
+  await page.locator('.layer-select').first().click();
+  await page.keyboard.press('ControlOrMeta+d');
+  await expect(wrappers(page)).toHaveCount(2);
+
+  const opacities = await page.evaluate(() =>
+    [...document.querySelectorAll('g[class^="mg-anim-"]')].map((node) => getComputedStyle(node).opacity),
+  );
+  expect(opacities, 'nothing should animate unless Play was pressed').toEqual(['1', '1']);
+});

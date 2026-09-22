@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Dialog } from '@base-ui/react/dialog';
 import { Select } from '@base-ui/react/select';
 import { Toolbar } from '@base-ui/react/toolbar';
@@ -50,7 +50,7 @@ export function ControlPanel({
   onRedo: () => void;
   onRestartTemplate: () => void;
   onSelectItem: (id: string, additive: boolean) => void;
-  onSetItemAnimation: (id: string, animation: ItemAnimation | null) => void;
+  onSetItemAnimation: (id: string, animation: ItemAnimation | null, record?: boolean) => void;
   onUndo: () => void;
 }) {
   const selectedIdSet = new Set(selectedIds);
@@ -189,12 +189,12 @@ export function ControlPanel({
                     type="button"
                   >
                     <span>{String(canvasItems.length - index).padStart(2, '0')}</span>
-                    {itemLabel(item, index)}
+                    <span className="layer-name">{itemLabel(item, index)}</span>
                   </button>
                   <AnimationControl
                     animation={item.animation}
                     label={itemLabel(item, index)}
-                    onChange={(animation) => onSetItemAnimation(item.id, animation)}
+                    onChange={(animation, record) => onSetItemAnimation(item.id, animation, record)}
                   />
                 </div>
               ))
@@ -222,10 +222,27 @@ function AnimationControl({
 }: {
   animation: ItemAnimation | undefined;
   label: string;
-  onChange: (animation: ItemAnimation | null) => void;
+  onChange: (animation: ItemAnimation | null, record?: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const current = animation ?? DEFAULT_ANIMATION;
+
+  // A range input fires a change per step of a drag, and each one that took a
+  // history entry would be a separate undo step -- a single drag across the
+  // delay slider is a hundred of them, against a history that holds fifty, so
+  // it would push every real edit out of the stack. The first change of a
+  // gesture records, the rest ride on that snapshot, and the gesture ends when
+  // the pointer or the key comes up. That is the same shape as dragging an
+  // item on the canvas, which snapshots once at pointer-down.
+  const midGesture = useRef(false);
+  const endGesture = () => {
+    midGesture.current = false;
+  };
+  const slide = (next: ItemAnimation) => {
+    const record = !midGesture.current;
+    midGesture.current = true;
+    onChange(next, record);
+  };
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
@@ -267,7 +284,10 @@ function AnimationControl({
             <input
               max={MAX_DURATION}
               min={MIN_DURATION}
-              onChange={(event) => onChange({ ...current, duration: Number(event.target.value) })}
+              onBlur={endGesture}
+              onChange={(event) => slide({ ...current, duration: Number(event.target.value) })}
+              onKeyUp={endGesture}
+              onPointerUp={endGesture}
               step={0.1}
               type="range"
               value={current.duration}
@@ -281,7 +301,10 @@ function AnimationControl({
             <input
               max={MAX_DELAY}
               min={MIN_DELAY}
-              onChange={(event) => onChange({ ...current, delay: Number(event.target.value) })}
+              onBlur={endGesture}
+              onChange={(event) => slide({ ...current, delay: Number(event.target.value) })}
+              onKeyUp={endGesture}
+              onPointerUp={endGesture}
               step={0.1}
               type="range"
               value={current.delay}
