@@ -1,5 +1,5 @@
 import { act, render } from '@testing-library/react';
-import { useInkBox, selectionBox, MIN_SELECTION_SIZE, SELECTION_PAD, type Box } from './MicrographicSvg';
+import { useInkBox, scaleInk, selectionBox, LETTER_SPACING, MIN_SELECTION_SIZE, SELECTION_PAD, type Box } from './MicrographicSvg';
 
 // The selection outline is measured from what an item actually renders rather
 // than estimated from its size. e2e/selection-outline.spec.ts proves the
@@ -45,8 +45,18 @@ describe('selectionBox', () => {
 
 // Exercises the hook through a real component so the ref attaches to a real
 // node, which is what the effect reads.
-function Probe({ active, deps, bbox }: { active: boolean; deps: unknown[]; bbox?: () => DOMRect }) {
-  const [ref, box] = useInkBox<SVGGElement>(active, deps);
+function Probe({
+  active,
+  deps,
+  bbox,
+  measuredAt,
+}: {
+  active: boolean;
+  deps: unknown[];
+  bbox?: () => DOMRect;
+  measuredAt?: number;
+}) {
+  const [ref, box] = useInkBox<SVGGElement>(active, deps, measuredAt);
   return (
     <svg>
       <g
@@ -54,6 +64,7 @@ function Probe({ active, deps, bbox }: { active: boolean; deps: unknown[]; bbox?
           if (node && bbox) (node as unknown as { getBBox: () => DOMRect }).getBBox = bbox;
           ref.current = node;
         }}
+        data-at={box ? String(box.at) : 'null'}
         data-box={box ? `${box.x},${box.y},${box.width},${box.height}` : 'null'}
       />
     </svg>
@@ -65,6 +76,10 @@ const rect = (x: number, y: number, width: number, height: number) =>
 
 function measured(container: HTMLElement) {
   return container.querySelector('g')?.getAttribute('data-box');
+}
+
+function measuredAt(container: HTMLElement) {
+  return container.querySelector('g')?.getAttribute('data-at');
 }
 
 describe('useInkBox', () => {
@@ -122,5 +137,92 @@ describe('useInkBox', () => {
     });
 
     expect(measured(container)).toBe('0,0,40,40');
+  });
+
+  it('records the size a measurement was taken at', () => {
+    const { container } = render(<Probe active deps={[]} measuredAt={48} bbox={() => rect(0, -40, 300, 50)} />);
+
+    expect(measuredAt(container)).toBe('48');
+  });
+
+  it('does not re-measure when only the size changes', () => {
+    // This is what makes a resize drag cheap and the outline honest. Putting
+    // the size back in `deps` costs a forced synchronous layout per frame, and
+    // lands the new measurement a render *after* the glyph has already grown,
+    // so for one frame the outline is drawn around the previous size.
+    const bbox = jest.fn(() => rect(0, -40, 300, 50));
+    const { container, rerender } = render(<Probe active deps={['LABEL']} measuredAt={48} bbox={bbox} />);
+    expect(bbox).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      rerender(<Probe active deps={['LABEL']} measuredAt={96} bbox={bbox} />);
+    });
+
+    expect(bbox).toHaveBeenCalledTimes(1);
+    expect(measuredAt(container)).toBe('48');
+  });
+});
+
+// The numbers below come from measuring a real <text> in Chromium at the font
+// the canvas uses (IBM Plex Mono 800, letter-spacing 2) with the 26-character
+// line 'Some reasonably long label'. The box is affine in the font size, not
+// proportional to it, which is the whole reason this function exists.
+describe('scaleInk', () => {
+  const GAPS = 25; // 26 characters, so 25 letter-spacing gaps
+  const atFortyEight = { at: 48, x: 0, y: -44.63, width: 802.79, height: 108.87 };
+
+  // Within a SELECTION_PAD of the real box is close enough to draw: the outline
+  // is padded by that much anyway, so an error this size only widens or narrows
+  // the gap around the glyphs, it never crosses them. The residual comes from
+  // the last glyph's side bearing, which the model folds into the scaling part.
+  // Proportional scaling misses by 24x that, in both directions.
+  const TOLERANCE = SELECTION_PAD;
+
+  it('scales proportionally when there is no letter spacing to hold back', () => {
+    const ink = scaleInk({ at: 10, x: 2, y: -8, width: 100, height: 20 }, 30, 0);
+
+    expect(ink).toEqual({ x: 6, y: -24, width: 300, height: 60 });
+  });
+
+  it('is a no-op at the size it was measured at', () => {
+    expect(scaleInk(atFortyEight, 48, GAPS)).toEqual({
+      x: 0,
+      y: -44.63,
+      width: 802.79,
+      height: 108.87,
+    });
+  });
+
+  it('matches the real box when the text is scaled up', () => {
+    // Chromium measures 2868.84 here. Scaling the whole box by 3.75 instead
+    // gives 3010.46 -- 142 units of slack hanging off the right of the glyphs.
+    expect(Math.abs(scaleInk(atFortyEight, 180, GAPS).width - 2868.84)).toBeLessThan(TOLERANCE);
+  });
+
+  it('matches the real box when the text is scaled down', () => {
+    // Chromium measures 239.42. Scaling the whole box by 0.25 gives 200.70,
+    // which would draw the outline 39 units *inside* the text it contains.
+    expect(Math.abs(scaleInk(atFortyEight, 12, GAPS).width - 239.42)).toBeLessThan(TOLERANCE);
+  });
+
+  it('holds the letter spacing out of the scaling entirely', () => {
+    // A box that is nothing but letter spacing is the same width at any size.
+    const spacing = { at: 20, x: 0, y: 0, width: LETTER_SPACING * 4, height: 0 };
+
+    expect(scaleInk(spacing, 200, 4).width).toBe(LETTER_SPACING * 4);
+  });
+
+  it('never reports a negative width when the spacing exceeds the measurement', () => {
+    // A one-character item measures narrower than the gaps its line would have
+    // if it were longer; the subtraction must not run past zero.
+    const ink = scaleInk({ at: 10, x: 0, y: 0, width: 4, height: 10 }, 20, 25);
+
+    expect(ink.width).toBeGreaterThanOrEqual(0);
+  });
+
+  it('leaves the box alone rather than dividing by a zero reference', () => {
+    const ink = scaleInk({ at: 0, x: 1, y: 2, width: 30, height: 40 }, 96, 0);
+
+    expect(ink).toEqual({ x: 1, y: 2, width: 30, height: 40 });
   });
 });
