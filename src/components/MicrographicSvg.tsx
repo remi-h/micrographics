@@ -638,6 +638,12 @@ function GraphicText({
       <text
         ref={textRef}
         fill={color}
+        // While editing this paints over the textarea, and SVG's default
+        // visiblePainted hit-testing would let the glyph ink swallow a click
+        // meant for the caret: the event would reach the group's drag handler
+        // and blur the editor, so clicking a character to move the caret
+        // committed the edit and started dragging the item instead.
+        pointerEvents={editing ? 'none' : undefined}
         fontFamily="IBM Plex Mono, ui-monospace, monospace"
         fontSize={item.size}
         fontWeight="800"

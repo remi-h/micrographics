@@ -94,3 +94,40 @@ test('committed text renders where the draft was', async ({ page }) => {
   // What was on screen mid-edit is what is on screen afterwards.
   await expect.poll(() => geometry(page)).toEqual(draft);
 });
+
+// While editing, the <text> paints over the textarea. Under SVG's default
+// visiblePainted hit-testing that lets the glyph ink swallow a click meant for
+// the caret: the event reaches the group's drag handler and blurs the editor,
+// so clicking a character to move the caret committed the edit and started
+// dragging the item. Clicks landing between glyphs still reached the textarea,
+// which made it look intermittent.
+test('clicking a character while editing moves the caret, it does not end the edit', async ({ page }) => {
+  await page.goto('/creator');
+  await selectATextItem(page);
+  await page.locator('g.canvas-item:has(rect[stroke-dasharray])').dblclick();
+
+  const editor = page.locator('.canvas-text-editor');
+  await expect(editor).toBeVisible();
+
+  // A point inside the rendered glyphs of the item being edited.
+  const point = await page.evaluate(() => {
+    const group = document.querySelector('g.canvas-item:has(.canvas-text-editor)');
+    const text = group?.querySelector('text');
+    if (!text) return null;
+    const box = text.getBoundingClientRect();
+    return { x: box.left + 4, y: box.top + box.height / 2 };
+  });
+  expect(point, 'expected the edited item to render text').not.toBeNull();
+
+  // The textarea must be what is under the pointer there, not the glyph ink.
+  await expect
+    .poll(() =>
+      page.evaluate((at) => document.elementFromPoint(at.x, at.y)?.tagName, point!),
+    )
+    .toBe('TEXTAREA');
+
+  await page.mouse.click(point!.x, point!.y);
+
+  // Still editing: the click went to the caret, not to a drag.
+  await expect(editor).toBeVisible();
+});
