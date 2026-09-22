@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Dialog } from '@base-ui/react/dialog';
 import { Select } from '@base-ui/react/select';
 import { Toolbar } from '@base-ui/react/toolbar';
-import { Check, ChevronDown, Download, FileCode2, RefreshCcw, Shuffle, Trash2, Undo2, Redo2 } from 'lucide-react';
+import { Check, ChevronDown, Download, FileCode2, Group, RefreshCcw, Shuffle, Trash2, Undo2, Redo2, Ungroup } from 'lucide-react';
 import { templates } from '../data';
+import { layerRows, rowItemIds } from '../groups';
 import { EXPORT_SCALES, exportPixelSize, type ExportScale } from '../exportMarkup';
 import type { CanvasItem, Template } from '../types';
 import { BrandIcon } from './BrandIcon';
@@ -23,6 +24,9 @@ export function ControlPanel({
   onRedo,
   onRestartTemplate,
   onSelectItem,
+  onSelectItems,
+  onGroupSelected,
+  onUngroupSelected,
   onUndo,
 }: {
   canvasItems: CanvasItem[];
@@ -38,9 +42,17 @@ export function ControlPanel({
   onRedo: () => void;
   onRestartTemplate: () => void;
   onSelectItem: (id: string, additive: boolean) => void;
+  onSelectItems: (ids: string[]) => void;
+  onGroupSelected: () => void;
+  onUngroupSelected: () => void;
   onUndo: () => void;
 }) {
   const selectedIdSet = new Set(selectedIds);
+  const rows = layerRows(canvasItems);
+  // A group can be dissolved as soon as one of its members is selected; two
+  // loose items are needed before there is anything to group.
+  const canGroup = selectedIds.length > 1;
+  const canUngroup = canvasItems.some((item) => item.groupId && selectedIdSet.has(item.id));
   const [sizeOpen, setSizeOpen] = useState(false);
 
   return (
@@ -160,22 +172,52 @@ export function ControlPanel({
           </Select.Root>
         </Field>
         <Field label="Layers">
+          {/* Grouping lives here as well as on the canvas: the layer list is
+              where a group reads as one thing, so it is where undoing that is
+              expected to be. */}
+          <div className="layer-actions">
+            <button className="layer-action" disabled={!canGroup} onClick={onGroupSelected} type="button">
+              <Group size={14} aria-hidden="true" />
+              Group
+            </button>
+            <button className="layer-action" disabled={!canUngroup} onClick={onUngroupSelected} type="button">
+              <Ungroup size={14} aria-hidden="true" />
+              Ungroup
+            </button>
+          </div>
           <div className="layer-list">
-            {canvasItems.length === 0 ? (
+            {rows.length === 0 ? (
               <div className="empty-layer">No symbols or text</div>
             ) : (
-              [...canvasItems].reverse().map((item, index) => (
-                <button
-                  className="layer-row"
-                  data-active={selectedIdSet.has(item.id)}
-                  key={item.id}
-                  onClick={(event) => onSelectItem(item.id, event.shiftKey || event.metaKey || event.ctrlKey)}
-                  type="button"
-                >
-                  <span>{String(canvasItems.length - index).padStart(2, '0')}</span>
-                  {itemLabel(item, index)}
-                </button>
-              ))
+              rows.map((row, index) => {
+                const ids = rowItemIds(row);
+                return (
+                  <button
+                    className="layer-row"
+                    data-active={ids.every((id) => selectedIdSet.has(id))}
+                    data-group={row.kind === 'group' || undefined}
+                    key={row.id}
+                    onClick={(event) => {
+                      // A group row stands for several items, so it cannot go
+                      // through the single-item toggle; it selects its members
+                      // outright, which is what clicking a group does anyway.
+                      if (row.kind === 'group') onSelectItems(ids);
+                      else onSelectItem(row.id, event.shiftKey || event.metaKey || event.ctrlKey);
+                    }}
+                    type="button"
+                  >
+                    <span>{String(rows.length - index).padStart(2, '0')}</span>
+                    {row.kind === 'group' ? (
+                      <>
+                        <Group size={13} aria-hidden="true" />
+                        {`Group of ${row.items.length}`}
+                      </>
+                    ) : (
+                      itemLabel(row.item, index)
+                    )}
+                  </button>
+                );
+              })
             )}
           </div>
         </Field>

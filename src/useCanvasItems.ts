@@ -1,5 +1,6 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { hitBounds, type Box } from './canvasGeometry';
+import { expandToGroups, groupItems, pruneGroups, regroupCopies, ungroupItems } from './groups';
 import { createItemId } from './itemIds';
 import type { CanvasItem, CanvasSymbol, CanvasText } from './types';
 import { clamp } from './utils';
@@ -54,6 +55,8 @@ export type CanvasItems = {
   editingTextDraft: string;
   editingTextId: string | null;
   findOpenPosition: (width: number, height: number) => Box;
+  /** Puts the selection into one group. Needs two items; does nothing with fewer. */
+  groupSelected: () => void;
   moveItem: (id: string, x: number, y: number) => void;
   nudgeSelected: (dx: number, dy: number) => void;
   pasteClipboard: () => void;
@@ -61,9 +64,17 @@ export type CanvasItems = {
   rotateItems: (updates: Array<{ id: string; rotate: number }>) => void;
   scaleItems: (updates: Array<{ id: string; size: number; x: number; y: number }>) => void;
   selectItem: (id: string | null, additive?: boolean) => void;
+  /**
+   * Selects exactly these items, plus the rest of any group they belong to.
+   * The marquee and the layer list go through this rather than setting the
+   * selection directly, so a group cannot be half-selected.
+   */
+  selectItems: (ids: string[]) => void;
   setEditingTextDraft: Dispatch<SetStateAction<string>>;
   setTextDraft: Dispatch<SetStateAction<string>>;
   textDraft: string;
+  /** Dissolves every group in the selection, leaving the items themselves alone. */
+  ungroupSelected: () => void;
 };
 
 // Auto-placement and align/distribute work from the same padded interaction
@@ -89,13 +100,19 @@ export function visualCenter(item: CanvasItem) {
 
 // A copy of each item, nudged clear of the original so the user can see that
 // there are now two, with ids that cannot collide with anything on the canvas.
+//
+// Group ids are re-minted too, so copying a group yields a second group rather
+// than two halves of one: without that, moving "the copy" would drag the
+// original along with it.
 function duplicateItems(items: CanvasItem[]) {
-  return items.map((item) => ({
-    ...item,
-    id: createItemId(item.kind),
-    x: clamp(item.x + 28, 52, 1148),
-    y: clamp(item.y + 28, 48, 752),
-  }));
+  return regroupCopies(
+    items.map((item) => ({
+      ...item,
+      id: createItemId(item.kind),
+      x: clamp(item.x + 28, 52, 1148),
+      y: clamp(item.y + 28, 48, 752),
+    })),
+  );
 }
 
 export function useCanvasItems({
@@ -262,7 +279,9 @@ export function useCanvasItems({
   const removeSelected = () => {
     if (selectedIds.length === 0) return;
     beginHistoryAction();
-    setCanvasItems((current) => current.filter((item) => !selectedIds.includes(item.id)));
+    // Pruned afterwards because a delete can strip a group down to one member,
+    // and a group of one is a layer row the user cannot do anything with.
+    setCanvasItems((current) => pruneGroups(current.filter((item) => !selectedIds.includes(item.id))));
     setSelectedIds([]);
   };
 
@@ -272,10 +291,36 @@ export function useCanvasItems({
       return;
     }
 
+    // Clicking one member of a group selects the group. A shift-click toggles
+    // the whole group in or out together rather than peeling a member off it.
+    const members = expandToGroups([id], canvasItems);
+
     setSelectedIds((current) => {
-      if (!additive) return [id];
-      return current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+      if (!additive) return members;
+      const alreadyIn = members.every((member) => current.includes(member));
+      return alreadyIn
+        ? current.filter((item) => !members.includes(item))
+        : [...current, ...members.filter((member) => !current.includes(member))];
     });
+  };
+
+  const selectItems = (ids: string[]) => {
+    setSelectedIds(expandToGroups(ids, canvasItems));
+  };
+
+  const groupSelected = () => {
+    const grouped = groupItems(canvasItems, selectedIds);
+    if (grouped === canvasItems) return;
+    beginHistoryAction();
+    setCanvasItems(grouped);
+    setSelectedIds(expandToGroups(selectedIds, grouped));
+  };
+
+  const ungroupSelected = () => {
+    const ungrouped = ungroupItems(canvasItems, selectedIds);
+    if (ungrouped === canvasItems) return;
+    beginHistoryAction();
+    setCanvasItems(ungrouped);
   };
 
   const copySelected = () => {
@@ -372,6 +417,7 @@ export function useCanvasItems({
     editingTextDraft,
     editingTextId,
     findOpenPosition,
+    groupSelected,
     moveItem,
     nudgeSelected,
     pasteClipboard,
@@ -379,8 +425,10 @@ export function useCanvasItems({
     rotateItems,
     scaleItems,
     selectItem,
+    selectItems,
     setEditingTextDraft,
     setTextDraft,
     textDraft,
+    ungroupSelected,
   };
 }

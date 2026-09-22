@@ -1,4 +1,5 @@
 import { palettes } from './data';
+import { pruneGroups } from './groups';
 import type { CanvasItem, Settings, Template } from './types';
 
 export const STORAGE_KEY = 'micrographics.editor';
@@ -85,14 +86,20 @@ function parseCanvasItem(value: unknown): CanvasItem | null {
   if (!isFiniteNumber(rotate) || !isFiniteNumber(size)) return null;
   if (!isFiniteNumber(x) || !isFiniteNumber(y)) return null;
 
+  // Grouping is newer than the saved shape, so a save from before it exists
+  // simply has no groupId and restores ungrouped. An unusable value is dropped
+  // rather than failing the item: a lost grouping costs the user a re-group,
+  // where a rejected item costs them the whole canvas.
+  const groupId = typeof value.groupId === 'string' && value.groupId.length > 0 ? { groupId: value.groupId } : null;
+
   if (kind === 'symbol') {
     if (typeof value.mark !== 'string' || value.mark.length === 0) return null;
-    return { id, kind, mark: value.mark, rotate, size, x, y };
+    return { ...groupId, id, kind, mark: value.mark, rotate, size, x, y };
   }
 
   if (kind === 'text') {
     if (typeof value.text !== 'string') return null;
-    return { id, kind, rotate, size, text: value.text, x, y };
+    return { ...groupId, id, kind, rotate, size, text: value.text, x, y };
   }
 
   return null;
@@ -108,7 +115,11 @@ function parseCanvasItems(value: unknown): CanvasItem[] | null {
     items.push(item);
   }
 
-  return items;
+  // Groups come back from storage, which is the one place items arrive without
+  // having gone through the operations that keep a group at two members or
+  // more. A save naming a group only one surviving item belongs to would
+  // otherwise draw a "Group of 1" row nothing can be done with.
+  return pruneGroups(items);
 }
 
 function parseZoom(value: unknown): number {

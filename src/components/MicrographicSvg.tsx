@@ -1,7 +1,8 @@
 import { forwardRef, useEffect, useRef, useState } from 'react';
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalSpaceBetween, AlignVerticalSpaceBetween } from 'lucide-react';
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalSpaceBetween, AlignVerticalSpaceBetween, Group, Ungroup } from 'lucide-react';
 import type { MouseEvent, PointerEvent } from 'react';
 import { hitBounds, intersects } from '../canvasGeometry';
+import { expandToGroups } from '../groups';
 import type { CanvasItem, CanvasSymbol, CanvasText, Palette, Settings } from '../types';
 import { MicroMark } from './MicroMark';
 
@@ -78,6 +79,8 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
   onChangeEditingText: (value: string) => void;
   onCommitTextEdit: () => void;
   onAlignSelected: (axis: 'x' | 'y') => void;
+  onGroupSelected: () => void;
+  onUngroupSelected: () => void;
   onDistributeSelected: (axis: 'x' | 'y') => void;
   onMoveItem: (id: string, x: number, y: number) => void;
   onRotateItems: (updates: Array<{ id: string; rotate: number }>) => void;
@@ -99,6 +102,8 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
       onChangeEditingText,
       onCommitTextEdit,
       onAlignSelected,
+      onGroupSelected,
+      onUngroupSelected,
       onDistributeSelected,
       onMoveItem,
       onRotateItems,
@@ -216,7 +221,12 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
       const rect = getMarqueeRect(event);
       if (!rect) return;
       setMarqueeRect(rect);
-      const ids = items.filter((item) => intersects(rect, hitBounds(item))).map((item) => item.id);
+      // Touching one member of a group sweeps the whole group in, so a
+      // marquee can never leave a group partly selected.
+      const ids = expandToGroups(
+        items.filter((item) => intersects(rect, hitBounds(item))).map((item) => item.id),
+        items,
+      );
       onSelectItems(marqueeRef.current.additive ? Array.from(new Set([...selectedIds, ...ids])) : ids);
       return;
     }
@@ -306,6 +316,14 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
   };
 
     const selectionToolbar = selectedBounds();
+    // One button, not two: a selection is either already a single whole group
+    // -- in which case the useful action is to take it apart -- or it is not,
+    // and the useful action is to make one.
+    const selectedGroupIds = new Set(
+      items.filter((item) => item.groupId && selectedIds.includes(item.id)).map((item) => item.groupId),
+    );
+    const selectionGrouped =
+      selectedGroupIds.size === 1 && items.filter((item) => item.groupId && selectedGroupIds.has(item.groupId)).length === selectedIds.length;
 
     return (
       <svg
@@ -373,11 +391,13 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
           <foreignObject
             x={selectionToolbar.toolbarX}
             y={selectionToolbar.toolbarY}
-            width="200"
-            height="44"
+            width="260"
+            // 36px buttons in 6px of padding inside a 1px border come to 50,
+            // which the previous 44 clipped.
+            height="52"
             onPointerDown={(event) => event.stopPropagation()}
           >
-            <div className="canvas-selection-actions" aria-label="Selection alignment tools">
+            <div className="canvas-selection-actions" aria-label="Selection tools">
               <button className="icon-button" onClick={() => onAlignSelected('x')} title="Align vertical centers" type="button">
                 <AlignCenterVertical size={17} aria-hidden="true" />
               </button>
@@ -390,6 +410,16 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
               <button className="icon-button" onClick={() => onDistributeSelected('y')} title="Even space vertically" type="button">
                 <AlignVerticalSpaceBetween size={17} aria-hidden="true" />
               </button>
+              <span className="canvas-selection-divider" />
+              {selectionGrouped ? (
+                <button className="icon-button" onClick={onUngroupSelected} title="Ungroup" type="button">
+                  <Ungroup size={17} aria-hidden="true" />
+                </button>
+              ) : (
+                <button className="icon-button" onClick={onGroupSelected} title="Group" type="button">
+                  <Group size={17} aria-hidden="true" />
+                </button>
+              )}
             </div>
           </foreignObject>
         )}

@@ -19,6 +19,13 @@ export type Settings = {
 
 export type CanvasText = {
   id: string;
+  /**
+   * Set when this item is part of a group. Items sharing a groupId are
+   * selected, moved and deleted together. Optional because most items are not
+   * grouped, and because a save written before groups existed has no such
+   * field. See groups.ts.
+   */
+  groupId?: string;
   kind: 'text';
   rotate: number;
   size: number;
@@ -29,6 +36,8 @@ export type CanvasText = {
 
 export type CanvasSymbol = {
   id: string;
+  /** Set when this item is part of a group; see CanvasText above and groups.ts. */
+  groupId?: string;
   kind: 'symbol';
   mark: string;
   rotate: number;

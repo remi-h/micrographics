@@ -94,6 +94,13 @@ everything is a reformatting change of its own.
   `Tech` logos. Add text from the same panel.
 - Drag items on the canvas to move them; select one to rotate or resize it
   with its handles. Select several to align or distribute them.
+- Select several items and press `Group`, in the `Layers` list or on the
+  toolbar that appears over the selection, to lock them together. A group is
+  one row in `Layers`, clicking any member selects all of them, and moving,
+  resizing, rotating, copying or deleting the group treats it as one thing.
+  `Ungroup` takes it apart again. Copying a group gives you a second,
+  independent group rather than enlarging the first. `Cmd`/`Ctrl` + `G` and
+  `Shift` + `Cmd`/`Ctrl` + `G` do the same from the keyboard.
 - Reorder and select items through the `Layers` list in the left panel.
 - Choose a palette from the swatches above the canvas, and zoom with the
   controls next to them.

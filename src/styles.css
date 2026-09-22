@@ -807,6 +807,52 @@ h1 {
   box-shadow: inset 0 0 0 1px #f4f0e8;
 }
 
+/* A group row stands for several items, so it is tinted to read as one thing
+   rather than as another item that happens to be named "Group of 3". */
+.layer-row[data-group] {
+  background: rgba(245, 242, 234, 0.06);
+  gap: 7px;
+}
+
+.layer-actions {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.layer-action {
+  flex: 1;
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid rgba(245, 242, 234, 0.16);
+  border-radius: 7px;
+  background: transparent;
+  color: #f4f0e8;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.layer-action:hover:not(:disabled) {
+  border-color: rgba(245, 242, 234, 0.4);
+}
+
+.layer-action:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.canvas-selection-divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 1px;
+  background: rgba(245, 242, 234, 0.16);
+}
+
 .empty-layer {
   min-height: 42px;
   display: grid;

@@ -27,6 +27,7 @@ function spyActions() {
     copySelected: jest.fn(),
     cutSelected: jest.fn(),
     duplicateSelected: jest.fn(),
+    groupSelected: jest.fn(),
     nudgeSelected: jest.fn(),
     pasteClipboard: jest.fn(),
     redo: jest.fn(),
@@ -35,6 +36,7 @@ function spyActions() {
     rotateItems: jest.fn(),
     setSelectedIds: jest.fn(),
     undo: jest.fn(),
+    ungroupSelected: jest.fn(),
     zoomCanvas: jest.fn(),
   } satisfies Omit<UseKeyboardShortcutsOptions, 'canvasItems' | 'selectedIds'>;
 }
@@ -82,6 +84,7 @@ function useLiveHarness(initial: { canvasItems: CanvasItem[]; selectedIds: strin
     copySelected: canvas.copySelected,
     cutSelected: canvas.cutSelected,
     duplicateSelected: canvas.duplicateSelected,
+    groupSelected: canvas.groupSelected,
     nudgeSelected: canvas.nudgeSelected,
     pasteClipboard: canvas.pasteClipboard,
     redo: history.redo,
@@ -91,6 +94,7 @@ function useLiveHarness(initial: { canvasItems: CanvasItem[]; selectedIds: strin
     selectedIds,
     setSelectedIds,
     undo: history.undo,
+    ungroupSelected: canvas.ungroupSelected,
     zoomCanvas: (delta: number) => setCanvasZoom((current) => current + delta),
   });
 

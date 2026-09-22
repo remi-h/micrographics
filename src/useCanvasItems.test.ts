@@ -372,3 +372,129 @@ describe('useCanvasItems text editing', () => {
     expect(itemById(result.current.canvasItems, 'text-1')).toMatchObject({ text: 'MICRO' });
   });
 });
+
+// Grouping. The arithmetic is covered in groups.test.ts; what matters here is
+// how the hook uses it -- which ids end up selected, when a history entry is
+// taken, and that a copy of a group is a group of its own.
+describe('useCanvasItems grouping', () => {
+  const grouped = () => {
+    const view = setUp({
+      canvasItems: [symbol('symbol-1'), symbol('symbol-2', 300), symbol('symbol-3', 500)],
+      selectedIds: ['symbol-1', 'symbol-2'],
+    });
+    act(() => view.result.current.groupSelected());
+    return view;
+  };
+
+  it('groups the selection and takes one history entry for it', () => {
+    const { result, beginHistoryAction } = grouped();
+
+    const groupId = itemById(result.current.canvasItems, 'symbol-1').groupId;
+    expect(groupId).toBeDefined();
+    expect(itemById(result.current.canvasItems, 'symbol-2').groupId).toBe(groupId);
+    expect(itemById(result.current.canvasItems, 'symbol-3').groupId).toBeUndefined();
+    expect(beginHistoryAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses to group one item, and takes no history entry for the refusal', () => {
+    const { result, beginHistoryAction } = setUp({
+      canvasItems: [symbol('symbol-1'), symbol('symbol-2', 300)],
+      selectedIds: ['symbol-1'],
+    });
+
+    act(() => result.current.groupSelected());
+
+    expect(itemById(result.current.canvasItems, 'symbol-1').groupId).toBeUndefined();
+    expect(beginHistoryAction).not.toHaveBeenCalled();
+  });
+
+  it('selects the whole group when one member is clicked', () => {
+    const { result } = grouped();
+
+    act(() => result.current.selectItem('symbol-2'));
+
+    expect(result.current.selectedIds).toEqual(['symbol-1', 'symbol-2']);
+  });
+
+  it('adds a whole group to an existing selection on a shift-click', () => {
+    const { result } = grouped();
+    act(() => result.current.selectItem('symbol-3'));
+
+    act(() => result.current.selectItem('symbol-1', true));
+
+    expect([...result.current.selectedIds].sort()).toEqual(['symbol-1', 'symbol-2', 'symbol-3']);
+  });
+
+  it('takes a whole group back out again on a second shift-click', () => {
+    const { result } = grouped();
+    act(() => result.current.selectItem('symbol-3'));
+    act(() => result.current.selectItem('symbol-1', true));
+
+    act(() => result.current.selectItem('symbol-2', true));
+
+    expect(result.current.selectedIds).toEqual(['symbol-3']);
+  });
+
+  it('completes a partial selection through selectItems, so a marquee cannot halve a group', () => {
+    const { result } = grouped();
+
+    act(() => result.current.selectItems(['symbol-1']));
+
+    expect(result.current.selectedIds).toEqual(['symbol-1', 'symbol-2']);
+  });
+
+  it('ungroups every group in the selection', () => {
+    const { result } = grouped();
+
+    act(() => result.current.ungroupSelected());
+
+    expect(result.current.canvasItems.every((item) => item.groupId === undefined)).toBe(true);
+  });
+
+  it('takes no history entry for ungrouping a selection that is not grouped', () => {
+    const { result, beginHistoryAction } = setUp({
+      canvasItems: [symbol('symbol-1'), symbol('symbol-2', 300)],
+      selectedIds: ['symbol-1', 'symbol-2'],
+    });
+
+    act(() => result.current.ungroupSelected());
+
+    expect(beginHistoryAction).not.toHaveBeenCalled();
+  });
+
+  it('duplicates a group into a second group rather than a bigger one', () => {
+    // Sharing the id would mean dragging "the copy" drags the original too.
+    const { result } = grouped();
+
+    act(() => result.current.duplicateSelected());
+
+    const copies = result.current.canvasItems.filter((item) => !['symbol-1', 'symbol-2', 'symbol-3'].includes(item.id));
+    expect(copies).toHaveLength(2);
+    expect(copies[0].groupId).toBe(copies[1].groupId);
+    expect(copies[0].groupId).not.toBe(itemById(result.current.canvasItems, 'symbol-1').groupId);
+  });
+
+  it('pastes a group as its own group', () => {
+    const { result } = grouped();
+
+    act(() => result.current.copySelected());
+    act(() => result.current.pasteClipboard());
+
+    const pasted = result.current.canvasItems.filter((item) => !['symbol-1', 'symbol-2', 'symbol-3'].includes(item.id));
+    expect(pasted).toHaveLength(2);
+    expect(pasted[0].groupId).toBe(pasted[1].groupId);
+    expect(pasted[0].groupId).not.toBe(itemById(result.current.canvasItems, 'symbol-1').groupId);
+  });
+
+  it('dissolves a group that a delete strips down to one member', () => {
+    const { result } = grouped();
+
+    act(() => result.current.selectItem('symbol-1'));
+    // The click above selected the group, so narrow it back to one member the
+    // way the layer list would not, then delete just that one.
+    act(() => result.current.setSelectedIds(['symbol-1']));
+    act(() => result.current.removeSelected());
+
+    expect(itemById(result.current.canvasItems, 'symbol-2').groupId).toBeUndefined();
+  });
+});

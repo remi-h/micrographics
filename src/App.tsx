@@ -76,6 +76,7 @@ function App() {
     duplicateSelected,
     editingTextDraft,
     editingTextId,
+    groupSelected,
     moveItem,
     nudgeSelected,
     pasteClipboard,
@@ -83,9 +84,11 @@ function App() {
     rotateItems,
     scaleItems,
     selectItem,
+    selectItems,
     setEditingTextDraft,
     setTextDraft,
     textDraft,
+    ungroupSelected,
   } = useCanvasItems({
     beginHistoryAction,
     canvasItems,
@@ -224,6 +227,7 @@ function App() {
     copySelected,
     cutSelected,
     duplicateSelected,
+    groupSelected,
     nudgeSelected,
     pasteClipboard,
     redo,
@@ -233,6 +237,7 @@ function App() {
     selectedIds,
     setSelectedIds,
     undo,
+    ungroupSelected,
     zoomCanvas,
   });
 
@@ -266,9 +271,12 @@ function App() {
           onExportSvg={exportSvg}
           onRandomize={randomize}
           onRedo={redo}
+          onGroupSelected={groupSelected}
           onRestartTemplate={restartTemplate}
           onSelectItem={selectItem}
+          onSelectItems={selectItems}
           onUndo={undo}
+          onUngroupSelected={ungroupSelected}
         />
 
         <section className="preview-stage" aria-label="Micrographic preview">
@@ -308,11 +316,13 @@ function App() {
                 onChangeEditingText={setEditingTextDraft}
                 onCommitTextEdit={commitTextEdit}
                 onDistributeSelected={distributeSelected}
+                onGroupSelected={groupSelected}
                 onMoveItem={moveItem}
                 onRotateItems={rotateItems}
                 onScaleItems={scaleItems}
-                onSelectItems={setSelectedIds}
+                onSelectItems={selectItems}
                 onSelectItem={selectItem}
+                onUngroupSelected={ungroupSelected}
                 palette={palette}
                 selectedIds={selectedIds}
                 settings={settings}

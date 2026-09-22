@@ -34,6 +34,7 @@ export type UseKeyboardShortcutsOptions = {
   copySelected: () => void;
   cutSelected: () => void;
   duplicateSelected: () => void;
+  groupSelected: () => void;
   nudgeSelected: (dx: number, dy: number) => void;
   pasteClipboard: () => void;
   redo: () => void;
@@ -41,6 +42,7 @@ export type UseKeyboardShortcutsOptions = {
   resetCanvasZoom: () => void;
   rotateItems: (updates: Array<{ id: string; rotate: number }>) => void;
   undo: () => void;
+  ungroupSelected: () => void;
   zoomCanvas: (delta: number) => void;
 };
 
@@ -50,6 +52,7 @@ export function useKeyboardShortcuts({
   copySelected,
   cutSelected,
   duplicateSelected,
+  groupSelected,
   nudgeSelected,
   pasteClipboard,
   redo,
@@ -59,6 +62,7 @@ export function useKeyboardShortcuts({
   selectedIds,
   setSelectedIds,
   undo,
+  ungroupSelected,
   zoomCanvas,
 }: UseKeyboardShortcutsOptions): void {
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
@@ -107,6 +111,12 @@ export function useKeyboardShortcuts({
     } else if (modifier && event.key.toLowerCase() === 'd') {
       event.preventDefault();
       duplicateSelected();
+    } else if (modifier && event.key.toLowerCase() === 'g') {
+      // Cmd/Ctrl+G groups, with Shift to take one apart, as every other
+      // drawing tool binds it.
+      event.preventDefault();
+      if (event.shiftKey) ungroupSelected();
+      else groupSelected();
     } else if (modifier && (event.key === '=' || event.key === '+')) {
       event.preventDefault();
       zoomCanvas(0.1);
