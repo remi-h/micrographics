@@ -551,6 +551,18 @@ describe('useCanvasItems grouping', () => {
     expect([...view.result.current.selectedIds].sort()).toEqual(['symbol-1', 'symbol-2', 'symbol-3']);
   });
 
+  it('takes a group back out again on a second modifier-click of its layer row', () => {
+    // The mirror of the branch above, and of what a shift-click on a single
+    // item does: everything already in comes back out together.
+    const view = grouped();
+    act(() => view.result.current.selectItem('symbol-3'));
+    act(() => view.result.current.selectItems(['symbol-1', 'symbol-2'], true));
+
+    act(() => view.result.current.selectItems(['symbol-1', 'symbol-2'], true));
+
+    expect(view.result.current.selectedIds).toEqual(['symbol-3']);
+  });
+
   it('dissolves a group that a delete strips down to one member', () => {
     const { result } = grouped();
 

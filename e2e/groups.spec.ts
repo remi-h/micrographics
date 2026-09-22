@@ -169,3 +169,25 @@ test('editing a grouped text item leaves the group whole afterwards', async ({ p
   const moved = before.filter((transform, index) => transform !== after[index]);
   expect(moved, 'nudging after an edit should still move the whole group').toHaveLength(2);
 });
+
+test('two groups can be merged from the Layers list', async ({ page }) => {
+  await page.goto('/creator');
+
+  // Two groups, made from the top four layers two at a time.
+  await groupTopTwo(page);
+  await layerRows(page).nth(1).click();
+  await layerRows(page).nth(2).click({ modifiers: ['Shift'] });
+  await groupButton(page).click();
+  await expect(groupRows(page)).toHaveCount(2);
+
+  // A group row has to honour the modifier, or a selection spanning both
+  // groups -- the one needed to merge them -- cannot be built from the list.
+  await groupRows(page).nth(0).click();
+  await groupRows(page).nth(1).click({ modifiers: ['Shift'] });
+  await expect(selectedOutlines(page)).toHaveCount(4);
+
+  await groupButton(page).click();
+
+  await expect(groupRows(page)).toHaveCount(1);
+  await expect(groupRows(page).first()).toContainText('Group of 4');
+});
