@@ -372,3 +372,62 @@ describe('useCanvasItems text editing', () => {
     expect(itemById(result.current.canvasItems, 'text-1')).toMatchObject({ text: 'MICRO' });
   });
 });
+
+describe('useCanvasItems animation', () => {
+  const slide = { delay: 0.2, duration: 0.6, kind: 'slide-left' as const };
+
+  it('gives an item an entrance, and takes one history entry for it', () => {
+    const { result, beginHistoryAction } = setUp({ canvasItems: [symbol('symbol-1')] });
+
+    act(() => result.current.setItemAnimation('symbol-1', slide));
+
+    expect(itemById(result.current.canvasItems, 'symbol-1').animation).toEqual(slide);
+    expect(beginHistoryAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('takes an entrance away, dropping the key rather than leaving an undefined', () => {
+    const { result } = setUp({ canvasItems: [symbol('symbol-1')] });
+    act(() => result.current.setItemAnimation('symbol-1', slide));
+
+    act(() => result.current.setItemAnimation('symbol-1', null));
+
+    const item = itemById(result.current.canvasItems, 'symbol-1');
+    expect(item.animation).toBeUndefined();
+    expect(Object.hasOwnProperty.call(item, 'animation')).toBe(false);
+  });
+
+  it('records no history entry for removing an entrance that was never there', () => {
+    const { result, beginHistoryAction } = setUp({ canvasItems: [symbol('symbol-1')] });
+
+    act(() => result.current.setItemAnimation('symbol-1', null));
+
+    expect(beginHistoryAction).not.toHaveBeenCalled();
+  });
+
+  it('leaves every other item alone', () => {
+    const { result } = setUp({ canvasItems: [symbol('symbol-1'), symbol('symbol-2', 300)] });
+
+    act(() => result.current.setItemAnimation('symbol-1', slide));
+
+    expect(itemById(result.current.canvasItems, 'symbol-2').animation).toBeUndefined();
+  });
+
+  it('ignores an id no item holds', () => {
+    const { result, beginHistoryAction } = setUp({ canvasItems: [symbol('symbol-1')] });
+
+    act(() => result.current.setItemAnimation('ghost', slide));
+
+    expect(beginHistoryAction).not.toHaveBeenCalled();
+    expect(result.current.canvasItems).toHaveLength(1);
+  });
+
+  it('carries the entrance onto a duplicate', () => {
+    const { result } = setUp({ canvasItems: [symbol('symbol-1')], selectedIds: ['symbol-1'] });
+    act(() => result.current.setItemAnimation('symbol-1', slide));
+
+    act(() => result.current.duplicateSelected());
+
+    const copy = result.current.canvasItems.find((item) => item.id !== 'symbol-1');
+    expect(copy?.animation).toEqual(slide);
+  });
+});

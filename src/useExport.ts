@@ -72,7 +72,10 @@ export function useExport({ canvasItems, palette, settings }: UseExportOptions):
   // Both exporters serialize a fresh, unselected render of the canvas rather
   // than the live node, so the editor's own chrome stays out of the file. See
   // buildExportMarkup.
-  const exportMarkup = (scale: number) => buildExportMarkup({ items: canvasItems, palette, settings, scale });
+  // The .svg is a document a browser runs, so it carries the entrances. The
+  // PNG is one frame, and that frame has to be the finished artwork.
+  const exportMarkup = (scale: number, animate = false) =>
+    buildExportMarkup({ animate, items: canvasItems, palette, settings, scale });
 
   const announceExport = (tone: ExportStatusMessage['tone'], text: string) => {
     exportStatusId.current += 1;
@@ -84,7 +87,7 @@ export function useExport({ canvasItems, palette, settings }: UseExportOptions):
       // Vector: the artboard's own size, with the scale control left to the
       // PNG. A viewBox is along for the ride, so it still scales anywhere.
       const { width, height } = exportPixelSize(1);
-      downloadBlob(new Blob([exportMarkup(1)], { type: 'image/svg+xml;charset=utf-8' }), 'micrographic.svg');
+      downloadBlob(new Blob([exportMarkup(1, true)], { type: 'image/svg+xml;charset=utf-8' }), 'micrographic.svg');
       announceExport('success', `Saved micrographic.svg (${width} × ${height}).`);
     } catch (error) {
       announceExport('error', `Could not export the SVG: ${reason(error)}.`);

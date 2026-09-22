@@ -1,3 +1,5 @@
+import type { ItemAnimation } from './animations';
+
 export type Template = '001' | '002' | '003' | '004' | '005' | '006' | '007' | '008' | 'blank';
 
 export type Palette = {
@@ -19,6 +21,12 @@ export type Settings = {
 
 export type CanvasText = {
   id: string;
+  /**
+   * The entrance this item plays, if it has one. Optional because most items
+   * have none, and because a save written before animations existed has no
+   * such field. See animations.ts.
+   */
+  animation?: ItemAnimation;
   kind: 'text';
   rotate: number;
   size: number;
@@ -29,6 +37,8 @@ export type CanvasText = {
 
 export type CanvasSymbol = {
   id: string;
+  /** The entrance this item plays, if it has one; see CanvasText above. */
+  animation?: ItemAnimation;
   kind: 'symbol';
   mark: string;
   rotate: number;

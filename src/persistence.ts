@@ -1,3 +1,4 @@
+import { ANIMATION_KINDS, MAX_DELAY, MAX_DURATION, MIN_DELAY, MIN_DURATION, type ItemAnimation } from './animations';
 import { palettes } from './data';
 import type { CanvasItem, Settings, Template } from './types';
 
@@ -77,6 +78,25 @@ function parseSettings(value: unknown): Settings | null {
 // from them: a save written by an older version carrying fields that no longer
 // exist (such as the removed per-item `tone`) still restores, minus those
 // fields, rather than being thrown away with the rest of the canvas.
+// Keyed off the kinds animations.ts defines, so adding one cannot leave the
+// validator behind. Out-of-range timings are clamped rather than rejected: a
+// duration of 400 seconds is a bad save, not a reason to lose the artwork.
+const ANIMATION_KIND_SET = new Set<string>(ANIMATION_KINDS);
+
+function parseAnimation(value: unknown): ItemAnimation | null {
+  if (!isRecord(value)) return null;
+
+  const { kind, duration, delay } = value;
+  if (typeof kind !== 'string' || !ANIMATION_KIND_SET.has(kind)) return null;
+  if (!isFiniteNumber(duration) || !isFiniteNumber(delay)) return null;
+
+  return {
+    delay: Math.min(Math.max(delay, MIN_DELAY), MAX_DELAY),
+    duration: Math.min(Math.max(duration, MIN_DURATION), MAX_DURATION),
+    kind: kind as ItemAnimation['kind'],
+  };
+}
+
 function parseCanvasItem(value: unknown): CanvasItem | null {
   if (!isRecord(value)) return null;
 
@@ -85,14 +105,21 @@ function parseCanvasItem(value: unknown): CanvasItem | null {
   if (!isFiniteNumber(rotate) || !isFiniteNumber(size)) return null;
   if (!isFiniteNumber(x) || !isFiniteNumber(y)) return null;
 
+  // Animations are newer than the saved shape, so a save from before they
+  // exist simply has none. An unusable one is dropped rather than failing the
+  // item: a lost entrance costs the user one dialog, a rejected item costs
+  // them the whole canvas.
+  const parsedAnimation = parseAnimation(value.animation);
+  const animation = parsedAnimation ? { animation: parsedAnimation } : null;
+
   if (kind === 'symbol') {
     if (typeof value.mark !== 'string' || value.mark.length === 0) return null;
-    return { id, kind, mark: value.mark, rotate, size, x, y };
+    return { ...animation, id, kind, mark: value.mark, rotate, size, x, y };
   }
 
   if (kind === 'text') {
     if (typeof value.text !== 'string') return null;
-    return { id, kind, rotate, size, text: value.text, x, y };
+    return { ...animation, id, kind, rotate, size, text: value.text, x, y };
   }
 
   return null;

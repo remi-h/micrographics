@@ -2,7 +2,18 @@ import { useState } from 'react';
 import { Dialog } from '@base-ui/react/dialog';
 import { Select } from '@base-ui/react/select';
 import { Toolbar } from '@base-ui/react/toolbar';
-import { Check, ChevronDown, Download, FileCode2, RefreshCcw, Shuffle, Trash2, Undo2, Redo2 } from 'lucide-react';
+import { Check, ChevronDown, Download, FileCode2, RefreshCcw, Shuffle, Sparkles, Trash2, Undo2, Redo2 } from 'lucide-react';
+import {
+  ANIMATION_KINDS,
+  DEFAULT_ANIMATION,
+  MAX_DELAY,
+  MAX_DURATION,
+  MIN_DELAY,
+  MIN_DURATION,
+  animationLabel,
+  type AnimationKind,
+  type ItemAnimation,
+} from '../animations';
 import { templates } from '../data';
 import { EXPORT_SCALES, exportPixelSize, type ExportScale } from '../exportMarkup';
 import type { CanvasItem, Template } from '../types';
@@ -23,6 +34,7 @@ export function ControlPanel({
   onRedo,
   onRestartTemplate,
   onSelectItem,
+  onSetItemAnimation,
   onUndo,
 }: {
   canvasItems: CanvasItem[];
@@ -38,6 +50,7 @@ export function ControlPanel({
   onRedo: () => void;
   onRestartTemplate: () => void;
   onSelectItem: (id: string, additive: boolean) => void;
+  onSetItemAnimation: (id: string, animation: ItemAnimation | null) => void;
   onUndo: () => void;
 }) {
   const selectedIdSet = new Set(selectedIds);
@@ -165,21 +178,132 @@ export function ControlPanel({
               <div className="empty-layer">No symbols or text</div>
             ) : (
               [...canvasItems].reverse().map((item, index) => (
-                <button
-                  className="layer-row"
-                  data-active={selectedIdSet.has(item.id)}
-                  key={item.id}
-                  onClick={(event) => onSelectItem(item.id, event.shiftKey || event.metaKey || event.ctrlKey)}
-                  type="button"
-                >
-                  <span>{String(canvasItems.length - index).padStart(2, '0')}</span>
-                  {itemLabel(item, index)}
-                </button>
+                // A row, not a button: it holds two of them. The animation
+                // control cannot be nested inside the row's own button, and
+                // making the whole row open the dialog would cost the click
+                // that selects a layer.
+                <div className="layer-row" data-active={selectedIdSet.has(item.id)} key={item.id}>
+                  <button
+                    className="layer-select"
+                    onClick={(event) => onSelectItem(item.id, event.shiftKey || event.metaKey || event.ctrlKey)}
+                    type="button"
+                  >
+                    <span>{String(canvasItems.length - index).padStart(2, '0')}</span>
+                    {itemLabel(item, index)}
+                  </button>
+                  <AnimationControl
+                    animation={item.animation}
+                    label={itemLabel(item, index)}
+                    onChange={(animation) => onSetItemAnimation(item.id, animation)}
+                  />
+                </div>
               ))
             )}
           </div>
         </Field>
       </div>
     </aside>
+  );
+}
+
+/**
+ * The per-layer entrance control from the Layers list: a button that says
+ * whether this layer animates, and a dialog to set what it does, how long it
+ * takes and how long it waits.
+ *
+ * The delay is the "order" -- rather than a position in a sequence, because a
+ * number of seconds says the same thing while also letting two layers arrive
+ * together, and it is the number the animation actually runs on.
+ */
+function AnimationControl({
+  animation,
+  label,
+  onChange,
+}: {
+  animation: ItemAnimation | undefined;
+  label: string;
+  onChange: (animation: ItemAnimation | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = animation ?? DEFAULT_ANIMATION;
+
+  return (
+    <Dialog.Root open={open} onOpenChange={setOpen}>
+      <Dialog.Trigger
+        className="layer-animate"
+        data-on={animation ? true : undefined}
+        aria-label={animation ? `Edit animation for ${label}` : `Add animation to ${label}`}
+        title={animation ? animationLabel(animation.kind) : 'Add animation'}
+      >
+        <Sparkles size={14} aria-hidden="true" />
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Backdrop className="dialog-backdrop" />
+        <Dialog.Popup className="dialog-popup">
+          <Dialog.Title className="dialog-title">Animate {label}</Dialog.Title>
+          <Dialog.Description className="dialog-description">
+            Plays when you press Play, and in the exported SVG when it is opened in a browser.
+          </Dialog.Description>
+
+          <div className="animation-kinds">
+            {ANIMATION_KINDS.map((kind) => (
+              <button
+                className="size-option"
+                data-active={animation ? kind === animation.kind : undefined}
+                key={kind}
+                onClick={() => onChange({ ...current, kind: kind as AnimationKind })}
+                type="button"
+              >
+                <span className="size-option-scale">{animationLabel(kind)}</span>
+                {animation && kind === animation.kind && <Check size={14} aria-hidden="true" />}
+              </button>
+            ))}
+          </div>
+
+          <label className="animation-field">
+            <span>
+              Duration <strong>{current.duration.toFixed(1)}s</strong>
+            </span>
+            <input
+              max={MAX_DURATION}
+              min={MIN_DURATION}
+              onChange={(event) => onChange({ ...current, duration: Number(event.target.value) })}
+              step={0.1}
+              type="range"
+              value={current.duration}
+            />
+          </label>
+
+          <label className="animation-field">
+            <span>
+              Starts after <strong>{current.delay.toFixed(1)}s</strong>
+            </span>
+            <input
+              max={MAX_DELAY}
+              min={MIN_DELAY}
+              onChange={(event) => onChange({ ...current, delay: Number(event.target.value) })}
+              step={0.1}
+              type="range"
+              value={current.delay}
+            />
+          </label>
+
+          <div className="dialog-footer">
+            <button
+              className="dialog-close"
+              disabled={!animation}
+              onClick={() => {
+                onChange(null);
+                setOpen(false);
+              }}
+              type="button"
+            >
+              Remove
+            </button>
+            <Dialog.Close className="dialog-close">Done</Dialog.Close>
+          </div>
+        </Dialog.Popup>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

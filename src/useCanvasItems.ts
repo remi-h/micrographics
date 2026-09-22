@@ -1,4 +1,5 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import type { ItemAnimation } from './animations';
 import { hitBounds, type Box } from './canvasGeometry';
 import { createItemId } from './itemIds';
 import type { CanvasItem, CanvasSymbol, CanvasText } from './types';
@@ -61,6 +62,8 @@ export type CanvasItems = {
   rotateItems: (updates: Array<{ id: string; rotate: number }>) => void;
   scaleItems: (updates: Array<{ id: string; size: number; x: number; y: number }>) => void;
   selectItem: (id: string | null, additive?: boolean) => void;
+  /** Gives one item an entrance, or takes its entrance away with `null`. */
+  setItemAnimation: (id: string, animation: ItemAnimation | null) => void;
   setEditingTextDraft: Dispatch<SetStateAction<string>>;
   setTextDraft: Dispatch<SetStateAction<string>>;
   textDraft: string;
@@ -278,6 +281,27 @@ export function useCanvasItems({
     });
   };
 
+  const setItemAnimation = (id: string, animation: ItemAnimation | null) => {
+    const target = canvasItems.find((item) => item.id === id);
+    if (!target) return;
+    // Nothing to record when the item already has exactly this entrance, or
+    // already has none: an undo entry for a no-op reads as a broken undo.
+    if (!animation && !target.animation) return;
+
+    beginHistoryAction();
+    setCanvasItems((current) =>
+      current.map((item) => {
+        if (item.id !== id) return item;
+        if (!animation) {
+          const next = { ...item };
+          delete next.animation;
+          return next;
+        }
+        return { ...item, animation };
+      }),
+    );
+  };
+
   const copySelected = () => {
     clipboardRef.current = canvasItems.filter((item) => selectedIds.includes(item.id));
   };
@@ -380,6 +404,7 @@ export function useCanvasItems({
     scaleItems,
     selectItem,
     setEditingTextDraft,
+    setItemAnimation,
     setTextDraft,
     textDraft,
   };

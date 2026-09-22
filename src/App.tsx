@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Tooltip } from '@base-ui/react/tooltip';
+import { animationRunTime } from './animations';
 import { AssetPanel } from './components/AssetPanel';
 import { ControlPanel } from './components/ControlPanel';
 import { ExportStatus } from './components/ExportStatus';
@@ -27,6 +28,9 @@ function App() {
   const [canvasZoom, setCanvasZoom] = useState(1);
   const [activeSymbolTab, setActiveSymbolTab] = useState(symbolTabs[0].id);
   const [restored, setRestored] = useState(false);
+  // A counter, not a flag: playing twice in a row has to restart the
+  // entrances, and the same value twice would not re-run the effect that does.
+  const [playToken, setPlayToken] = useState(0);
   const persistRef = useRef<PersistedEditorState>({ canvasItems, canvasZoom, settings });
   const { beginHistoryAction, redo, stateRef, undo } = useHistory({
     canvasItems,
@@ -84,6 +88,7 @@ function App() {
     scaleItems,
     selectItem,
     setEditingTextDraft,
+    setItemAnimation,
     setTextDraft,
     textDraft,
   } = useCanvasItems({
@@ -268,11 +273,13 @@ function App() {
           onRedo={redo}
           onRestartTemplate={restartTemplate}
           onSelectItem={selectItem}
+          onSetItemAnimation={setItemAnimation}
           onUndo={undo}
         />
 
         <section className="preview-stage" aria-label="Micrographic preview">
           <StageHeader
+            canPlay={animationRunTime(canvasItems) > 0}
             canvasZoom={canvasZoom}
             grid={settings.grid}
             palette={palette}
@@ -281,6 +288,7 @@ function App() {
             selectedTemplateName={selectedTemplateName}
             settings={settings}
             onChangeGrid={(value) => update('grid', value)}
+            onPlayAnimations={() => setPlayToken((current) => current + 1)}
             onChangePalette={(index) => update('paletteIndex', index)}
             onResetZoom={resetCanvasZoom}
             onZoomIn={() => zoomCanvas(0.1)}
@@ -314,6 +322,7 @@ function App() {
                 onSelectItems={setSelectedIds}
                 onSelectItem={selectItem}
                 palette={palette}
+                playToken={playToken}
                 selectedIds={selectedIds}
                 settings={settings}
               />

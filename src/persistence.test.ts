@@ -170,4 +170,48 @@ describe('saveEditorState / loadEditorState', () => {
     expect(() => loadEditorState()).not.toThrow();
     expect(loadEditorState()).toBeNull();
   });
+
+  // Animations, like groups, are newer than the saved shape.
+  it('round-trips an animation', () => {
+    const animated: PersistedEditorState = {
+      ...state,
+      canvasItems: [{ animation: { delay: 0.4, duration: 1.2, kind: 'pop' }, id: 'symbol-1', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 100, y: 200 }],
+    };
+
+    expect(saveEditorState(animated)).toBe(true);
+    expect(loadEditorState()).toEqual(animated);
+  });
+
+  it('restores a save written before animations existed', () => {
+    expect(saveEditorState(state)).toBe(true);
+    expect(loadEditorState()?.canvasItems[0].animation).toBeUndefined();
+  });
+
+  it('keeps the item when its stored animation is unusable', () => {
+    writeRaw(
+      JSON.stringify({
+        version: STORAGE_VERSION,
+        settings: state.settings,
+        canvasItems: [{ animation: { kind: 'somersault', duration: 1, delay: 0 }, id: 'symbol-1', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 100, y: 200 }],
+        canvasZoom: 1,
+      }),
+    );
+
+    const loaded = loadEditorState();
+    expect(loaded?.canvasItems).toHaveLength(1);
+    expect(loaded?.canvasItems[0].animation).toBeUndefined();
+  });
+
+  it('clamps a stored timing rather than restoring an entrance that never ends', () => {
+    writeRaw(
+      JSON.stringify({
+        version: STORAGE_VERSION,
+        settings: state.settings,
+        canvasItems: [{ animation: { kind: 'fade', duration: 4000, delay: -12 }, id: 'symbol-1', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 100, y: 200 }],
+        canvasZoom: 1,
+      }),
+    );
+
+    expect(loadEditorState()?.canvasItems[0].animation).toEqual({ delay: 0, duration: 5, kind: 'fade' });
+  });
 });

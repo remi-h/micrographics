@@ -1,7 +1,9 @@
-import { forwardRef, useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalSpaceBetween, AlignVerticalSpaceBetween } from 'lucide-react';
-import type { MouseEvent, PointerEvent } from 'react';
+import type { MouseEvent, PointerEvent, ReactNode } from 'react';
+import { ANIMATION_ORIGIN_STYLE, animationClassName, animationFrames, animationTiming } from '../animations';
 import { hitBounds, intersects } from '../canvasGeometry';
+import type { ItemAnimation } from '../animations';
 import type { CanvasItem, CanvasSymbol, CanvasText, Palette, Settings } from '../types';
 import { MicroMark } from './MicroMark';
 
@@ -77,6 +79,12 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
   onCancelTextEdit: () => void;
   onChangeEditingText: (value: string) => void;
   onCommitTextEdit: () => void;
+  /**
+   * Bumped to play every animated item's entrance once. Zero means nothing has
+   * been played yet, which is why it is a counter rather than a boolean: the
+   * same request twice in a row still has to restart the animations.
+   */
+  playToken: number;
   onAlignSelected: (axis: 'x' | 'y') => void;
   onDistributeSelected: (axis: 'x' | 'y') => void;
   onMoveItem: (id: string, x: number, y: number) => void;
@@ -98,6 +106,7 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
       onCancelTextEdit,
       onChangeEditingText,
       onCommitTextEdit,
+      playToken,
       onAlignSelected,
       onDistributeSelected,
       onMoveItem,
@@ -336,11 +345,17 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
           </>
         )}
         {settings.grid && <Grid palette={palette} />}
-        {items.map((item) =>
-          item.kind === 'symbol' ? (
+        {items.map((item, index) =>
+          // An animated item is wrapped in a group of its own, and the CSS
+          // transform goes on the wrapper. On the item's own group it would
+          // *replace* the translate/rotate attribute that positions it -- a
+          // CSS transform overrides the presentation attribute -- and the item
+          // would animate in from the canvas origin. Only animated items are
+          // wrapped, so an ordinary canvas keeps exactly the structure it had.
+          <AnimatedLayer animation={item.animation} index={index} key={item.id} playToken={playToken}>
+            {item.kind === 'symbol' ? (
             <GraphicSymbol
               item={item}
-              key={item.id}
               onPointerDown={(event) => startDrag(event, item)}
               onRotatePointerDown={(event) => startRotate(event, item)}
               onResizePointerDown={(event) => startItemResize(event, item)}
@@ -352,7 +367,6 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
               editing={editingTextId === item.id}
               editingValue={editingTextValue}
               item={item}
-              key={item.id}
               onCancelEdit={onCancelTextEdit}
               onChangeEdit={onChangeEditingText}
               onCommitEdit={onCommitTextEdit}
@@ -367,7 +381,8 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
               palette={palette}
               selected={selectedIds.includes(item.id)}
             />
-          ),
+            )}
+          </AnimatedLayer>,
         )}
         {selectionToolbar && (
           <foreignObject
@@ -400,6 +415,52 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
 );
 
 MicrographicSvg.displayName = 'MicrographicSvg';
+
+/**
+ * Wraps one canvas item so its entrance can be played without disturbing the
+ * transform that positions it. An item with no animation is passed straight
+ * through: no wrapper, no class, nothing added to the DOM or to the export.
+ *
+ * Playing goes through the Web Animations API rather than a CSS class that
+ * gets toggled. Restarting a CSS animation means removing the class, forcing a
+ * reflow and adding it back; `Element.animate` just starts another one, and
+ * cancelling the previous one first makes a second Play mid-flight behave the
+ * way pressing it again should.
+ */
+function AnimatedLayer({
+  animation,
+  children,
+  index,
+  playToken,
+}: {
+  animation: ItemAnimation | undefined;
+  children: ReactNode;
+  index: number;
+  playToken: number;
+}) {
+  const ref = useRef<SVGGElement | null>(null);
+
+  const play = useEffectEvent(() => {
+    const node = ref.current;
+    // Absent in jsdom, and there is nothing to play before the first request.
+    if (!node || !animation || playToken === 0 || typeof node.animate !== 'function') return;
+
+    node.getAnimations().forEach((running) => running.cancel());
+    node.animate(animationFrames(animation.kind), animationTiming(animation));
+  });
+
+  useEffect(() => {
+    play();
+  }, [playToken]);
+
+  if (!animation) return children;
+
+  return (
+    <g className={animationClassName(index)} ref={ref} style={ANIMATION_ORIGIN_STYLE}>
+      {children}
+    </g>
+  );
+}
 
 function Grid({ palette }: { palette: Palette }) {
   const width = 1200;

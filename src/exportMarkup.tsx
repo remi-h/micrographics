@@ -1,3 +1,4 @@
+import { animationStyleSheet } from './animations';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { MicrographicSvg } from './components/MicrographicSvg';
@@ -28,6 +29,13 @@ export type ExportInput = {
   items: CanvasItem[];
   palette: Palette;
   settings: Settings;
+  /**
+   * Whether to write the items' entrance animations into the file as CSS.
+   * True for the .svg, which is a document a browser will run; false for the
+   * PNG, which is one frame and must be the finished artwork rather than the
+   * first frame of an entrance.
+   */
+  animate?: boolean;
   // Multiplier on the artboard size for the width/height written onto the SVG
   // root. The downloaded .svg stays at 1x; the PNG path raises it.
   scale?: number;
@@ -54,7 +62,7 @@ const noop = () => {};
 // Each item still carries its transparent hit-target rect. It paints nothing,
 // so the exported artwork is unaffected, and dropping it would mean a second
 // render mode -- exactly the kind of special case this approach avoids.
-export function buildExportMarkup({ items, palette, settings, scale = 1 }: ExportInput): string {
+export function buildExportMarkup({ animate = false, items, palette, settings, scale = 1 }: ExportInput): string {
   // Detached from the document: it is never laid out and never painted, so the
   // canvas the user is looking at is untouched.
   const host = document.createElement('div');
@@ -82,6 +90,7 @@ export function buildExportMarkup({ items, palette, settings, scale = 1 }: Expor
           onSelectItem={noop}
           onSelectItems={noop}
           palette={palette}
+          playToken={0}
           selectedIds={[]}
           settings={settings}
         />,
@@ -105,6 +114,19 @@ export function buildExportMarkup({ items, palette, settings, scale = 1 }: Expor
     const { width, height } = exportPixelSize(scale);
     svg.setAttribute('width', String(width));
     svg.setAttribute('height', String(height));
+
+    // The animations ride along as a stylesheet inside the file rather than as
+    // SMIL, which is deprecated, and rather than being baked into the elements,
+    // which would leave a viewer that does not run CSS showing the *first*
+    // frame: items stacked transparently off the left edge instead of the
+    // poster. Every entrance animates from an offset back to the item's own
+    // attributes, so without CSS the file is simply the finished artwork.
+    const stylesheet = animate ? animationStyleSheet(items) : null;
+    if (stylesheet) {
+      const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+      style.textContent = stylesheet;
+      svg.insertBefore(style, svg.firstChild);
+    }
 
     // XMLSerializer, not markup built by hand: it declares the SVG namespace on
     // the root element, which a standalone .svg file needs and which the PNG

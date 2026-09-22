@@ -136,4 +136,38 @@ describe('exportPixelSize', () => {
     expect(DEFAULT_EXPORT_SCALE).toBe(2);
     expect(exportPixelSize(DEFAULT_EXPORT_SCALE)).toEqual({ width: 2400, height: 1600 });
   });
+
+  // Animations ride along in the .svg, which a browser runs, but never in the
+  // PNG, which is a single frame and has to be the finished artwork rather
+  // than the first frame of an entrance.
+  it('writes the entrances into the SVG when asked to', () => {
+    const animated: CanvasItem[] = [{ ...canvasItems[0], animation: { delay: 0.2, duration: 0.6, kind: 'slide-left' } }];
+    const markup = buildExportMarkup({ animate: true, items: animated, palette, settings });
+
+    expect(markup).toContain('@keyframes mg-slide-left');
+    expect(markup).toContain('mg-anim-0');
+  });
+
+  it('leaves the entrances out when it is not asked to, which is the PNG path', () => {
+    const animated: CanvasItem[] = [{ ...canvasItems[0], animation: { delay: 0.2, duration: 0.6, kind: 'slide-left' } }];
+    const markup = buildExportMarkup({ items: animated, palette, settings });
+
+    expect(markup).not.toContain('@keyframes');
+    expect(markup).not.toContain('animation:');
+  });
+
+  it('adds no stylesheet to an SVG whose items are not animated', () => {
+    const markup = buildExportMarkup({ animate: true, items: canvasItems, palette, settings });
+
+    expect(markup).not.toContain('<style');
+  });
+
+  it('keeps the animated item at its own position, so a viewer without CSS shows the artwork', () => {
+    // The animation is a departure from the element's own attributes and
+    // resolves back to them, so the attributes are the finished poster.
+    const animated: CanvasItem[] = [{ ...canvasItems[0], animation: { delay: 0, duration: 0.6, kind: 'slide-left' } }];
+    const markup = buildExportMarkup({ animate: true, items: animated, palette, settings });
+
+    expect(markup).toContain('translate(100 200)');
+  });
 });

@@ -807,6 +807,115 @@ h1 {
   box-shadow: inset 0 0 0 1px #f4f0e8;
 }
 
+/* The row is a container now: the layer's name selects it, and the control on
+   the right opens its animation settings. The padding moves onto the two
+   buttons so both fill the row and neither leaves a dead strip. */
+.layer-row {
+  padding: 0;
+  gap: 0;
+}
+
+.layer-select {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 11px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layer-animate {
+  flex: none;
+  width: 34px;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-left: 1px solid rgba(245, 242, 234, 0.12);
+  background: transparent;
+  color: rgba(245, 242, 234, 0.45);
+  cursor: pointer;
+}
+
+.layer-animate:hover,
+.layer-animate:focus-visible {
+  color: #f4f0e8;
+  background: #2a2a2a;
+  outline: none;
+}
+
+.layer-animate[data-on] {
+  color: #f4f0e8;
+}
+
+.animation-kinds {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0 4px;
+}
+
+.animation-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: #9a978f;
+}
+
+.animation-field strong {
+  color: #f4f0e8;
+  font-variant-numeric: tabular-nums;
+}
+
+.animation-field input[type="range"] {
+  width: 100%;
+  accent-color: #f4f0e8;
+}
+
+.dialog-footer {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.dialog-footer .dialog-close {
+  flex: 1;
+  margin-top: 0;
+}
+
+.dialog-footer .dialog-close:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.stage-play {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid rgba(245, 242, 234, 0.2);
+  border-radius: 7px;
+  background: transparent;
+  color: #f4f0e8;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.stage-play:hover {
+  border-color: #f4f0e8;
+}
+
 .empty-layer {
   min-height: 42px;
   display: grid;
