@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useRef, useState } from 'react';
 import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalSpaceBetween, AlignVerticalSpaceBetween, Group, Ungroup } from 'lucide-react';
 import type { MouseEvent, PointerEvent } from 'react';
 import { hitBounds, intersects } from '../canvasGeometry';
-import { expandToGroups } from '../groups';
+import { expandToGroups, isOneWholeGroup } from '../groups';
 import type { CanvasItem, CanvasSymbol, CanvasText, Palette, Settings } from '../types';
 import { MicroMark } from './MicroMark';
 
@@ -15,6 +15,27 @@ export const SELECTION_PAD = 6;
 // zero-height outline would collapse onto the ink and put both handles in the
 // same place. Floor the outline so it stays grabbable.
 export const MIN_SELECTION_SIZE = 20;
+
+// The box the selection toolbar is laid out in, in canvas units. The toolbar
+// itself is `width: max-content` centred inside it, so this only has to be
+// wide enough to hold the widest arrangement of buttons -- and it has to be
+// the same number the placement below centres and clamps against, which is
+// what went wrong when a button was added and only the foreignObject grew.
+export const SELECTION_TOOLBAR_WIDTH = 260;
+export const SELECTION_TOOLBAR_HEIGHT = 52;
+
+// Where the toolbar sits over a selection: centred on it, then kept inside the
+// 1200 x 800 artboard. The outer <svg> clips anything past its viewBox, so a
+// selection near an edge would otherwise lose whichever button ran off it.
+export function selectionToolbarPosition(bounds: { left: number; right: number; top: number }) {
+  return {
+    toolbarX: Math.min(
+      1200 - SELECTION_TOOLBAR_WIDTH - 16,
+      Math.max(16, (bounds.left + bounds.right) / 2 - SELECTION_TOOLBAR_WIDTH / 2),
+    ),
+    toolbarY: Math.max(16, bounds.top - 58),
+  };
+}
 
 // The selection outline is drawn from what the item actually renders, not from
 // an estimate of it. Estimates were wrong in both directions: symbol glyphs
@@ -184,10 +205,7 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
     const top = Math.min(...bounds.map((item) => item.y));
     const right = Math.max(...bounds.map((item) => item.x + item.width));
 
-    return {
-      toolbarX: Math.min(1000, Math.max(16, (left + right) / 2 - 100)),
-      toolbarY: Math.max(16, top - 58),
-    };
+    return selectionToolbarPosition({ left, right, top });
   };
 
   const getMarqueeRect = (event: PointerEvent<SVGElement>) => {
@@ -318,12 +336,9 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
     const selectionToolbar = selectedBounds();
     // One button, not two: a selection is either already a single whole group
     // -- in which case the useful action is to take it apart -- or it is not,
-    // and the useful action is to make one.
-    const selectedGroupIds = new Set(
-      items.filter((item) => item.groupId && selectedIds.includes(item.id)).map((item) => item.groupId),
-    );
-    const selectionGrouped =
-      selectedGroupIds.size === 1 && items.filter((item) => item.groupId && selectedGroupIds.has(item.groupId)).length === selectedIds.length;
+    // and the useful action is to make one. Two groups, or a group plus a
+    // loose item, is the second case.
+    const selectionGrouped = isOneWholeGroup(items, selectedIds);
 
     return (
       <svg
@@ -391,10 +406,10 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
           <foreignObject
             x={selectionToolbar.toolbarX}
             y={selectionToolbar.toolbarY}
-            width="260"
+            width={SELECTION_TOOLBAR_WIDTH}
             // 36px buttons in 6px of padding inside a 1px border come to 50,
-            // which the previous 44 clipped.
-            height="52"
+            // which the previous height of 44 clipped.
+            height={SELECTION_TOOLBAR_HEIGHT}
             onPointerDown={(event) => event.stopPropagation()}
           >
             <div className="canvas-selection-actions" aria-label="Selection tools">

@@ -4,7 +4,7 @@ import { Select } from '@base-ui/react/select';
 import { Toolbar } from '@base-ui/react/toolbar';
 import { Check, ChevronDown, Download, FileCode2, Group, RefreshCcw, Shuffle, Trash2, Undo2, Redo2, Ungroup } from 'lucide-react';
 import { templates } from '../data';
-import { layerRows, rowItemIds } from '../groups';
+import { isOneWholeGroup, layerRows, rowItemIds } from '../groups';
 import { EXPORT_SCALES, exportPixelSize, type ExportScale } from '../exportMarkup';
 import type { CanvasItem, Template } from '../types';
 import { BrandIcon } from './BrandIcon';
@@ -42,7 +42,7 @@ export function ControlPanel({
   onRedo: () => void;
   onRestartTemplate: () => void;
   onSelectItem: (id: string, additive: boolean) => void;
-  onSelectItems: (ids: string[]) => void;
+  onSelectItems: (ids: string[], additive?: boolean) => void;
   onGroupSelected: () => void;
   onUngroupSelected: () => void;
   onUndo: () => void;
@@ -50,8 +50,9 @@ export function ControlPanel({
   const selectedIdSet = new Set(selectedIds);
   const rows = layerRows(canvasItems);
   // A group can be dissolved as soon as one of its members is selected; two
-  // loose items are needed before there is anything to group.
-  const canGroup = selectedIds.length > 1;
+  // items are needed before there is anything to group, and a selection that
+  // is already one whole group has nothing left to gather.
+  const canGroup = selectedIds.length > 1 && !isOneWholeGroup(canvasItems, selectedIds);
   const canUngroup = canvasItems.some((item) => item.groupId && selectedIdSet.has(item.id));
   const [sizeOpen, setSizeOpen] = useState(false);
 
@@ -198,11 +199,13 @@ export function ControlPanel({
                     data-group={row.kind === 'group' || undefined}
                     key={row.id}
                     onClick={(event) => {
-                      // A group row stands for several items, so it cannot go
-                      // through the single-item toggle; it selects its members
-                      // outright, which is what clicking a group does anyway.
-                      if (row.kind === 'group') onSelectItems(ids);
-                      else onSelectItem(row.id, event.shiftKey || event.metaKey || event.ctrlKey);
+                      const additive = event.shiftKey || event.metaKey || event.ctrlKey;
+                      // A group row stands for several items, so it goes
+                      // through the whole-set selector rather than the
+                      // single-item one; both honour the modifier, so a
+                      // selection spanning two groups can still be built here.
+                      if (row.kind === 'group') onSelectItems(ids, additive);
+                      else onSelectItem(row.id, additive);
                     }}
                     type="button"
                   >

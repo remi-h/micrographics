@@ -1,4 +1,13 @@
-import { expandToGroups, groupItems, layerRows, pruneGroups, regroupCopies, rowItemIds, ungroupItems } from './groups';
+import {
+  expandToGroups,
+  groupItems,
+  isOneWholeGroup,
+  layerRows,
+  pruneGroups,
+  regroupCopies,
+  rowItemIds,
+  ungroupItems,
+} from './groups';
 import type { CanvasItem, CanvasSymbol } from './types';
 
 // Grouping is pure array work over `groupId` (see groups.ts), so the whole of
@@ -43,6 +52,40 @@ describe('expandToGroups', () => {
 
     expect(expandToGroups(['a', 'a', 'b'], items)).toEqual(['a', 'b']);
   });
+
+  it('drops an id no item on the canvas holds, grouped or not', () => {
+    // Callers count what comes back. A stale id counted as a second item is
+    // enough for groupItems to stamp a group onto a lone survivor.
+    expect(expandToGroups(['a', 'ghost'], [symbol('a')])).toEqual(['a']);
+    expect(expandToGroups(['a', 'ghost'], [symbol('a', 'g1'), symbol('b', 'g1')])).toEqual(['a', 'b']);
+  });
+});
+
+describe('isOneWholeGroup', () => {
+  it('is true for exactly one group and nothing else', () => {
+    expect(isOneWholeGroup([symbol('a', 'g1'), symbol('b', 'g1')], ['a', 'b'])).toBe(true);
+  });
+
+  it('is false for part of a group', () => {
+    expect(isOneWholeGroup([symbol('a', 'g1'), symbol('b', 'g1')], ['a'])).toBe(false);
+  });
+
+  it('is false for a group plus a loose item', () => {
+    const items = [symbol('a', 'g1'), symbol('b', 'g1'), symbol('c')];
+
+    expect(isOneWholeGroup(items, ['a', 'b', 'c'])).toBe(false);
+  });
+
+  it('is false for two whole groups', () => {
+    const items = [symbol('a', 'g1'), symbol('b', 'g1'), symbol('c', 'g2'), symbol('d', 'g2')];
+
+    expect(isOneWholeGroup(items, ['a', 'b', 'c', 'd'])).toBe(false);
+  });
+
+  it('is false for loose items, however many', () => {
+    expect(isOneWholeGroup([symbol('a'), symbol('b')], ['a', 'b'])).toBe(false);
+    expect(isOneWholeGroup([symbol('a')], ['a'])).toBe(false);
+  });
 });
 
 describe('groupItems', () => {
@@ -83,6 +126,29 @@ describe('groupItems', () => {
 
     expect(groupItems(items, ['a'])).toBe(items);
     expect(groupItems(items, [])).toBe(items);
+  });
+
+  it('does nothing to a group that is already whole', () => {
+    // Re-minting the id changes nothing on screen but costs a history entry,
+    // so the user's next undo would look broken.
+    const items = [symbol('a', 'g1'), symbol('b', 'g1')];
+
+    expect(groupItems(items, ['a', 'b'])).toBe(items);
+    expect(groupItems(items, ['a'])).toBe(items);
+  });
+
+  it('still groups a whole group together with a loose item', () => {
+    const items = [symbol('a', 'g1'), symbol('b', 'g1'), symbol('c')];
+    const grouped = groupItems(items, ['a', 'c']);
+
+    expect(grouped).not.toBe(items);
+    expect(groupOf(grouped, 'c')).toBe(groupOf(grouped, 'a'));
+  });
+
+  it('will not stamp a group onto a lone item named alongside a stale id', () => {
+    const items = [symbol('a')];
+
+    expect(groupItems(items, ['a', 'ghost'])).toBe(items);
   });
 });
 

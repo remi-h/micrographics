@@ -1,5 +1,13 @@
 import { act, render } from '@testing-library/react';
-import { useInkBox, selectionBox, MIN_SELECTION_SIZE, SELECTION_PAD, type Box } from './MicrographicSvg';
+import {
+  useInkBox,
+  selectionBox,
+  selectionToolbarPosition,
+  MIN_SELECTION_SIZE,
+  SELECTION_PAD,
+  SELECTION_TOOLBAR_WIDTH,
+  type Box,
+} from './MicrographicSvg';
 
 // The selection outline is measured from what an item actually renders rather
 // than estimated from its size. e2e/selection-outline.spec.ts proves the
@@ -122,5 +130,35 @@ describe('useInkBox', () => {
     });
 
     expect(measured(container)).toBe('0,0,40,40');
+  });
+});
+
+// The toolbar that appears over a multi-item selection. It is placed in canvas
+// units inside a viewBox that clips, so the arithmetic is the whole of it.
+describe('selectionToolbarPosition', () => {
+  it('centres the toolbar on the selection', () => {
+    const { toolbarX } = selectionToolbarPosition({ left: 400, right: 600, top: 300 });
+
+    expect(toolbarX + SELECTION_TOOLBAR_WIDTH / 2).toBe(500);
+  });
+
+  it('sits the toolbar above the selection', () => {
+    expect(selectionToolbarPosition({ left: 0, right: 100, top: 300 }).toolbarY).toBe(242);
+  });
+
+  it('keeps the whole toolbar on the artboard at the right edge', () => {
+    // The previous placement used a half-width of 100 for a toolbar that had
+    // grown past 200, so the last button hung off the viewBox and was clipped.
+    const { toolbarX } = selectionToolbarPosition({ left: 1140, right: 1190, top: 400 });
+
+    expect(toolbarX + SELECTION_TOOLBAR_WIDTH).toBeLessThanOrEqual(1200);
+  });
+
+  it('keeps the whole toolbar on the artboard at the left edge', () => {
+    expect(selectionToolbarPosition({ left: 10, right: 40, top: 400 }).toolbarX).toBeGreaterThanOrEqual(0);
+  });
+
+  it('keeps the toolbar on the artboard for a selection against the top', () => {
+    expect(selectionToolbarPosition({ left: 400, right: 600, top: 0 }).toolbarY).toBeGreaterThanOrEqual(0);
   });
 });

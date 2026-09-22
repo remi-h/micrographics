@@ -486,6 +486,71 @@ describe('useCanvasItems grouping', () => {
     expect(pasted[0].groupId).not.toBe(itemById(result.current.canvasItems, 'symbol-1').groupId);
   });
 
+  it('keeps the group selected while one of its text items is edited', () => {
+    // Editing reads `editingTextId`, never the selection, so there is nothing
+    // to gain by narrowing it -- and the narrowing outlives the edit, leaving
+    // the next nudge or delete acting on one member of a locked group.
+    const view = setUp({
+      canvasItems: [symbol('symbol-1'), text('text-1', 300)],
+      selectedIds: ['symbol-1', 'text-1'],
+    });
+    act(() => view.result.current.groupSelected());
+
+    const item = itemById(view.result.current.canvasItems, 'text-1');
+    if (item.kind !== 'text') throw new Error('expected a text item');
+    act(() => view.result.current.beginTextEdit(item));
+
+    expect(view.result.current.editingTextId).toBe('text-1');
+    expect([...view.result.current.selectedIds].sort()).toEqual(['symbol-1', 'text-1']);
+  });
+
+  it('leaves an ungrouped text item selected on its own when it is edited', () => {
+    const view = setUp({
+      canvasItems: [symbol('symbol-1'), text('text-1', 300)],
+      selectedIds: ['symbol-1'],
+    });
+
+    const item = itemById(view.result.current.canvasItems, 'text-1');
+    if (item.kind !== 'text') throw new Error('expected a text item');
+    act(() => view.result.current.beginTextEdit(item));
+
+    expect(view.result.current.selectedIds).toEqual(['text-1']);
+  });
+
+  it('takes no history entry for grouping a selection that is already one group', () => {
+    // It would only re-mint the group id: nothing changes on screen, but the
+    // user's next undo would appear to do nothing.
+    const view = grouped();
+    const groupId = itemById(view.result.current.canvasItems, 'symbol-1').groupId;
+    view.beginHistoryAction.mockClear();
+
+    act(() => view.result.current.groupSelected());
+
+    expect(view.beginHistoryAction).not.toHaveBeenCalled();
+    expect(itemById(view.result.current.canvasItems, 'symbol-1').groupId).toBe(groupId);
+  });
+
+  it('still groups a selection that spans a group and a loose item', () => {
+    const view = grouped();
+    act(() => view.result.current.selectItems(['symbol-1', 'symbol-3']));
+
+    act(() => view.result.current.groupSelected());
+
+    const groupId = itemById(view.result.current.canvasItems, 'symbol-3').groupId;
+    expect(groupId).toBeDefined();
+    expect(itemById(view.result.current.canvasItems, 'symbol-1').groupId).toBe(groupId);
+    expect(itemById(view.result.current.canvasItems, 'symbol-2').groupId).toBe(groupId);
+  });
+
+  it('adds a group to the selection from a layer row held with a modifier', () => {
+    const view = grouped();
+    act(() => view.result.current.selectItem('symbol-3'));
+
+    act(() => view.result.current.selectItems(['symbol-1', 'symbol-2'], true));
+
+    expect([...view.result.current.selectedIds].sort()).toEqual(['symbol-1', 'symbol-2', 'symbol-3']);
+  });
+
   it('dissolves a group that a delete strips down to one member', () => {
     const { result } = grouped();
 

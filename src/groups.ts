@@ -26,14 +26,18 @@ import type { CanvasItem } from './types';
 //     from an ungrouped item to the user but would still take a "Group of 1"
 //     row, so deleting members down to one dissolves the group instead.
 
-/** The ids that must be selected together with `ids`, given the groups in `items`. */
+/**
+ * The ids that must be selected together with `ids`, given the groups in
+ * `items`. Ids naming nothing on the canvas are dropped: the result is always
+ * a set of real items, in paint order, whether or not a group is involved.
+ * Callers count what comes back, so a branch that passed stale ids through
+ * could report two items where the canvas holds one.
+ */
 export function expandToGroups(ids: string[], items: CanvasItem[]): string[] {
   const groupIds = new Set<string>();
   for (const item of items) {
     if (item.groupId && ids.includes(item.id)) groupIds.add(item.groupId);
   }
-
-  if (groupIds.size === 0) return [...new Set(ids)];
 
   const expanded = new Set(ids);
   for (const item of items) {
@@ -46,6 +50,21 @@ export function expandToGroups(ids: string[], items: CanvasItem[]): string[] {
 }
 
 /**
+ * Whether `ids` is exactly one whole group and nothing else — the state in
+ * which grouping has nothing left to do and ungrouping is the useful action.
+ * A selection spanning two groups, or a group plus a loose item, is not this.
+ */
+export function isOneWholeGroup(items: CanvasItem[], ids: string[]): boolean {
+  const selected = items.filter((item) => ids.includes(item.id));
+  if (selected.length < 2) return false;
+
+  const groupId = selected[0].groupId;
+  if (!groupId || !selected.every((item) => item.groupId === groupId)) return false;
+
+  return items.filter((item) => item.groupId === groupId).length === selected.length;
+}
+
+/**
  * Puts every item in `ids` — and every group any of them belongs to — into one
  * new group, gathered together at the topmost member's position in the z-order.
  * Returns `items` unchanged when there is nothing to group.
@@ -53,6 +72,10 @@ export function expandToGroups(ids: string[], items: CanvasItem[]): string[] {
 export function groupItems(items: CanvasItem[], ids: string[]): CanvasItem[] {
   const members = new Set(expandToGroups(ids, items));
   if (members.size < 2) return items;
+  // Re-grouping a group that is already whole would only mint it a new id:
+  // nothing on screen changes, but the caller would take a history entry for
+  // it, and the user's next undo would appear to do nothing.
+  if (isOneWholeGroup(items, [...members])) return items;
 
   const groupId = createGroupId();
   const grouped = items.filter((item) => members.has(item.id)).map((item) => ({ ...item, groupId }));

@@ -67,9 +67,11 @@ export type CanvasItems = {
   /**
    * Selects exactly these items, plus the rest of any group they belong to.
    * The marquee and the layer list go through this rather than setting the
-   * selection directly, so a group cannot be half-selected.
+   * selection directly, so a group cannot be half-selected. `additive` adds
+   * them to the current selection, or takes them back out when they are all
+   * already in it, matching what a shift-click on a single item does.
    */
-  selectItems: (ids: string[]) => void;
+  selectItems: (ids: string[], additive?: boolean) => void;
   setEditingTextDraft: Dispatch<SetStateAction<string>>;
   setTextDraft: Dispatch<SetStateAction<string>>;
   textDraft: string;
@@ -214,7 +216,12 @@ export function useCanvasItems({
   const beginTextEdit = (item: CanvasText) => {
     setEditingTextId(item.id);
     setEditingTextDraft(item.text);
-    setSelectedIds([item.id]);
+    // The group, not just the item double-clicked. Editing is driven by
+    // `editingTextId`, never by the selection, so keeping the group whole
+    // costs the edit nothing -- and collapsing it would outlive the edit,
+    // leaving one member selected afterwards for the next nudge or delete to
+    // carry out of the group it is supposed to be locked to.
+    setSelectedIds(expandToGroups([item.id], canvasItems));
   };
 
   const cancelTextEdit = () => {
@@ -304,8 +311,16 @@ export function useCanvasItems({
     });
   };
 
-  const selectItems = (ids: string[]) => {
-    setSelectedIds(expandToGroups(ids, canvasItems));
+  const selectItems = (ids: string[], additive = false) => {
+    const members = expandToGroups(ids, canvasItems);
+
+    setSelectedIds((current) => {
+      if (!additive) return members;
+      const alreadyIn = members.length > 0 && members.every((member) => current.includes(member));
+      return alreadyIn
+        ? current.filter((item) => !members.includes(item))
+        : [...current, ...members.filter((member) => !current.includes(member))];
+    });
   };
 
   const groupSelected = () => {

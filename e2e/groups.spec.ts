@@ -126,3 +126,46 @@ test('a group survives a reload', async ({ page }) => {
   await expect(groupRows(page)).toHaveCount(1);
   await expect(groupRows(page).first()).toContainText('Group of 2');
 });
+
+test('editing a grouped text item leaves the group whole afterwards', async ({ page }) => {
+  await page.goto('/creator');
+
+  // Group a text layer with whatever sits above it, then edit the text.
+  const rows = layerRows(page);
+  const count = await rows.count();
+  let textRow = -1;
+  for (let index = 0; index < count; index += 1) {
+    if (!/symbol/i.test(await rows.nth(index).innerText())) {
+      textRow = index;
+      break;
+    }
+  }
+  expect(textRow, 'expected a text layer in the default template').toBeGreaterThanOrEqual(0);
+
+  await rows.nth(textRow).click();
+  await rows.nth(textRow === 0 ? 1 : 0).click({ modifiers: ['Shift'] });
+  await groupButton(page).click();
+  await expect(groupRows(page)).toHaveCount(1);
+
+  const before = await page.evaluate(() =>
+    [...document.querySelectorAll('g.canvas-item')].map((node) => node.getAttribute('transform') ?? ''),
+  );
+
+  // The grouped text item specifically. The template has several text layers,
+  // and DOM order runs bottom-up while the layer list runs top-down, so
+  // ":has(text)" alone picks a different one.
+  await page.locator('g.canvas-item:has(rect[stroke-dasharray]):has(text)').first().dblclick();
+  await expect(page.locator('.canvas-text-editor')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.canvas-text-editor')).toHaveCount(0);
+
+  // The group must still move as one.
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+
+  const after = await page.evaluate(() =>
+    [...document.querySelectorAll('g.canvas-item')].map((node) => node.getAttribute('transform') ?? ''),
+  );
+  const moved = before.filter((transform, index) => transform !== after[index]);
+  expect(moved, 'nudging after an edit should still move the whole group').toHaveLength(2);
+});

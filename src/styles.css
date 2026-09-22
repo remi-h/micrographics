@@ -1234,7 +1234,10 @@ h1 {
 }
 
 .canvas-selection-actions {
+  /* Sized to its buttons and centred in the box MicrographicSvg places, so
+     the row stays centred on the selection whatever it holds. */
   width: max-content;
+  margin-inline: auto;
   display: flex;
   gap: 6px;
   padding: 6px;
