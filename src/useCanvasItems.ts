@@ -41,6 +41,16 @@ export type UseCanvasItemsOptions = {
   visibleCanvasRect: () => Box | null;
 };
 
+/** How small an item may be dragged before it stops shrinking. */
+export const MIN_ITEM_SIZE = { symbol: 16, text: 10 } as const;
+
+/**
+ * And how large. Sized against the 1200 x 800 artboard rather than picked: a
+ * symbol may fill half its width and a text item a third, which is a ceiling a
+ * user reaches on purpose rather than one a single drag walks into.
+ */
+export const MAX_ITEM_SIZE = { symbol: 600, text: 400 } as const;
+
 export type CanvasItems = {
   addSymbol: (mark: string) => void;
   addText: () => void;
@@ -266,7 +276,10 @@ export function useCanvasItems({
 
         return {
           ...item,
-          size: clamp(update.size, item.kind === 'text' ? 10 : 16, item.kind === 'text' ? 180 : 240),
+          // The ceilings are what a drag runs into. The old 240 was a fifth of
+          // the artboard's width, which a symbol reached after about 160px of
+          // pointer travel and then sat there while the user kept dragging.
+          size: clamp(update.size, MIN_ITEM_SIZE[item.kind], MAX_ITEM_SIZE[item.kind]),
           x: clamp(update.x, 52, 1148),
           y: clamp(update.y, 48, 752),
         };

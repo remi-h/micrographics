@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { useState } from 'react';
 import { hitBounds, intersects, type Box } from './canvasGeometry';
 import type { CanvasItem, CanvasSymbol, CanvasText } from './types';
-import { useCanvasItems } from './useCanvasItems';
+import { MAX_ITEM_SIZE, MIN_ITEM_SIZE, useCanvasItems } from './useCanvasItems';
 
 // Like useHistory, the hook is a layer over state App owns, so the tests stand
 // up the smallest possible owner: the two pieces of state and their setters,
@@ -100,8 +100,8 @@ describe('useCanvasItems scaling and rotating', () => {
       ]),
     );
 
-    expect(itemById(result.current.canvasItems, 'symbol-1').size).toBe(240);
-    expect(itemById(result.current.canvasItems, 'text-1').size).toBe(180);
+    expect(itemById(result.current.canvasItems, 'symbol-1').size).toBe(MAX_ITEM_SIZE.symbol);
+    expect(itemById(result.current.canvasItems, 'text-1').size).toBe(MAX_ITEM_SIZE.text);
 
     act(() =>
       result.current.scaleItems([
@@ -110,8 +110,8 @@ describe('useCanvasItems scaling and rotating', () => {
       ]),
     );
 
-    expect(itemById(result.current.canvasItems, 'symbol-1').size).toBe(16);
-    expect(itemById(result.current.canvasItems, 'text-1').size).toBe(10);
+    expect(itemById(result.current.canvasItems, 'symbol-1').size).toBe(MIN_ITEM_SIZE.symbol);
+    expect(itemById(result.current.canvasItems, 'text-1').size).toBe(MIN_ITEM_SIZE.text);
   });
 
   it('clamps the position a scale moves an item to', () => {
