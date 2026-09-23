@@ -17,16 +17,126 @@ export const SELECTION_PAD = 6;
 // same place. Floor the outline so it stays grabbable.
 export const MIN_SELECTION_SIZE = 20;
 
+// Dragging the handle past the anchor would otherwise invert the ratio and
+// flip the selection through itself. The items have their own size floor; this
+// only has to keep the arithmetic the right way up.
+export const MIN_RESIZE_RATIO = 0.02;
+
+// A selection with no extent at all has no diagonal to scale along. Floor the
+// span so the division stays sane; the axis has its own fallback below.
+export const MIN_RESIZE_SPAN = 1;
+
+/**
+ * Where a resize drag started: the corner that stays put, the far corner the
+ * pointer drags, the axis between them, and where the pointer first went down.
+ */
+export type ResizeGrip = {
+  anchorX: number;
+  anchorY: number;
+  axisX: number;
+  axisY: number;
+  span: number;
+  cornerX: number;
+  cornerY: number;
+  grabX: number;
+  grabY: number;
+};
+
+/**
+ * The grip a drag starts from, taken from the selection's own bounds: the
+ * top-left corner stays put and the bottom-right one is what the pointer
+ * drags, along the diagonal between them.
+ *
+ * The grab point is recorded but deliberately not used to build the axis. The
+ * resize handle is drawn *inside* each item's rotated group, so on a rotated
+ * item the pointer is nowhere near the corner it appears to sit on; and with
+ * several items selected there is one handle per item, so the pointer is at
+ * whichever one was grabbed rather than at the selection's corner. Deriving
+ * the axis from the pointer made the drag wildly over-sensitive in the first
+ * case and dependent on which handle you grabbed in the second. Bounds have
+ * neither problem, and `resizeRatio` applies the pointer as a displacement so
+ * the ratio is still exactly 1 where the drag began.
+ */
+export function resizeGrip(
+  bounds: { left: number; top: number; right: number; bottom: number },
+  grab: { x: number; y: number },
+): ResizeGrip {
+  const reachX = bounds.right - bounds.left;
+  const reachY = bounds.bottom - bounds.top;
+  const diagonal = Math.hypot(reachX, reachY);
+  // A zero diagonal would divide out to a zero vector rather than a unit one,
+  // which pins the ratio at its floor for the rest of the drag. Fall back to
+  // the diagonal every handle sits on.
+  const unit = diagonal === 0 ? { x: Math.SQRT1_2, y: Math.SQRT1_2 } : { x: reachX / diagonal, y: reachY / diagonal };
+  return {
+    anchorX: bounds.left,
+    anchorY: bounds.top,
+    axisX: unit.x,
+    axisY: unit.y,
+    cornerX: bounds.right,
+    cornerY: bounds.bottom,
+    grabX: grab.x,
+    grabY: grab.y,
+    span: Math.max(MIN_RESIZE_SPAN, diagonal),
+  };
+}
+
+/**
+ * How much bigger the selection should be, given where the pointer is now.
+ *
+ * The pointer is projected onto the grip's axis rather than measured straight
+ * to it, so wandering sideways off the diagonal does not change the size. The
+ * result is linear in how far the pointer has travelled along that axis: move
+ * twice as far, get twice the growth.
+ *
+ * Scaling used to run from the selection's *centre*, which made the box grow
+ * in both directions at once -- twice the pointer's own rate -- while the far
+ * corner slid away from the cursor. On a small item the centre is barely
+ * twenty pixels from the handle, so ten pixels of travel was most of its size
+ * again, and the size ceiling arrived within one flick of the wrist.
+ */
+export function resizeRatio(grip: ResizeGrip, point: { x: number; y: number }): number {
+  // How far the pointer has come, applied to the selection's far corner. The
+  // pointer's absolute position is not the corner -- see `resizeGrip` -- but
+  // how far it has moved is the same wherever it started.
+  const cornerX = grip.cornerX + (point.x - grip.grabX);
+  const cornerY = grip.cornerY + (point.y - grip.grabY);
+  const along = (cornerX - grip.anchorX) * grip.axisX + (cornerY - grip.anchorY) * grip.axisY;
+  return Math.max(MIN_RESIZE_RATIO, along / grip.span);
+}
+
+// Letter spacing on the canvas text, in canvas units. Absolute: it is the same
+// number of units between two characters at any font size, which is why
+// `scaleInk` below has to take it out before scaling a measurement.
+export const LETTER_SPACING = 2;
+
+// A measurement, and the font size it was taken at, so it can answer for other
+// sizes. `at` is 1 for a measurement that does not depend on a font size.
+export type Measured = Box & { at: number };
+
 // The selection outline is drawn from what the item actually renders, not from
 // an estimate of it. Estimates were wrong in both directions: symbol glyphs
 // don't fill their nominal 36-unit design box, and the text width formula
 // (chars * size * 0.62) ignores the letterSpacing="2" that <text> below
 // applies, so long strings overflowed their own outline to the right.
-export function useInkBox<T extends SVGGraphicsElement>(active: boolean, deps: unknown[]) {
+//
+// `deps` are the things that change the *shape* being measured -- a symbol's
+// mark, a text item's characters. An item's `size` is deliberately not one of
+// them. Re-measuring on every frame of a resize drag was both slow (each
+// getBBox is a forced synchronous layout: ~2.5ms per update for a text item,
+// against 0.2ms for a symbol) and wrong to look at, because the measurement
+// only lands on the render *after* the one that resized the glyph. For one
+// frame the outline still wore the previous size, and a text item's letters
+// visibly escaped their own border while it was being dragged bigger. Callers
+// scale the measurement instead; `scaleInk` and the symbol call site below.
+export function useInkBox<T extends SVGGraphicsElement>(active: boolean, deps: unknown[], measuredAt = 1) {
   const ref = useRef<T | null>(null);
-  const [box, setBox] = useState<Box | null>(null);
+  const [box, setBox] = useState<Measured | null>(null);
 
-  useEffect(() => {
+  // The measurement reads `measuredAt` but must not re-run when it changes --
+  // that is the per-frame re-measure this hook exists to avoid. An effect event
+  // is exactly that: the latest value, without a dependency on it.
+  const measure = useEffectEvent(() => {
     const node = ref.current;
     // getBBox is unimplemented in jsdom and throws on an unrendered node.
     if (!active || !node || typeof node.getBBox !== 'function') {
@@ -34,21 +144,25 @@ export function useInkBox<T extends SVGGraphicsElement>(active: boolean, deps: u
       return;
     }
 
-    // The measurement only exists once the node is in the DOM, so storing it is
-    // a genuine render-measure-render: react-hooks/set-state-in-effect is
-    // suppressed rather than obeyed. The state settles after one extra render
-    // because the effect re-runs only when `active` or `deps` change.
     try {
       const measured = node.getBBox();
       if (measured.width === 0 && measured.height === 0) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
         setBox(null);
         return;
       }
-      setBox({ x: measured.x, y: measured.y, width: measured.width, height: measured.height });
+      setBox({ at: measuredAt, height: measured.height, width: measured.width, x: measured.x, y: measured.y });
     } catch {
       setBox(null);
     }
+  });
+
+  // The box does not exist until the node is in the DOM, so storing it is a
+  // genuine render-measure-render: react-hooks/set-state-in-effect is
+  // suppressed rather than obeyed. The extra render it schedules is bounded --
+  // the effect re-runs when the shape changes, not on every frame of a drag.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
+    measure();
     // The dependency list spreads `deps`, a parameter, so its contents are not
     // statically known and exhaustive-deps cannot verify them. Callers pass the
     // values the measurement depends on; see the two call sites below.
@@ -56,6 +170,29 @@ export function useInkBox<T extends SVGGraphicsElement>(active: boolean, deps: u
   }, [active, ...deps]);
 
   return [ref, box] as const;
+}
+
+// Answer for a font size other than the one a text box was measured at, without
+// measuring again. Everything about the glyphs scales with the font size, so
+// the box does too -- except the letter spacing, which is a fixed number of
+// units per gap whatever the size. Take it out, scale, put it back: measured at
+// 48 and asked for everything from 12 to 180, that stays within four units of
+// the real box -- inside the SELECTION_PAD the outline adds anyway. A plain
+// proportional scale does not: from 48 up to 180 it is 141 units too wide, and
+// from 48 down to 12 it is 39 units too *narrow*, which draws the outline
+// inside the text it is meant to contain.
+//
+// `gaps` is how many letter-spacing gaps the widest line has, so one less than
+// its character count.
+export function scaleInk(ink: Measured, size: number, gaps: number): Box {
+  const ratio = ink.at === 0 ? 1 : size / ink.at;
+  const spacing = LETTER_SPACING * Math.max(0, gaps);
+  return {
+    x: ink.x * ratio,
+    y: ink.y * ratio,
+    width: Math.max(0, ink.width - spacing) * ratio + spacing,
+    height: ink.height * ratio,
+  };
 }
 
 // Grow a measured ink box into the outline that gets drawn around it.
@@ -131,13 +268,9 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
     x: number;
     y: number;
   } | null>(null);
-  const resizeRef = useRef<{
-    centerX: number;
-    centerY: number;
-    items: Array<{ id: string; size: number; x: number; y: number }>;
-    pointerId: number;
-    startDistance: number;
-  } | null>(null);
+  const resizeRef = useRef<
+    (ResizeGrip & { items: Array<{ id: string; size: number; x: number; y: number }>; pointerId: number }) | null
+  >(null);
 
   const setRefs = (node: SVGSVGElement | null) => {
     localRef.current = node;
@@ -239,15 +372,16 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
     }
 
     if (resizeRef.current) {
+      const resize = resizeRef.current;
       const point = getSvgPoint(event);
-      const distance = Math.hypot(point.x - resizeRef.current.centerX, point.y - resizeRef.current.centerY);
-      const ratio = resizeRef.current.startDistance === 0 ? 1 : distance / resizeRef.current.startDistance;
+      const ratio = resizeRatio(resize, point);
+
       onScaleItems(
-        resizeRef.current.items.map((item) => ({
+        resize.items.map((item) => ({
           id: item.id,
           size: item.size * ratio,
-          x: resizeRef.current ? resizeRef.current.centerX + (item.x - resizeRef.current.centerX) * ratio : item.x,
-          y: resizeRef.current ? resizeRef.current.centerY + (item.y - resizeRef.current.centerY) * ratio : item.y,
+          x: resize.anchorX + (item.x - resize.anchorX) * ratio,
+          y: resize.anchorY + (item.y - resize.anchorY) * ratio,
         })),
       );
       return;
@@ -296,19 +430,27 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
     const ids = selectedIds.includes(item.id) ? selectedIds : [item.id];
     const selectedItems = items.filter((entry) => ids.includes(entry.id));
     const bounds = selectedItems.map(hitBounds);
-    const left = Math.min(...bounds.map((entry) => entry.x));
-    const top = Math.min(...bounds.map((entry) => entry.y));
-    const right = Math.max(...bounds.map((entry) => entry.x + entry.width));
-    const bottom = Math.max(...bounds.map((entry) => entry.y + entry.height));
-    const centerX = (left + right) / 2;
-    const centerY = (top + bottom) / 2;
+    // The top-left corner of the selection stays put and the bottom-right one
+    // follows the pointer -- the same anchoring every drawing tool uses.
+    // Scaling about the centre instead made the box grow in both directions at
+    // once, so it moved twice as fast as the pointer and the far corner ran
+    // away from the cursor; on a small item that was most of its size for ten
+    // pixels of travel, and the size clamp arrived almost immediately.
+    const grip = resizeGrip(
+      {
+        left: Math.min(...bounds.map((entry) => entry.x)),
+        top: Math.min(...bounds.map((entry) => entry.y)),
+        right: Math.max(...bounds.map((entry) => entry.x + entry.width)),
+        bottom: Math.max(...bounds.map((entry) => entry.y + entry.height)),
+      },
+      point,
+    );
+
     onBeginHistoryAction();
     resizeRef.current = {
-      centerX,
-      centerY,
+      ...grip,
       items: selectedItems.map((entry) => ({ id: entry.id, size: entry.size, x: entry.x, y: entry.y })),
       pointerId: event.pointerId,
-      startDistance: Math.max(1, Math.hypot(point.x - centerX, point.y - centerY)),
     };
     event.currentTarget.setPointerCapture(event.pointerId);
     selectForPointerAction(event, item);
@@ -508,11 +650,13 @@ function GraphicSymbol({
   const color = palette.ink;
   const half = item.size / 2;
   const scale = item.size / 36;
-  const [glyphRef, glyphBox] = useInkBox<SVGGElement>(selected, [item.mark, item.size]);
+  const [glyphRef, glyphBox] = useInkBox<SVGGElement>(selected, [item.mark]);
 
   // glyphBox is measured inside the glyph group, so it is in the mark's own
-  // 36-unit space and excludes the group's own transform. Map it through that
-  // same transform — scale(size/36) translate(-18 -18) — to reach item space.
+  // 36-unit space and excludes the group's own transform. That makes it the
+  // same numbers at every size, which is why `item.size` is not a dependency
+  // above: mapping it through that same transform — scale(size/36)
+  // translate(-18 -18) — reaches item space at whatever size the item is now.
   const ink: Box = glyphBox
     ? {
         x: (glyphBox.x - 18) * scale,
@@ -607,15 +751,23 @@ function GraphicText({
   // with the same metrics, so they cannot look different.
   const displayText = editing ? editingValue : item.text;
   const lines = displayText.split('\n');
-  const estimatedWidth = Math.max(...lines.map((line) => line.length)) * item.size * 0.62;
+  const widestLine = Math.max(...lines.map((line) => line.length));
+  const estimatedWidth = widestLine * item.size * 0.62;
   const estimatedHeight = lines.length * item.size * 1.08;
-  const [textRef, textBox] = useInkBox<SVGTextElement>(selected || editing, [displayText, item.size]);
+  const [textRef, textBox] = useInkBox<SVGTextElement>(selected || editing, [displayText], item.size);
 
   // <text> sits at the item group's origin with no transform of its own, so a
   // measured box is already in item space. Measuring while editing too is what
   // lets the outline grow as lines are added; the estimate is the fallback for
   // where measuring is unavailable, such as jsdom.
-  const ink: Box = textBox ?? { x: 0, y: -item.size, width: estimatedWidth, height: estimatedHeight };
+  //
+  // The measurement is taken at whatever size the item was when it was selected
+  // and scaled from there, so dragging the resize handle re-measures nothing
+  // and the outline is never a frame behind the letters. Reselecting the item
+  // takes a fresh measurement at the size it ended up.
+  const ink: Box = textBox
+    ? scaleInk(textBox, item.size, widestLine - 1)
+    : { x: 0, y: -item.size, width: estimatedWidth, height: estimatedHeight };
   const outline = selectionBox(ink);
 
   return (
@@ -683,7 +835,7 @@ function GraphicText({
               fontFamily: 'IBM Plex Mono, ui-monospace, monospace',
               fontSize: item.size,
               fontWeight: 800,
-              letterSpacing: 2,
+              letterSpacing: LETTER_SPACING,
               lineHeight: 1.08,
               paddingTop: SELECTION_PAD,
               paddingLeft: SELECTION_PAD,
@@ -715,7 +867,7 @@ function GraphicText({
         fontFamily="IBM Plex Mono, ui-monospace, monospace"
         fontSize={item.size}
         fontWeight="800"
-        letterSpacing="2"
+        letterSpacing={LETTER_SPACING}
         xmlSpace="preserve"
       >
         {lines.map((line, index) => (

@@ -93,7 +93,9 @@ everything is a reformatting change of its own.
 - Add symbols from the right panel. They are grouped into `Daily` marks and
   `Tech` logos. Add text from the same panel.
 - Drag items on the canvas to move them; select one to rotate or resize it
-  with its handles. Select several to align or distribute them.
+  with its handles. Resizing keeps the opposite corner of the selection
+  pinned, so the item grows along with the pointer. Select several to align or
+  distribute them.
 - Reorder and select items through the `Layers` list in the left panel.
 - Give a layer an entrance with the sparkle button on its row in `Layers`:
   dissolve, slide in from any side, or pop. Set how long it takes and how long
