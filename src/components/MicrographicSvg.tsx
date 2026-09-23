@@ -20,24 +20,63 @@ export const MIN_SELECTION_SIZE = 20;
 // only has to keep the arithmetic the right way up.
 export const MIN_RESIZE_RATIO = 0.02;
 
-// A selection grabbed exactly at its own anchor has no axis to scale along.
-// Floor the span so the unit vector stays finite.
+// A selection with no extent at all has no diagonal to scale along. Floor the
+// span so the division stays sane; the axis has its own fallback below.
 export const MIN_RESIZE_SPAN = 1;
 
-/** Where a resize drag started: the corner that stays put, and the axis out to the handle. */
-export type ResizeGrip = { anchorX: number; anchorY: number; axisX: number; axisY: number; span: number };
+/**
+ * Where a resize drag started: the corner that stays put, the far corner the
+ * pointer drags, the axis between them, and where the pointer first went down.
+ */
+export type ResizeGrip = {
+  anchorX: number;
+  anchorY: number;
+  axisX: number;
+  axisY: number;
+  span: number;
+  cornerX: number;
+  cornerY: number;
+  grabX: number;
+  grabY: number;
+};
 
 /**
- * The grip a drag starts from. The anchor is the corner opposite the handle,
- * and the axis runs from it to wherever the pointer actually grabbed, so the
- * ratio is exactly 1 at the grab point and the item does not jump on the first
- * move.
+ * The grip a drag starts from, taken from the selection's own bounds: the
+ * top-left corner stays put and the bottom-right one is what the pointer
+ * drags, along the diagonal between them.
+ *
+ * The grab point is recorded but deliberately not used to build the axis. The
+ * resize handle is drawn *inside* each item's rotated group, so on a rotated
+ * item the pointer is nowhere near the corner it appears to sit on; and with
+ * several items selected there is one handle per item, so the pointer is at
+ * whichever one was grabbed rather than at the selection's corner. Deriving
+ * the axis from the pointer made the drag wildly over-sensitive in the first
+ * case and dependent on which handle you grabbed in the second. Bounds have
+ * neither problem, and `resizeRatio` applies the pointer as a displacement so
+ * the ratio is still exactly 1 where the drag began.
  */
-export function resizeGrip(bounds: { left: number; top: number }, point: { x: number; y: number }): ResizeGrip {
-  const reachX = point.x - bounds.left;
-  const reachY = point.y - bounds.top;
-  const span = Math.max(MIN_RESIZE_SPAN, Math.hypot(reachX, reachY));
-  return { anchorX: bounds.left, anchorY: bounds.top, axisX: reachX / span, axisY: reachY / span, span };
+export function resizeGrip(
+  bounds: { left: number; top: number; right: number; bottom: number },
+  grab: { x: number; y: number },
+): ResizeGrip {
+  const reachX = bounds.right - bounds.left;
+  const reachY = bounds.bottom - bounds.top;
+  const diagonal = Math.hypot(reachX, reachY);
+  // A zero diagonal would divide out to a zero vector rather than a unit one,
+  // which pins the ratio at its floor for the rest of the drag. Fall back to
+  // the diagonal every handle sits on.
+  const unit = diagonal === 0 ? { x: Math.SQRT1_2, y: Math.SQRT1_2 } : { x: reachX / diagonal, y: reachY / diagonal };
+  return {
+    anchorX: bounds.left,
+    anchorY: bounds.top,
+    axisX: unit.x,
+    axisY: unit.y,
+    cornerX: bounds.right,
+    cornerY: bounds.bottom,
+    grabX: grab.x,
+    grabY: grab.y,
+    span: Math.max(MIN_RESIZE_SPAN, diagonal),
+  };
 }
 
 /**
@@ -55,7 +94,12 @@ export function resizeGrip(bounds: { left: number; top: number }, point: { x: nu
  * again, and the size ceiling arrived within one flick of the wrist.
  */
 export function resizeRatio(grip: ResizeGrip, point: { x: number; y: number }): number {
-  const along = (point.x - grip.anchorX) * grip.axisX + (point.y - grip.anchorY) * grip.axisY;
+  // How far the pointer has come, applied to the selection's far corner. The
+  // pointer's absolute position is not the corner -- see `resizeGrip` -- but
+  // how far it has moved is the same wherever it started.
+  const cornerX = grip.cornerX + (point.x - grip.grabX);
+  const cornerY = grip.cornerY + (point.y - grip.grabY);
+  const along = (cornerX - grip.anchorX) * grip.axisX + (cornerY - grip.anchorY) * grip.axisY;
   return Math.max(MIN_RESIZE_RATIO, along / grip.span);
 }
 
@@ -377,14 +421,19 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
     const ids = selectedIds.includes(item.id) ? selectedIds : [item.id];
     const selectedItems = items.filter((entry) => ids.includes(entry.id));
     const bounds = selectedItems.map(hitBounds);
-    // The handle sits at the bottom-right of the selection, so the top-left
-    // corner is what stays put -- the same anchoring every drawing tool uses.
+    // The top-left corner of the selection stays put and the bottom-right one
+    // follows the pointer -- the same anchoring every drawing tool uses.
     // Scaling about the centre instead made the box grow in both directions at
     // once, so it moved twice as fast as the pointer and the far corner ran
     // away from the cursor; on a small item that was most of its size for ten
     // pixels of travel, and the size clamp arrived almost immediately.
     const grip = resizeGrip(
-      { left: Math.min(...bounds.map((entry) => entry.x)), top: Math.min(...bounds.map((entry) => entry.y)) },
+      {
+        left: Math.min(...bounds.map((entry) => entry.x)),
+        top: Math.min(...bounds.map((entry) => entry.y)),
+        right: Math.max(...bounds.map((entry) => entry.x + entry.width)),
+        bottom: Math.max(...bounds.map((entry) => entry.y + entry.height)),
+      },
       point,
     );
 

@@ -243,32 +243,67 @@ describe('scaleInk', () => {
 // 67 and the size ceiling arrived after eighty. These pin the mapping that
 // replaced it: anchored on the opposite corner, and linear in travel.
 describe('resizeGrip', () => {
+  const bounds = { left: 100, top: 100, right: 200, bottom: 180 };
+
   it('is exactly neutral at the point the handle was grabbed', () => {
     // Anything else makes the item jump the instant the pointer moves.
-    const point = { x: 140, y: 120 };
-    const grip = resizeGrip({ left: 100, top: 100 }, point);
+    const grab = { x: 200, y: 180 };
 
-    expect(resizeRatio(grip, point)).toBeCloseTo(1);
+    expect(resizeRatio(resizeGrip(bounds, grab), grab)).toBeCloseTo(1);
+  });
+
+  it('is neutral even when the grab point is nowhere near the corner', () => {
+    // Which is the normal case for a rotated item: the handle is drawn inside
+    // the item's rotated group, so it can be grabbed on the far side of the
+    // selection from the corner it belongs to.
+    const grab = { x: 104, y: 104 };
+
+    expect(resizeRatio(resizeGrip(bounds, grab), grab)).toBeCloseTo(1);
   });
 
   it('keeps the anchor on the corner opposite the handle', () => {
-    const grip = resizeGrip({ left: 100, top: 100 }, { x: 140, y: 120 });
+    const grip = resizeGrip(bounds, { x: 200, y: 180 });
 
     expect(grip.anchorX).toBe(100);
     expect(grip.anchorY).toBe(100);
   });
 
-  it('survives a grab landing exactly on the anchor', () => {
-    const grip = resizeGrip({ left: 100, top: 100 }, { x: 100, y: 100 });
+  it('takes its axis from the selection, not from where the pointer went down', () => {
+    // A rotated item's handle sits at the selection's *top-left* in canvas
+    // coordinates. Measuring the axis to the pointer collapsed the span to
+    // almost nothing there, and one small drag ran the item to its ceiling.
+    const fromCorner = resizeGrip(bounds, { x: 200, y: 180 });
+    const fromRotated = resizeGrip(bounds, { x: 100, y: 100 });
 
-    expect(Number.isFinite(grip.axisX)).toBe(true);
-    expect(Number.isFinite(resizeRatio(grip, { x: 150, y: 150 }))).toBe(true);
+    expect(fromRotated.span).toBeCloseTo(fromCorner.span);
+    expect(fromRotated.axisX).toBeCloseTo(fromCorner.axisX);
+    expect(fromRotated.axisY).toBeCloseTo(fromCorner.axisY);
+  });
+
+  it('answers the same push the same way wherever the handle was grabbed', () => {
+    // Several items selected means several handles, one per item. Grabbing the
+    // near one used to scale many times faster than grabbing the far one.
+    const wide = { left: 200, top: 200, right: 1000, bottom: 600 };
+    const near = resizeGrip(wide, { x: 260, y: 240 });
+    const far = resizeGrip(wide, { x: 1000, y: 600 });
+
+    expect(resizeRatio(near, { x: 280, y: 260 })).toBeCloseTo(resizeRatio(far, { x: 1020, y: 620 }));
+  });
+
+  it('survives a selection with no extent at all', () => {
+    const grip = resizeGrip({ left: 100, top: 100, right: 100, bottom: 100 }, { x: 100, y: 100 });
+
+    // A zero axis would pin the ratio at its floor for the rest of the drag,
+    // collapsing the item with no way back.
+    expect(Math.hypot(grip.axisX, grip.axisY)).toBeCloseTo(1);
+    expect(resizeRatio(grip, { x: 200, y: 200 })).toBeGreaterThan(1);
   });
 });
 
 describe('resizeRatio', () => {
-  // A handle grabbed 100 units to the right of the anchor, on the x axis.
-  const grip = resizeGrip({ left: 0, top: 0 }, { x: 100, y: 0 });
+  // A selection 100 units wide and none tall, grabbed on its far corner, so
+  // the axis is the x axis and the span is 100.
+  const grip = resizeGrip({ left: 0, top: 0, right: 100, bottom: 0 }, { x: 100, y: 0 });
 
   it('grows in step with the pointer rather than faster than it', () => {
     // Anchored on the opposite corner, travel and growth are one to one. The

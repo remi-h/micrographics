@@ -218,3 +218,74 @@ test('resizing tracks the pointer steadily, without running out of room', async 
   // And that amount is modest: the centre-anchored mapping moved twice as fast.
   expect(largest, 'twenty pixels of travel should not be half the item again').toBeLessThan(35);
 });
+
+// The resize handle is drawn inside the item's rotated group, so on a rotated
+// item the pointer goes down nowhere near the canvas-space corner the handle
+// stands for. Taking the drag axis from there collapsed it to almost nothing:
+// at 180 degrees the gap between the anchor and the handle was 2.8 units at
+// every size, so twenty pixels of drag was a ratio of eleven and the item went
+// straight to its size ceiling in one flick.
+test('resizing a rotated item is no more sensitive than resizing an upright one', async ({ page }) => {
+  await page.goto('/creator');
+  await page.locator('.symbol-button').first().click();
+
+  // The page opens on a template, so the item just added is found through its
+  // own handles rather than by taking the first item on the canvas.
+  const selected = page.locator('.canvas-item:has(.resize-handle)');
+  await expect(selected).toHaveCount(1);
+
+  // One diagonal push on the resize handle, and how much bigger it left the item.
+  const grow = async () => {
+    const box = (await page.locator('.resize-handle').first().boundingBox())!;
+    return page.evaluate(
+      async ({ hx, hy }) => {
+        const target = document.elementFromPoint(hx, hy)!;
+        const ev = (type: string, px: number, py: number) =>
+          new PointerEvent(type, { bubbles: true, cancelable: true, clientX: px, clientY: py, pointerId: 1, isPrimary: true, buttons: 1 });
+        const size = () => {
+          const glyph = document.querySelector('.resize-handle')?.closest('.canvas-item')?.querySelector('g[transform^="scale"]');
+          return Number(/scale\(([\d.]+)\)/.exec(glyph?.getAttribute('transform') ?? '')?.[1] ?? 0) * 36;
+        };
+
+        const before = size();
+        target.dispatchEvent(ev('pointerdown', hx, hy));
+        target.dispatchEvent(ev('pointermove', hx + 28, hy + 28));
+        await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+        await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+        const after = size();
+        target.dispatchEvent(ev('pointerup', hx + 28, hy + 28));
+        return after - before;
+      },
+      { hx: box.x + box.width / 2, hy: box.y + box.height / 2 },
+    );
+  };
+
+  const upright = await grow();
+  expect(upright, 'the drag should have grown the upright item').toBeGreaterThan(0);
+
+  // Now swing it half way round, so the handle ends up on the opposite side of
+  // the item from the corner it stands for.
+  const rotateBox = (await page.locator('.rotate-handle').first().boundingBox())!;
+  const origin = await page.evaluate(() => {
+    const group = document.querySelector('.canvas-item:has(.resize-handle)') as SVGGElement;
+    const point = new DOMPoint(0, 0).matrixTransform(group.getScreenCTM()!);
+    return { x: point.x, y: point.y };
+  });
+  const rx = rotateBox.x + rotateBox.width / 2;
+  const ry = rotateBox.y + rotateBox.height / 2;
+  await page.mouse.move(rx, ry);
+  await page.mouse.down();
+  await page.mouse.move(2 * origin.x - rx, 2 * origin.y - ry, { steps: 12 });
+  await page.mouse.up();
+
+  const rotation = Number(/rotate\(([-\d.]+)\)/.exec((await selected.getAttribute('transform')) ?? '')?.[1] ?? 0);
+  expect(Math.abs(rotation - 180), 'the item should have turned half way round').toBeLessThan(15);
+
+  const rotated = await grow();
+
+  // The same gesture, so the same growth. Within a comfortable margin, since
+  // the selection box is not square and its diagonal shifts a little as the
+  // measured ink box turns with it.
+  expect(rotated, 'a rotated item should still grow').toBeGreaterThan(0);
+  expect(rotated, 'rotating an item must not make its resize handle hypersensitive').toBeLessThan(upright * 2);
+});
