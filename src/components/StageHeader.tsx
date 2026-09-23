@@ -1,4 +1,4 @@
-import { ZoomIn, ZoomOut } from 'lucide-react';
+import { Play, ZoomIn, ZoomOut } from 'lucide-react';
 import type { Palette, Settings } from '../types';
 
 export function StageHeader({
@@ -7,9 +7,11 @@ export function StageHeader({
   palette,
   paletteIndex,
   palettes,
+  canPlay,
   selectedTemplateName,
   settings,
   onChangeGrid,
+  onPlayAnimations,
   onChangePalette,
   onResetZoom,
   onZoomIn,
@@ -20,9 +22,11 @@ export function StageHeader({
   palette: Palette;
   paletteIndex: number;
   palettes: Palette[];
+  canPlay: boolean;
   selectedTemplateName: string | undefined;
   settings: Settings;
   onChangeGrid: (value: boolean) => void;
+  onPlayAnimations: () => void;
   onChangePalette: (index: number) => void;
   onResetZoom: () => void;
   onZoomIn: () => void;
@@ -35,6 +39,14 @@ export function StageHeader({
         <h2>{palette.name}</h2>
       </div>
       <div className="stage-actions">
+        {/* Only offered once something on the canvas has an entrance, so the
+            control does not sit there inert on a canvas that cannot use it. */}
+        {canPlay && (
+          <button className="stage-play" onClick={onPlayAnimations} type="button">
+            <Play size={14} aria-hidden="true" />
+            Play
+          </button>
+        )}
         <div className="stage-palette-list" aria-label="Color palette">
           {palettes.map((item, index) => (
             <button

@@ -807,6 +807,133 @@ h1 {
   box-shadow: inset 0 0 0 1px #f4f0e8;
 }
 
+/* The row is a container now: the layer's name selects it, and the control on
+   the right opens its animation settings. The padding moves onto the two
+   buttons so both fill the row and neither leaves a dead strip.
+   min-width: 0 because the row is a grid item, whose automatic minimum is its
+   min-content -- and the name below is `white-space: nowrap`, so that minimum
+   is the whole label. Without this the list's single auto column grows to the
+   longest layer name and scrolls sideways, carrying the animation control off
+   the edge of the panel. */
+.layer-row {
+  min-width: 0;
+  padding: 0;
+  gap: 0;
+}
+
+.layer-select {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 11px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+/* On the label rather than on .layer-select: text-overflow does not apply to a
+   flex container's anonymous items, so a long layer name clipped without ever
+   showing an ellipsis.
+   The colour and size are restated because wrapping the label in a <span>
+   brings it under `.layer-row span`, which styles the small muted index
+   number -- without these the name reads as another index. */
+.layer-select .layer-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #f4f0e8;
+  font-size: 13px;
+}
+
+.layer-animate {
+  flex: none;
+  width: 34px;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-left: 1px solid rgba(245, 242, 234, 0.12);
+  background: transparent;
+  color: rgba(245, 242, 234, 0.45);
+  cursor: pointer;
+}
+
+.layer-animate:hover,
+.layer-animate:focus-visible {
+  color: #f4f0e8;
+  background: #2a2a2a;
+  outline: none;
+}
+
+.layer-animate[data-on] {
+  color: #f4f0e8;
+}
+
+.animation-kinds {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0 4px;
+}
+
+.animation-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: #9a978f;
+}
+
+.animation-field strong {
+  color: #f4f0e8;
+  font-variant-numeric: tabular-nums;
+}
+
+.animation-field input[type="range"] {
+  width: 100%;
+  accent-color: #f4f0e8;
+}
+
+.dialog-footer {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.dialog-footer .dialog-close {
+  flex: 1;
+  margin-top: 0;
+}
+
+.dialog-footer .dialog-close:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.stage-play {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid rgba(245, 242, 234, 0.2);
+  border-radius: 7px;
+  background: transparent;
+  color: #f4f0e8;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.stage-play:hover {
+  border-color: #f4f0e8;
+}
+
 .empty-layer {
   min-height: 42px;
   display: grid;
@@ -965,6 +1092,62 @@ h1 {
   color: rgba(244, 240, 232, 0.62);
 }
 
+/* The export dialog stacks three format groups, so it needs more room than
+   the single list of PNG sizes it replaced. */
+.export-dialog {
+  width: min(400px, calc(100vw - 32px));
+}
+
+.export-group + .export-group {
+  margin-top: 16px;
+}
+
+.export-group-label {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(244, 240, 232, 0.45);
+}
+
+/* Same shape as a size option, with room for an icon and a line of copy. */
+.export-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 13px;
+  border: 1px solid rgba(245, 242, 234, 0.14);
+  border-radius: 8px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.export-option:hover:not(:disabled),
+.export-option:focus-visible {
+  border-color: rgba(245, 242, 234, 0.4);
+  outline: none;
+}
+
+.export-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.export-option-name {
+  font-weight: 700;
+}
+
+.export-option-note {
+  flex: 1;
+  font-size: 12px;
+  color: rgba(244, 240, 232, 0.6);
+  text-align: right;
+}
+
 .size-options {
   display: grid;
   gap: 8px;
@@ -988,10 +1171,6 @@ h1 {
 .size-option:focus-visible {
   border-color: rgba(245, 242, 234, 0.4);
   outline: none;
-}
-
-.size-option[data-active='true'] {
-  border-color: rgba(245, 242, 234, 0.55);
 }
 
 .size-option-scale {

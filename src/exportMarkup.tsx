@@ -1,3 +1,4 @@
+import { animationClassName, animationStateAt, animationStyleSheet } from './animations';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { MicrographicSvg } from './components/MicrographicSvg';
@@ -14,10 +15,6 @@ export const EXPORT_SCALES = [1, 2, 4] as const;
 
 export type ExportScale = (typeof EXPORT_SCALES)[number];
 
-// What the export produced before the scale was selectable, kept as the default
-// so nobody's habitual export changes size under them.
-export const DEFAULT_EXPORT_SCALE: ExportScale = 2;
-
 // Pixel size of an export at a given scale. Pure, so the PNG canvas, the labels
 // on the size control and the status message all quote the same numbers.
 export function exportPixelSize(scale: number) {
@@ -28,12 +25,36 @@ export type ExportInput = {
   items: CanvasItem[];
   palette: Palette;
   settings: Settings;
+  /**
+   * Whether to write the items' entrance animations into the file as CSS.
+   * True for the .svg, which is a document a browser will run; false for the
+   * PNG, which is one frame and must be the finished artwork rather than the
+   * first frame of an entrance.
+   */
+  animate?: boolean;
+  /**
+   * Seconds into the entrance sequence to freeze the artwork at, baking each
+   * animated item's state in as an inline style instead of writing CSS.
+   *
+   * This is the GIF export's whole mechanism. A GIF is a stack of finished
+   * pictures with no engine behind them, so each frame is rendered with the
+   * animation already applied rather than described. Mutually exclusive with
+   * `animate` in practice, and ignored when nothing on the canvas animates.
+   */
+  freezeAt?: number;
   // Multiplier on the artboard size for the width/height written onto the SVG
   // root. The downloaded .svg stays at 1x; the PNG path raises it.
   scale?: number;
 };
 
 const noop = () => {};
+
+// A fresh id for each exported file, so its stylesheet can be scoped to it.
+let exportCount = 0;
+function exportScopeId() {
+  exportCount += 1;
+  return `mg-${Math.random().toString(36).slice(2, 8)}-${exportCount}`;
+}
 
 // Exports used to be serialized straight off the live canvas node, so whatever
 // the editor was drawing at the time went into the file: the dashed selection
@@ -54,7 +75,7 @@ const noop = () => {};
 // Each item still carries its transparent hit-target rect. It paints nothing,
 // so the exported artwork is unaffected, and dropping it would mean a second
 // render mode -- exactly the kind of special case this approach avoids.
-export function buildExportMarkup({ items, palette, settings, scale = 1 }: ExportInput): string {
+export function buildExportMarkup({ animate = false, freezeAt, items, palette, settings, scale = 1 }: ExportInput): string {
   // Detached from the document: it is never laid out and never painted, so the
   // canvas the user is looking at is untouched.
   const host = document.createElement('div');
@@ -82,6 +103,7 @@ export function buildExportMarkup({ items, palette, settings, scale = 1 }: Expor
           onSelectItem={noop}
           onSelectItems={noop}
           palette={palette}
+          playToken={0}
           selectedIds={[]}
           settings={settings}
         />,
@@ -105,6 +127,47 @@ export function buildExportMarkup({ items, palette, settings, scale = 1 }: Expor
     const { width, height } = exportPixelSize(scale);
     svg.setAttribute('width', String(width));
     svg.setAttribute('height', String(height));
+
+    // The animations ride along as a stylesheet inside the file rather than as
+    // SMIL, which is deprecated, and rather than being baked into the elements,
+    // which would leave a viewer that does not run CSS showing the *first*
+    // frame: items stacked transparently off the left edge instead of the
+    // poster. Every entrance animates from an offset back to the item's own
+    // attributes, so without CSS the file is simply the finished artwork.
+    //
+    // The rules are scoped to this file's own root id. An exported SVG is often
+    // inlined into a page, where its styles are document-global -- two of them
+    // in one page would otherwise both define `.mg-anim-0` and the second would
+    // win for both. This is the same exposure the `mg-` prefix on the keyframes
+    // names guards against, which those already handle by being identical
+    // wherever they collide; the per-item timings are not.
+    const stylesheet = animate ? animationStyleSheet(items, exportScopeId()) : null;
+    if (stylesheet) {
+      const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+      style.setAttribute('type', 'text/css');
+      style.textContent = stylesheet.css;
+      svg.setAttribute('id', stylesheet.scope);
+      // After <title>, which is the element's accessible name and is expected
+      // to come first.
+      const title = svg.querySelector('title');
+      svg.insertBefore(style, title ? title.nextSibling : svg.firstChild);
+    }
+
+    // A frozen frame carries its state on the elements themselves. The
+    // stylesheet path above cannot serve this: the frames are rasterized
+    // through an <img>, and an SVG loaded that way is a separate document that
+    // runs no animation, so a CSS `@keyframes` would render as its filled
+    // starting state for every frame.
+    if (freezeAt !== undefined) {
+      items.forEach((item, index) => {
+        if (!item.animation) return;
+        const layer = svg.querySelector(`.${animationClassName(index)}`);
+        if (!(layer instanceof SVGElement)) return;
+        const state = animationStateAt(item.animation, freezeAt);
+        layer.style.opacity = String(state.opacity);
+        layer.style.transform = state.transform;
+      });
+    }
 
     // XMLSerializer, not markup built by hand: it declares the SVG namespace on
     // the root element, which a standalone .svg file needs and which the PNG
