@@ -112,7 +112,13 @@ export function useExport({ canvasItems, palette, settings }: UseExportOptions):
   // once and the GIF export does per frame. The context is handed in rather
   // than made here so the GIF can reuse one canvas across every frame instead
   // of allocating a full-size one each time.
-  const drawMarkup = async (markup: string, context: CanvasRenderingContext2D, width: number, height: number) => {
+  const drawMarkup = async (
+    markup: string,
+    context: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    opaqueOn?: string,
+  ) => {
     const url = URL.createObjectURL(new Blob([markup], { type: 'image/svg+xml;charset=utf-8' }));
     try {
       const image = new Image();
@@ -129,6 +135,24 @@ export function useExport({ canvasItems, palette, settings }: UseExportOptions):
       // and an entrance is transparent at its start, so without this every
       // frame would show the one before it underneath.
       context.clearRect(0, 0, width, height);
+
+      // A GIF's transparency is one bit: a pixel is either fully clear or
+      // fully opaque, with nothing in between. An entrance is *made of* the
+      // in-between -- a dissolve is nothing but partial alpha -- so on a
+      // transparent artboard there is no honest way to write one. Thresholding
+      // turns every fade into a hard pop, and dropping alpha (which is what a
+      // GIF palette does) bakes a 30%-opacity item in at full strength and
+      // fills the empty canvas with black.
+      //
+      // So the frames are laid on the paper colour first. The GIF comes out
+      // opaque even when `Include background` is off, and the fades survive.
+      // The PNG and the SVG are unaffected: both carry real alpha, so both
+      // still honour the toggle.
+      if (opaqueOn) {
+        context.fillStyle = opaqueOn;
+        context.fillRect(0, 0, width, height);
+      }
+
       context.drawImage(image, 0, 0, width, height);
     } finally {
       URL.revokeObjectURL(url);
@@ -197,7 +221,7 @@ export function useExport({ canvasItems, palette, settings }: UseExportOptions):
       const frames: Uint8ClampedArray[] = [];
 
       for (const at of times) {
-        await drawMarkup(exportMarkup(1, false, at), context, width, height);
+        await drawMarkup(exportMarkup(1, false, at), context, width, height, palette.paper);
         frames.push(context.getImageData(0, 0, width, height).data);
       }
 

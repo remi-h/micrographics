@@ -42,6 +42,7 @@ type Stubs = {
   downloads: Array<{ download: string; href: string }>;
   decode: jest.Mock<Promise<void>, []>;
   clearRect: jest.Mock;
+  fillRect: jest.Mock;
   drawImage: jest.Mock;
   getContext: jest.Mock;
   toBlob: jest.Mock;
@@ -68,16 +69,20 @@ beforeEach(() => {
   const canvases: HTMLCanvasElement[] = [];
   const drawImage = jest.fn();
   const clearRect = jest.fn();
+  const fillRect = jest.fn();
   const decode = jest.fn<Promise<void>, []>(() => Promise.resolve());
   const getContext = jest.fn(function getContext(this: HTMLCanvasElement) {
     canvases.push(this);
-    return {
+    const context = {
       clearRect,
+      fillRect,
+      fillStyle: '',
       drawImage,
       // The GIF export reads each frame back out; a fixed one-pixel buffer is
       // enough, since what is asserted is the encoding, not the pixels.
       getImageData: () => ({ data: new Uint8ClampedArray(4) }),
-    } as unknown as CanvasRenderingContext2D;
+    };
+    return context as unknown as CanvasRenderingContext2D;
   });
   const toBlob = jest.fn((callback: BlobCallback) => callback(new Blob(['png'], { type: 'image/png' })));
 
@@ -98,7 +103,7 @@ beforeEach(() => {
     downloads.push({ download: this.download, href: this.href });
   } as HTMLAnchorElement['click']);
 
-  stubs = { canvases, clearRect, createdUrls, decode, downloads, drawImage, getContext, revokedUrls, toBlob };
+  stubs = { canvases, clearRect, fillRect, createdUrls, decode, downloads, drawImage, getContext, revokedUrls, toBlob };
 });
 
 afterEach(() => {
@@ -414,6 +419,34 @@ describe('useExport GIF', () => {
     await exportGif(result);
 
     expect(stubs.clearRect.mock.calls.length).toBeGreaterThanOrEqual(buildExportMarkup.mock.calls.length);
+  });
+
+  it('lays every frame on the paper colour, so a fade is still a fade', async () => {
+    // GIF transparency is one bit, and an entrance is made of the in-between.
+    // Left on a transparent artboard, dropping alpha (which is what a GIF
+    // palette does) bakes a half-faded item in at full strength and fills the
+    // empty canvas with black.
+    const { result } = setUpGif();
+
+    await exportGif(result);
+
+    // Once per frame, not once for the file: each frame is drawn into the same
+    // reused context, so a single fill at the start would be wiped by the
+    // clear before frame two.
+    const frames = buildExportMarkup.mock.calls.filter(([input]) => input.freezeAt !== undefined).length;
+    expect(stubs.fillRect).toHaveBeenCalledTimes(frames);
+    expect(stubs.fillRect).toHaveBeenCalledWith(0, 0, 1200, 800);
+  });
+
+  it('leaves the PNG alone, which carries real transparency', async () => {
+    // The toggle still means what it says everywhere the format can honour it.
+    const { result } = setUpGif();
+
+    await act(async () => {
+      await result.current.exportPng();
+    });
+
+    expect(stubs.fillRect).not.toHaveBeenCalled();
   });
 
   it('writes the file at the artboard size and says how many frames it took', async () => {

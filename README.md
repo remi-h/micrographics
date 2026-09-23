@@ -125,6 +125,11 @@ everything is a reformatting change of its own.
   is always 1200 x 800, since a GIF stores every frame as its own picture, and
   it holds on the finished artwork for a moment before looping. The option is
   only offered once at least one layer has an entrance.
+- A GIF is always written on the background colour, even with `Include
+  background` off. GIF transparency is one bit — a pixel is either fully clear
+  or fully opaque — and an entrance is made of the in-between, so on a
+  transparent canvas every fade would become a hard cut. The SVG and the PNG
+  both carry real transparency and honour the toggle as usual.
 - Each export reports back in the corner of the window, naming the file it
   wrote, or saying what went wrong if the browser could not produce it.
 - Your work is saved automatically in the browser, so closing the tab or

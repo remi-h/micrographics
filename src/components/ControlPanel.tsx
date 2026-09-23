@@ -177,7 +177,7 @@ export function ControlPanel({
                     {exportingGif
                       ? 'Rendering frames…'
                       : animated
-                        ? 'Plays the entrances, 1200 × 800'
+                        ? 'Plays the entrances, 1200 × 800, on the background colour'
                         : 'Give a layer an entrance first'}
                   </span>
                 </button>

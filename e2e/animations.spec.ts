@@ -362,3 +362,52 @@ test('the GIF export writes a real animated gif', async ({ page }) => {
   for (let at = 0; at < file.length; at += 1) if (file[at] === 0x2c) frames += 1;
   expect(frames).toBeGreaterThan(5);
 });
+
+// A GIF's transparency is one bit: fully clear or fully opaque, nothing
+// between. An entrance is made of the in-between, so on a transparent artboard
+// there is nothing honest to write -- dropping alpha, which is what a GIF
+// palette does, bakes a half-faded item in at full strength and fills the empty
+// canvas with black. The frames are laid on the paper colour for that reason,
+// and this checks it holds with `Include background` switched off, which is the
+// only way to reach a transparent artboard.
+test('a GIF exported with the background off is still opaque, not black', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto('/creator');
+  await giveTopLayerAnEntrance(page, 'Dissolve in');
+  // A Base UI Switch inside a <label>, so it is reached by role rather than
+  // by the label association a native checkbox would have.
+  const background = page.locator('.toggle-row', { hasText: 'Include background' }).getByRole('switch');
+  await expect(background).toHaveAttribute('aria-checked', 'true');
+  await background.click();
+  await expect(background).toHaveAttribute('aria-checked', 'false');
+
+  await openExportDialog(page);
+  const download = await Promise.all([
+    page.waitForEvent('download'),
+    page.locator('.export-option').filter({ hasText: 'GIF' }).click(),
+  ]).then(([event]) => event);
+
+  const file = await readFile(await download.path());
+
+  // Decode the first frame in the browser and look at the corner, which no
+  // item covers. Black there is the bug; the paper colour is the fix.
+  const corner = await page.evaluate(async (bytes) => {
+    const blob = new Blob([new Uint8Array(bytes)], { type: 'image/gif' });
+    const bitmap = await createImageBitmap(blob);
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext('2d')!;
+    // On a colour of its own, so a transparent GIF pixel is visibly not the
+    // paper rather than silently compositing to something plausible.
+    context.fillStyle = '#ff00ff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(bitmap, 0, 0);
+    const [r, g, b] = context.getImageData(4, 4, 1, 1).data;
+    return { r, g, b };
+  }, [...file]);
+
+  expect(corner, 'the empty corner should not have encoded as black').not.toEqual({ r: 0, g: 0, b: 0 });
+  // Nor left transparent, which would show the magenta underneath.
+  expect(corner, 'the empty corner should not have been left transparent').not.toEqual({ r: 255, g: 0, b: 255 });
+});
