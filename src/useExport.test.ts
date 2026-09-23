@@ -41,6 +41,8 @@ type Stubs = {
   revokedUrls: string[];
   downloads: Array<{ download: string; href: string }>;
   decode: jest.Mock<Promise<void>, []>;
+  clearRect: jest.Mock;
+  fillRect: jest.Mock;
   drawImage: jest.Mock;
   getContext: jest.Mock;
   toBlob: jest.Mock;
@@ -66,10 +68,21 @@ beforeEach(() => {
   const downloads: Array<{ download: string; href: string }> = [];
   const canvases: HTMLCanvasElement[] = [];
   const drawImage = jest.fn();
+  const clearRect = jest.fn();
+  const fillRect = jest.fn();
   const decode = jest.fn<Promise<void>, []>(() => Promise.resolve());
   const getContext = jest.fn(function getContext(this: HTMLCanvasElement) {
     canvases.push(this);
-    return { drawImage } as unknown as CanvasRenderingContext2D;
+    const context = {
+      clearRect,
+      fillRect,
+      fillStyle: '',
+      drawImage,
+      // The GIF export reads each frame back out; a fixed one-pixel buffer is
+      // enough, since what is asserted is the encoding, not the pixels.
+      getImageData: () => ({ data: new Uint8ClampedArray(4) }),
+    };
+    return context as unknown as CanvasRenderingContext2D;
   });
   const toBlob = jest.fn((callback: BlobCallback) => callback(new Blob(['png'], { type: 'image/png' })));
 
@@ -90,7 +103,7 @@ beforeEach(() => {
     downloads.push({ download: this.download, href: this.href });
   } as HTMLAnchorElement['click']);
 
-  stubs = { canvases, createdUrls, decode, downloads, drawImage, getContext, revokedUrls, toBlob };
+  stubs = { canvases, clearRect, fillRect, createdUrls, decode, downloads, drawImage, getContext, revokedUrls, toBlob };
 });
 
 afterEach(() => {
@@ -102,7 +115,7 @@ function setUp() {
   return renderHook(() => useExport({ canvasItems, palette: palettes[0], settings: initialSettings }));
 }
 
-async function exportPng(result: { current: ReturnType<typeof useExport> }, scale?: ExportScale) {
+async function exportPng(result: { current: ReturnType<typeof useExport> }, scale: ExportScale = 2) {
   await act(async () => {
     await result.current.exportPng(scale);
   });
@@ -183,8 +196,7 @@ describe('useExport PNG', () => {
   it('rasterizes at the chosen scale, and quotes that size', async () => {
     const { result } = setUp();
 
-    act(() => result.current.setExportScale(4));
-    await exportPng(result);
+    await exportPng(result, 4);
 
     expect(buildExportMarkup).toHaveBeenCalledWith(expect.objectContaining({ scale: 4 }));
     expect(stubs.canvases[0].width).toBe(4800);
@@ -192,29 +204,20 @@ describe('useExport PNG', () => {
     expect(result.current.exportStatus?.text).toBe('Saved micrographic.png (4800 × 3200).');
   });
 
-  // The size picker sets the scale and exports in one click. Reading the scale
-  // off state would rasterize at the previous one, because state is not updated
-  // until the next render, so the scale is passed in instead.
-  it('rasterizes at a scale passed in, not the one still in state', async () => {
-    const { result } = setUp();
-    expect(result.current.exportScale).toBe(2);
-
-    await exportPng(result, 4);
-
-    expect(buildExportMarkup).toHaveBeenCalledWith(expect.objectContaining({ scale: 4 }));
-    expect(stubs.canvases[0].width).toBe(4800);
-    expect(result.current.exportStatus?.text).toBe('Saved micrographic.png (4800 × 3200).');
-  });
-
-  it('remembers a scale passed in as the new default', async () => {
+  // The scale is a parameter, not remembered state. It used to be remembered,
+  // which only ever showed as a tick beside one size in the export dialog --
+  // and a tick reads as a selection, so it implied a confirm button the dialog
+  // does not have and does not need: every row there exports on the spot.
+  it('rasterizes at whatever scale the caller asked for, every time', async () => {
     const { result } = setUp();
 
     await exportPng(result, 1);
-    expect(result.current.exportScale).toBe(1);
+    expect(stubs.canvases[0].width).toBe(1200);
 
-    // A later export with no scale uses what the picker last chose.
-    await exportPng(result);
-    expect(stubs.canvases[1].width).toBe(1200);
+    // No carry-over from the previous call.
+    await exportPng(result, 4);
+    expect(stubs.canvases[1].width).toBe(4800);
+    expect(result.current.exportStatus?.text).toBe('Saved micrographic.png (4800 × 3200).');
   });
 
   // 1 of 4: the serializer itself throws, before there is anything to decode.
@@ -275,8 +278,7 @@ describe('useExport PNG', () => {
     stubs.toBlob.mockImplementationOnce((callback: BlobCallback) => callback(null));
     const { result } = setUp();
 
-    act(() => result.current.setExportScale(4));
-    await exportPng(result);
+    await exportPng(result, 4);
 
     expect(result.current.exportStatus).toEqual({
       id: 1,
@@ -299,9 +301,23 @@ describe('useExport PNG', () => {
     expect([...stubs.revokedUrls].sort()).toEqual([...stubs.createdUrls].sort());
   });
 
+  // A refused context is now found before any markup is serialized, so there
+  // is no source URL to revoke -- the leak this guards against cannot happen
+  // on that path at all. The two failures that come after the URL is minted
+  // still have to clean it up, and are covered below.
+  it('mints no object URL at all when the 2D context is refused', async () => {
+    stubs.getContext.mockReturnValueOnce(null);
+    const { result } = setUp();
+
+    await exportPng(result);
+
+    expect(result.current.exportStatus?.tone).toBe('error');
+    expect(stubs.createdUrls).toEqual([]);
+    expect(stubs.revokedUrls).toEqual([]);
+  });
+
   it.each([
     ['a decode failure', () => stubs.decode.mockRejectedValueOnce(new Error('nope'))],
-    ['a refused context', () => stubs.getContext.mockReturnValueOnce(null)],
     ['an encode failure', () => stubs.toBlob.mockImplementationOnce((callback: BlobCallback) => callback(null))],
   ])('revokes the source object URL after %s', async (_label, arrange) => {
     arrange();
@@ -340,6 +356,177 @@ describe('useExport status messages', () => {
     const { result } = setUp();
 
     expect(result.current.exportStatus).toBeNull();
-    expect(result.current.exportScale).toBe(2);
+  });
+});
+
+// The GIF is the one export with no engine behind it: the browser runs the
+// .svg's CSS and rasterizes the PNG, but every GIF frame has to be rendered
+// with the animation's state already worked out and applied. These pin the
+// parts of that a browser test cannot see -- which moments are rendered, that
+// each one is a fresh picture, and that the failure paths still say so.
+describe('useExport GIF', () => {
+  const animated: CanvasItem[] = [
+    { ...canvasItems[0], animation: { delay: 0, duration: 1, kind: 'slide-left' } },
+    { ...canvasItems[1], animation: { delay: 1, duration: 1, kind: 'fade' } },
+  ];
+
+  function setUpGif(items: CanvasItem[] = animated) {
+    return renderHook(() => useExport({ canvasItems: items, palette: palettes[0], settings: initialSettings }));
+  }
+
+  async function exportGif(result: { current: ReturnType<typeof useExport> }) {
+    await act(async () => {
+      await result.current.exportGif();
+    });
+  }
+
+  it('renders a frame per sampled moment, each at its own time', async () => {
+    const { result } = setUpGif();
+
+    await exportGif(result);
+
+    const frozen = buildExportMarkup.mock.calls
+      .map(([input]) => input.freezeAt)
+      .filter((at): at is number => at !== undefined);
+
+    expect(frozen.length).toBeGreaterThan(1);
+    // Strictly increasing: a repeated moment would be a duplicated picture,
+    // and a decreasing one would play the entrance backwards.
+    expect([...frozen].sort((a, b) => a - b)).toEqual(frozen);
+    expect(new Set(frozen).size).toBe(frozen.length);
+    // The sequence runs two seconds, so the plan must reach past the last
+    // item's landing rather than stopping at the first one's.
+    expect(Math.max(...frozen)).toBeGreaterThan(2);
+  });
+
+  it('clears the canvas between frames', async () => {
+    // Entrances are transparent at their start, so without a clear each frame
+    // would be composited onto the one before it and the GIF would smear.
+    const { result } = setUpGif();
+
+    await exportGif(result);
+
+    expect(stubs.clearRect.mock.calls.length).toBeGreaterThanOrEqual(buildExportMarkup.mock.calls.length);
+  });
+
+  it('lays every frame on the paper colour, so a fade is still a fade', async () => {
+    // GIF transparency is one bit, and an entrance is made of the in-between.
+    // Left on a transparent artboard, dropping alpha (which is what a GIF
+    // palette does) bakes a half-faded item in at full strength and fills the
+    // empty canvas with black.
+    const { result } = setUpGif();
+
+    await exportGif(result);
+
+    // Once per frame, not once for the file: each frame is drawn into the same
+    // reused context, so a single fill at the start would be wiped by the
+    // clear before frame two.
+    const frames = buildExportMarkup.mock.calls.filter(([input]) => input.freezeAt !== undefined).length;
+    expect(stubs.fillRect).toHaveBeenCalledTimes(frames);
+    expect(stubs.fillRect).toHaveBeenCalledWith(0, 0, 1200, 800);
+  });
+
+  it('leaves the PNG alone, which carries real transparency', async () => {
+    // The toggle still means what it says everywhere the format can honour it.
+    const { result } = setUpGif();
+
+    await act(async () => {
+      await result.current.exportPng(2);
+    });
+
+    expect(stubs.fillRect).not.toHaveBeenCalled();
+  });
+
+  it('writes the file at the artboard size and says how many frames it took', async () => {
+    const { result } = setUpGif();
+
+    await exportGif(result);
+
+    expect(stubs.downloads).toEqual([expect.objectContaining({ download: 'micrographic.gif' })]);
+    expect(result.current.exportStatus?.tone).toBe('success');
+    expect(result.current.exportStatus?.text).toMatch(/^Saved micrographic\.gif \(1200 × 800, \d+ frames\)\.$/);
+  });
+
+  it('says there is nothing to animate rather than writing a still GIF', async () => {
+    const { result } = setUpGif(canvasItems);
+
+    await exportGif(result);
+
+    expect(stubs.downloads).toEqual([]);
+    expect(result.current.exportStatus).toEqual({
+      id: 1,
+      text: 'Nothing on the canvas is animated, so there is no GIF to make.',
+      tone: 'error',
+    });
+  });
+
+  it('names the step that failed instead of ending with no file', async () => {
+    buildExportMarkup.mockImplementationOnce(() => {
+      throw new Error('the SVG could not be serialized');
+    });
+    const { result } = setUpGif();
+
+    await exportGif(result);
+
+    expect(stubs.downloads).toEqual([]);
+    expect(result.current.exportStatus).toEqual({
+      id: 1,
+      text: 'Could not export the GIF: the SVG could not be serialized.',
+      tone: 'error',
+    });
+  });
+
+  it('ignores a second press while the first is still encoding', async () => {
+    // Two clicks inside one frame both read the same rendered `exportingGif`,
+    // so a state-based guard lets both through -- and they race for the same
+    // filename. The latch is a ref for that reason.
+    const { result } = setUpGif();
+
+    await act(async () => {
+      await Promise.all([result.current.exportGif(), result.current.exportGif()]);
+    });
+
+    expect(stubs.downloads).toHaveLength(1);
+  });
+
+  it('can be run again once the first one has finished', async () => {
+    // The latch has to clear, or the control is dead after one export.
+    const { result } = setUpGif();
+
+    await exportGif(result);
+    await exportGif(result);
+
+    expect(stubs.downloads).toHaveLength(2);
+  });
+
+  it('clears the latch when there is nothing to animate', async () => {
+    // This path returns before any work starts; leaving the latch set would
+    // make the very next GIF export silently do nothing.
+    const { result } = setUpGif(canvasItems);
+
+    await exportGif(result);
+
+    expect(result.current.exportStatus?.tone).toBe('error');
+    await act(async () => {
+      await result.current.exportGif();
+    });
+    expect(result.current.exportStatus?.id).toBe(2);
+  });
+
+  it('reports that it is working, and settles when it is done', async () => {
+    const { result } = setUpGif();
+    expect(result.current.exportingGif).toBe(false);
+
+    await exportGif(result);
+
+    expect(result.current.exportingGif).toBe(false);
+  });
+
+  it('leaves no object URL behind', async () => {
+    const { result } = setUpGif();
+
+    await exportGif(result);
+
+    expect([...stubs.revokedUrls].sort()).toEqual([...stubs.createdUrls].sort());
   });
 });

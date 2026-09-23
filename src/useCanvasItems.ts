@@ -1,4 +1,5 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { sameAnimation, type ItemAnimation } from './animations';
 import { hitBounds, type Box } from './canvasGeometry';
 import { expandToGroups, groupItems, pruneGroups, regroupCopies, ungroupItems } from './groups';
 import { createItemId } from './itemIds';
@@ -82,6 +83,15 @@ export type CanvasItems = {
    * already in it, matching what a shift-click on a single item does.
    */
   selectItems: (ids: string[], additive?: boolean) => void;
+  /**
+   * Gives one item an entrance, or takes its entrance away with `null`.
+   *
+   * `record` is how a continuous gesture stays one undo step. A slider fires a
+   * change per step of the drag, and every other continuous gesture in the
+   * editor -- drag, rotate, resize -- takes one snapshot as it begins and none
+   * after. Pass false for the steps after the first.
+   */
+  setItemAnimation: (id: string, animation: ItemAnimation | null, record?: boolean) => void;
   setEditingTextDraft: Dispatch<SetStateAction<string>>;
   setTextDraft: Dispatch<SetStateAction<string>>;
   textDraft: string;
@@ -351,6 +361,28 @@ export function useCanvasItems({
     setCanvasItems(ungrouped);
   };
 
+  const setItemAnimation = (id: string, animation: ItemAnimation | null, record = true) => {
+    const target = canvasItems.find((item) => item.id === id);
+    if (!target) return;
+    // Nothing to do at all when the item already has exactly this entrance, or
+    // already has none: an undo entry for a no-op reads as a broken undo, and
+    // clicking the entrance that is already chosen is an easy way to make one.
+    if (sameAnimation(target.animation, animation)) return;
+
+    if (record) beginHistoryAction();
+    setCanvasItems((current) =>
+      current.map((item) => {
+        if (item.id !== id) return item;
+        if (!animation) {
+          const next = { ...item };
+          delete next.animation;
+          return next;
+        }
+        return { ...item, animation };
+      }),
+    );
+  };
+
   const copySelected = () => {
     clipboardRef.current = canvasItems.filter((item) => selectedIds.includes(item.id));
   };
@@ -455,6 +487,7 @@ export function useCanvasItems({
     selectItem,
     selectItems,
     setEditingTextDraft,
+    setItemAnimation,
     setTextDraft,
     textDraft,
     ungroupSelected,

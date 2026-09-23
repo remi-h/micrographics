@@ -191,3 +191,32 @@ test('two groups can be merged from the Layers list', async ({ page }) => {
   await expect(groupRows(page)).toHaveCount(1);
   await expect(groupRows(page).first()).toContainText('Group of 4');
 });
+
+// Grouping and entrances landed in separate PRs and meet in the Layers list.
+// A group is one thing everywhere else -- it moves, scales and rotates as one
+// -- so its row carries one entrance that every member plays, rather than a
+// control per member the collapsed row has nowhere to show.
+test('a group has one entrance, and every member plays it', async ({ page }) => {
+  await page.goto('/creator');
+  await groupTopTwo(page);
+
+  const groupRow = groupRows(page).first();
+  await groupRow.locator('.layer-animate').click();
+  await expect(page.locator('.dialog-popup')).toBeVisible();
+  await page.locator('.animation-kinds button', { hasText: 'Pop in' }).first().click();
+  await page.getByRole('button', { name: 'Done' }).click();
+  await expect(page.locator('.dialog-popup')).toHaveCount(0);
+
+  // The row shows the entrance, and both members are wrapped to play it --
+  // one control, two animated items.
+  await expect(groupRow.locator('.layer-animate[data-on]')).toHaveCount(1);
+  await expect(page.locator('g[class^="mg-anim-"]')).toHaveCount(2);
+
+  // One undo takes the entrance off every member at once, rather than
+  // peeling them off one at a time. (How many entries the entrance flow takes
+  // is animations.spec.ts's business -- opening the control already sets the
+  // default one, so the count is not this test's to assert.)
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(page.locator('g[class^="mg-anim-"]')).toHaveCount(0);
+  await expect(groupRows(page)).toHaveCount(1);
+});

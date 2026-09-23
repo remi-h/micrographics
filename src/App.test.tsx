@@ -51,7 +51,7 @@ describe('App scroll-to-selection', () => {
     const { container } = render(<App />);
     const scrollTo = setUpArtboard();
 
-    fireEvent.click(container.querySelectorAll('.layer-row')[0]);
+    fireEvent.click(container.querySelectorAll('.layer-select')[0]);
     flushAnimationFrame();
     // Selecting is not a scroll trigger; only the zoom below should move it.
     expect(scrollTo).not.toHaveBeenCalled();
@@ -66,7 +66,7 @@ describe('App scroll-to-selection', () => {
     const { container } = render(<App />);
     const scrollTo = setUpArtboard();
 
-    const rows = container.querySelectorAll('.layer-row');
+    const rows = container.querySelectorAll('.layer-select');
     expect(rows.length).toBeGreaterThan(1);
 
     fireEvent.click(rows[0]);

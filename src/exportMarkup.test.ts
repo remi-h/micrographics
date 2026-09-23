@@ -3,7 +3,6 @@ import {
   ARTBOARD_HEIGHT,
   ARTBOARD_WIDTH,
   buildExportMarkup,
-  DEFAULT_EXPORT_SCALE,
   EXPORT_SCALES,
   exportPixelSize,
 } from './exportMarkup';
@@ -119,6 +118,61 @@ describe('buildExportMarkup', () => {
     expect(document.body.innerHTML).toBe(before);
     expect(document.querySelector('svg.artboard')).toBeNull();
   });
+  // Animations ride along in the .svg, which a browser runs, but never in the
+  // PNG, which is a single frame and has to be the finished artwork rather
+  // than the first frame of an entrance.
+  it('writes the entrances into the SVG when asked to', () => {
+    const animated: CanvasItem[] = [{ ...canvasItems[0], animation: { delay: 0.2, duration: 0.6, kind: 'slide-left' } }];
+    const markup = buildExportMarkup({ animate: true, items: animated, palette, settings });
+
+    expect(markup).toContain('@keyframes mg-slide-left');
+    expect(markup).toContain('mg-anim-0');
+  });
+
+  it('leaves the entrances out when it is not asked to, which is the PNG path', () => {
+    const animated: CanvasItem[] = [{ ...canvasItems[0], animation: { delay: 0.2, duration: 0.6, kind: 'slide-left' } }];
+    const markup = buildExportMarkup({ items: animated, palette, settings });
+
+    expect(markup).not.toContain('@keyframes');
+    expect(markup).not.toContain('animation:');
+  });
+
+  it('adds no stylesheet to an SVG whose items are not animated', () => {
+    const markup = buildExportMarkup({ animate: true, items: canvasItems, palette, settings });
+
+    expect(markup).not.toContain('<style');
+  });
+
+  it('puts the stylesheet after the title, which is the element’s accessible name', () => {
+    const animated: CanvasItem[] = [{ ...canvasItems[0], animation: { delay: 0, duration: 0.6, kind: 'fade' } }];
+    const markup = buildExportMarkup({ animate: true, items: animated, palette, settings });
+
+    expect(markup.indexOf('<title')).toBeLessThan(markup.indexOf('<style'));
+    expect(markup).toContain('type="text/css"');
+  });
+
+  it('gives each exported file its own scope, so two of them can share a page', () => {
+    // Styles inside an inlined SVG are document-global, so two files both
+    // claiming `.mg-anim-0` would leave the second one's timings driving both.
+    const animated: CanvasItem[] = [{ ...canvasItems[0], animation: { delay: 0, duration: 0.6, kind: 'fade' } }];
+    const scopeOf = (markup: string) => /<svg[^>]*\sid="([^"]+)"/.exec(markup)?.[1];
+
+    const first = buildExportMarkup({ animate: true, items: animated, palette, settings });
+    const second = buildExportMarkup({ animate: true, items: animated, palette, settings });
+
+    expect(scopeOf(first)).toBeDefined();
+    expect(scopeOf(first)).not.toBe(scopeOf(second));
+    expect(first).toContain(`#${scopeOf(first)} .mg-anim-0`);
+  });
+
+  it('keeps the animated item at its own position, so a viewer without CSS shows the artwork', () => {
+    // The animation is a departure from the element's own attributes and
+    // resolves back to them, so the attributes are the finished poster.
+    const animated: CanvasItem[] = [{ ...canvasItems[0], animation: { delay: 0, duration: 0.6, kind: 'slide-left' } }];
+    const markup = buildExportMarkup({ animate: true, items: animated, palette, settings });
+
+    expect(markup).toContain('translate(100 200)');
+  });
 });
 
 describe('exportPixelSize', () => {
@@ -131,9 +185,11 @@ describe('exportPixelSize', () => {
     expect(exportPixelSize(4)).toEqual({ width: 4800, height: 3200 });
   });
 
-  it('offers screen, retina and print scales, defaulting to what PNG export always produced', () => {
+  it('offers screen, retina and print scales', () => {
+    // No default among them: the export dialog asks every time, because there
+    // is nowhere for a remembered choice to show without implying a selection
+    // the dialog cannot confirm.
     expect(EXPORT_SCALES).toEqual([1, 2, 4]);
-    expect(DEFAULT_EXPORT_SCALE).toBe(2);
-    expect(exportPixelSize(DEFAULT_EXPORT_SCALE)).toEqual({ width: 2400, height: 1600 });
   });
+
 });
