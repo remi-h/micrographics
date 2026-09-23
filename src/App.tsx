@@ -100,7 +100,7 @@ function App() {
     visibleCanvasRect,
   });
   const palette = palettes[settings.paletteIndex];
-  const { exportPng, exportScale, exportStatus, exportSvg } = useExport({
+  const { exportGif, exportingGif, exportPng, exportScale, exportStatus, exportSvg } = useExport({
     canvasItems,
     palette,
     settings,
@@ -262,11 +262,13 @@ function App() {
         <ControlPanel
           canvasItems={canvasItems}
           exportScale={exportScale}
+          exportingGif={exportingGif}
           itemLabel={itemLabel}
           selectedIds={selectedIds}
           selectedTemplateName={selectedTemplateName}
           template={settings.template}
           onChooseTemplate={chooseTemplate}
+          onExportGif={exportGif}
           onExportPng={exportPng}
           onExportSvg={exportSvg}
           onRandomize={randomize}

@@ -40,15 +40,45 @@ export const MAX_DELAY = 10;
 
 export const DEFAULT_ANIMATION: ItemAnimation = { delay: 0, duration: 0.6, kind: 'slide-left' };
 
-/** The starting state each entrance animates away from. */
-const ENTRANCES: Record<AnimationKind, { label: string; from: { opacity: number; transform?: string } }> = {
+/**
+ * The starting state each entrance animates away from, as numbers rather than
+ * as a CSS string.
+ *
+ * There are three consumers now, not two: the CSS the exported .svg carries,
+ * the Web Animations keyframes the canvas previews with, and the GIF export,
+ * which has no engine to run either and has to work out where an item *is* at
+ * a given moment. A string like `translateX(-240px)` serves the first two and
+ * leaves the third parsing its own format back out, so the offset is kept as
+ * the numbers it is and the CSS is generated from them.
+ */
+type Offset = { opacity: number; translateX?: number; translateY?: number; scale?: number };
+
+const ENTRANCES: Record<AnimationKind, { label: string; from: Offset }> = {
   fade: { from: { opacity: 0 }, label: 'Dissolve in' },
-  'slide-left': { from: { opacity: 0, transform: `translateX(${-SLIDE_DISTANCE}px)` }, label: 'Slide in from left' },
-  'slide-right': { from: { opacity: 0, transform: `translateX(${SLIDE_DISTANCE}px)` }, label: 'Slide in from right' },
-  'slide-up': { from: { opacity: 0, transform: `translateY(${SLIDE_DISTANCE}px)` }, label: 'Slide in from below' },
-  'slide-down': { from: { opacity: 0, transform: `translateY(${-SLIDE_DISTANCE}px)` }, label: 'Slide in from above' },
-  pop: { from: { opacity: 0, transform: 'scale(0.4)' }, label: 'Pop in' },
+  'slide-left': { from: { opacity: 0, translateX: -SLIDE_DISTANCE }, label: 'Slide in from left' },
+  'slide-right': { from: { opacity: 0, translateX: SLIDE_DISTANCE }, label: 'Slide in from right' },
+  'slide-up': { from: { opacity: 0, translateY: SLIDE_DISTANCE }, label: 'Slide in from below' },
+  'slide-down': { from: { opacity: 0, translateY: -SLIDE_DISTANCE }, label: 'Slide in from above' },
+  pop: { from: { opacity: 0, scale: 0.4 }, label: 'Pop in' },
 };
+
+/**
+ * An offset as a CSS transform, or `none` when the entrance only fades. The
+ * order is fixed rather than incidental: no entrance combines a translate with
+ * a scale today, but if one did, a transform list is applied right to left and
+ * the two do not commute.
+ */
+function transformCss(offset: Offset): string {
+  const parts: string[] = [];
+  // Identity values are left out rather than written, so a finished entrance
+  // reads `none` -- the same thing the CSS `to` frame says -- instead of
+  // `scale(1)`. They paint identically, but the last GIF frame should be the
+  // artwork itself, not a transformed copy that happens to land on it.
+  if (offset.translateX) parts.push(`translateX(${offset.translateX}px)`);
+  if (offset.translateY) parts.push(`translateY(${offset.translateY}px)`);
+  if (offset.scale !== undefined && offset.scale !== 1) parts.push(`scale(${offset.scale})`);
+  return parts.length > 0 ? parts.join(' ') : 'none';
+}
 
 export const ANIMATION_KINDS = Object.keys(ENTRANCES) as AnimationKind[];
 
@@ -80,7 +110,7 @@ export const ANIMATION_ORIGIN_STYLE = { transformBox: 'fill-box', transformOrigi
 export function animationFrames(kind: AnimationKind): Keyframe[] {
   const { from } = ENTRANCES[kind];
   return [
-    { opacity: from.opacity, transform: from.transform ?? 'none' },
+    { opacity: from.opacity, transform: transformCss(from) },
     { opacity: 1, transform: 'none' },
   ];
 }
@@ -112,9 +142,8 @@ function keyframesName(kind: AnimationKind): string {
   return `mg-${kind}`;
 }
 
-function frameCss(frame: { opacity: number; transform?: string }): string {
-  const transform = frame.transform ? ` transform: ${frame.transform};` : '';
-  return `opacity: ${frame.opacity};${transform}`;
+function frameCss(frame: Offset): string {
+  return `opacity: ${frame.opacity}; transform: ${transformCss(frame)};`;
 }
 
 /**
@@ -152,6 +181,84 @@ export function animationStyleSheet(items: CanvasItem[], scope: string): { css: 
   });
 
   return { css: [...keyframes, ...rules].join('\n'), scope };
+}
+
+/**
+ * The easing curve's own control points, kept beside the CSS string above so
+ * the GIF frames and the CSS cannot drift apart. `cubic-bezier(x1, y1, x2, y2)`
+ * implies (0, 0) and (1, 1) as the endpoints.
+ */
+const EASING_POINTS = { x1: 0.22, y1: 1, x2: 0.36, y2: 1 } as const;
+
+function bezier(a: number, b: number, t: number): number {
+  // The standard cubic with P0 = 0 and P3 = 1.
+  const inverse = 1 - t;
+  return 3 * inverse * inverse * t * a + 3 * inverse * t * t * b + t * t * t;
+}
+
+/**
+ * The eased progress at a linear progress, by solving the curve's x for t and
+ * reading off its y -- which is what a browser does for `cubic-bezier`.
+ *
+ * Bisection: the curve is monotonic in x, so halving the interval converges
+ * unconditionally. Newton would get there in fewer steps but stalls where the
+ * derivative is near zero, which this curve's long flat tail is made of.
+ *
+ * Twenty steps rather than the eight that looked like enough. Eight leaves the
+ * result up to 0.010 out near the start of the curve, where it is steepest --
+ * about a hundredth of an item's opacity on the frames where the eye is most
+ * likely to catch a step. Twenty brings that under 1e-6 and costs nothing:
+ * this runs a few hundred times for a whole file.
+ */
+function ease(progress: number): number {
+  const { x1, x2, y1, y2 } = EASING_POINTS;
+  if (progress <= 0) return 0;
+  if (progress >= 1) return 1;
+
+  let low = 0;
+  let high = 1;
+  let t = progress;
+  for (let step = 0; step < 20; step += 1) {
+    const x = bezier(x1, x2, t);
+    if (Math.abs(x - progress) < 1e-6) break;
+    if (x < progress) low = t;
+    else high = t;
+    t = (low + high) / 2;
+  }
+
+  return bezier(y1, y2, t);
+}
+
+/**
+ * Where an animated item sits at a given moment, in seconds from the start of
+ * the sequence. Before its delay it holds its starting offset and after it
+ * finishes it holds its natural state, which is `fill: both` in the preview and
+ * `both` in the exported CSS -- the same behaviour, worked out rather than run.
+ *
+ * This is what the GIF export draws each frame from. A GIF is a stack of
+ * finished pictures, so there is no engine to hand the animation to: every
+ * frame has to be rendered with the state already applied.
+ */
+export function animationStateAt(animation: ItemAnimation, seconds: number): { opacity: number; transform: string } {
+  const { from } = ENTRANCES[animation.kind];
+  const delay = Math.max(0, animation.delay);
+  const duration = Math.max(MIN_DURATION, animation.duration);
+  const progress = ease(Math.min(1, Math.max(0, (seconds - delay) / duration)));
+
+  // Every entrance runs from its offset to the item's own natural state, so
+  // interpolating towards the identity value of each property is the whole of
+  // it: opacity 1, no translation, scale 1.
+  const between = (start: number, end: number) => start + (end - start) * progress;
+
+  return {
+    opacity: between(from.opacity, 1),
+    transform: transformCss({
+      opacity: 0,
+      scale: from.scale === undefined ? undefined : between(from.scale, 1),
+      translateX: from.translateX === undefined ? undefined : between(from.translateX, 0),
+      translateY: from.translateY === undefined ? undefined : between(from.translateY, 0),
+    }),
+  };
 }
 
 /** How long the whole sequence runs, in seconds. Zero when nothing animates. */

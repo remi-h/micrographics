@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Dialog } from '@base-ui/react/dialog';
 import { Select } from '@base-ui/react/select';
 import { Toolbar } from '@base-ui/react/toolbar';
-import { Check, ChevronDown, Download, FileCode2, RefreshCcw, Shuffle, Sparkles, Trash2, Undo2, Redo2 } from 'lucide-react';
+import { Check, ChevronDown, Download, FileCode2, Film, RefreshCcw, Shuffle, Sparkles, Trash2, Undo2, Redo2 } from 'lucide-react';
 import {
   ANIMATION_KINDS,
   DEFAULT_ANIMATION,
@@ -14,6 +14,7 @@ import {
   type ItemAnimation,
 } from '../animations';
 import { templates } from '../data';
+import { animationRunTime } from '../animations';
 import { EXPORT_SCALES, exportPixelSize, type ExportScale } from '../exportMarkup';
 import type { CanvasItem, Template } from '../types';
 import { BrandIcon } from './BrandIcon';
@@ -22,11 +23,13 @@ import { Field, ToolButton } from './Controls';
 export function ControlPanel({
   canvasItems,
   exportScale,
+  exportingGif,
   itemLabel,
   selectedIds,
   selectedTemplateName,
   template,
   onChooseTemplate,
+  onExportGif,
   onExportPng,
   onExportSvg,
   onRandomize,
@@ -38,11 +41,13 @@ export function ControlPanel({
 }: {
   canvasItems: CanvasItem[];
   exportScale: ExportScale;
+  exportingGif: boolean;
   itemLabel: (item: CanvasItem, index: number) => string;
   selectedIds: string[];
   selectedTemplateName: string | undefined;
   template: Template;
   onChooseTemplate: (template: Template) => void;
+  onExportGif: () => void;
   onExportPng: (scale?: ExportScale) => void;
   onExportSvg: () => void;
   onRandomize: () => void;
@@ -53,7 +58,11 @@ export function ControlPanel({
   onUndo: () => void;
 }) {
   const selectedIdSet = new Set(selectedIds);
-  const [sizeOpen, setSizeOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  // Whether anything on the canvas actually animates decides how the dialog
+  // talks about the formats: with no entrances there is no animation to lose
+  // by picking the PNG, and the GIF has nothing to render.
+  const animated = animationRunTime(canvasItems) > 0;
 
   return (
     <aside className="control-panel">
@@ -85,55 +94,95 @@ export function ControlPanel({
           <Redo2 size={17} aria-hidden="true" />
         </ToolButton>
         <Toolbar.Separator className="toolbar-separator" />
-        <ToolButton label="Export SVG" onClick={onExportSvg}>
-          <FileCode2 size={17} aria-hidden="true" />
-        </ToolButton>
-        {/* The size is asked for in a dialog rather than shown as a second
-            control, so the toolbar stays one row at this panel width. Choosing
-            a size exports at it immediately -- picking a size and then hunting
-            for a second button to press would be a worse trade than the wrap
-            it replaces. */}
-        <Dialog.Root open={sizeOpen} onOpenChange={setSizeOpen}>
-          <Dialog.Trigger
-            render={<Toolbar.Button />}
-            className="icon-button"
-            aria-label="Export PNG"
-          >
+        {/* One Export control rather than a button per format: the toolbar has
+            to stay a single row at this panel width, and the formats are a
+            choice between alternatives, which is what a dialog is for. The PNG
+            sizes live in here too, so there is one place to look. */}
+        <Dialog.Root open={exportOpen} onOpenChange={setExportOpen}>
+          <Dialog.Trigger render={<Toolbar.Button />} className="icon-button" aria-label="Export">
             <Download size={17} aria-hidden="true" />
           </Dialog.Trigger>
           <Dialog.Portal>
             <Dialog.Backdrop className="dialog-backdrop" />
-            <Dialog.Popup className="dialog-popup">
-              <Dialog.Title className="dialog-title">Export PNG</Dialog.Title>
+            <Dialog.Popup className="dialog-popup export-dialog">
+              <Dialog.Title className="dialog-title">Export</Dialog.Title>
               <Dialog.Description className="dialog-description">
-                Pick a size. The artboard is 1200 × 800.
+                {animated
+                  ? 'Choose a format. Only SVG and GIF carry the animation — a PNG is a single frame.'
+                  : 'Choose a format. The artboard is 1200 × 800.'}
               </Dialog.Description>
-              <div className="size-options">
-                {EXPORT_SCALES.map((scale) => {
-                  const { width, height } = exportPixelSize(scale);
-                  return (
-                    <button
-                      className="size-option"
-                      data-active={scale === exportScale}
-                      key={scale}
-                      onClick={() => {
-                        setSizeOpen(false);
-                        // The scale goes to the exporter directly: setting it
-                        // as state here and exporting in the same click would
-                        // rasterize at the previously chosen size.
-                        void onExportPng(scale);
-                      }}
-                      type="button"
-                    >
-                      <span className="size-option-scale">{scale}&times;</span>
-                      <span className="size-option-pixels">
-                        {width} &times; {height}
-                      </span>
-                      {scale === exportScale && <Check size={14} aria-hidden="true" />}
-                    </button>
-                  );
-                })}
+
+              <div className="export-group">
+                <p className="export-group-label">Vector</p>
+                <button
+                  className="export-option"
+                  onClick={() => {
+                    setExportOpen(false);
+                    onExportSvg();
+                  }}
+                  type="button"
+                >
+                  <FileCode2 size={16} aria-hidden="true" />
+                  <span className="export-option-name">SVG</span>
+                  <span className="export-option-note">{animated ? 'Animated, scales anywhere' : 'Scales anywhere'}</span>
+                </button>
               </div>
+
+              <div className="export-group">
+                <p className="export-group-label">PNG{animated ? ' — one frame, no animation' : ''}</p>
+                <div className="size-options">
+                  {EXPORT_SCALES.map((scale) => {
+                    const { width, height } = exportPixelSize(scale);
+                    return (
+                      <button
+                        className="size-option"
+                        data-active={scale === exportScale}
+                        key={scale}
+                        onClick={() => {
+                          setExportOpen(false);
+                          // The scale goes to the exporter directly: setting it
+                          // as state here and exporting in the same click would
+                          // rasterize at the previously chosen size.
+                          void onExportPng(scale);
+                        }}
+                        type="button"
+                      >
+                        <span className="size-option-scale">{scale}&times;</span>
+                        <span className="size-option-pixels">
+                          {width} &times; {height}
+                        </span>
+                        {scale === exportScale && <Check size={14} aria-hidden="true" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="export-group">
+                <p className="export-group-label">Animated</p>
+                <button
+                  className="export-option"
+                  disabled={!animated || exportingGif}
+                  onClick={() => {
+                    // The dialog stays open: encoding takes long enough to
+                    // wonder whether the click landed, and closing would take
+                    // the only thing saying so with it.
+                    void onExportGif();
+                  }}
+                  type="button"
+                >
+                  <Film size={16} aria-hidden="true" />
+                  <span className="export-option-name">GIF</span>
+                  <span className="export-option-note">
+                    {exportingGif
+                      ? 'Rendering frames…'
+                      : animated
+                        ? 'Plays the entrances, 1200 × 800'
+                        : 'Give a layer an entrance first'}
+                  </span>
+                </button>
+              </div>
+
               <Dialog.Close className="dialog-close">Cancel</Dialog.Close>
             </Dialog.Popup>
           </Dialog.Portal>

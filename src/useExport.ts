@@ -1,6 +1,8 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { animationRunTime } from './animations';
 import type { ExportStatusMessage } from './components/ExportStatus';
 import { buildExportMarkup, DEFAULT_EXPORT_SCALE, exportPixelSize, type ExportScale } from './exportMarkup';
+import { encodeGif, gifFrameDelay, gifFrameTimes } from './gif';
 import type { CanvasItem, Palette, Settings } from './types';
 import { downloadBlob } from './utils';
 
@@ -50,6 +52,14 @@ export type Export = {
    * state is not updated until the next render.
    */
   exportPng: (scale?: ExportScale) => Promise<void>;
+  /**
+   * Renders the entrance sequence to an animated .gif. Always at the
+   * artboard's own size: a GIF carries every frame as its own picture, so the
+   * scales the PNG offers would multiply the file by four or sixteen.
+   */
+  exportGif: () => Promise<void>;
+  /** Whether a GIF is being encoded, so the control can say so and not be pressed twice. */
+  exportingGif: boolean;
   /** The multiplier the PNG export rasterizes at. Session state; never persisted. */
   exportScale: ExportScale;
   setExportScale: Dispatch<SetStateAction<ExportScale>>;
@@ -67,15 +77,19 @@ function reason(error: unknown) {
 export function useExport({ canvasItems, palette, settings }: UseExportOptions): Export {
   const [exportScale, setExportScale] = useState<ExportScale>(DEFAULT_EXPORT_SCALE);
   const [exportStatus, setExportStatus] = useState<ExportStatusMessage | null>(null);
+  const [exportingGif, setExportingGif] = useState(false);
   const exportStatusId = useRef(0);
+  // The real re-entrancy latch. `exportingGif` beside it is only what the
+  // control renders from; a ref is what a second click in the same frame sees.
+  const gifInFlight = useRef(false);
 
   // Both exporters serialize a fresh, unselected render of the canvas rather
   // than the live node, so the editor's own chrome stays out of the file. See
   // buildExportMarkup.
   // The .svg is a document a browser runs, so it carries the entrances. The
   // PNG is one frame, and that frame has to be the finished artwork.
-  const exportMarkup = (scale: number, animate = false) =>
-    buildExportMarkup({ animate, items: canvasItems, palette, settings, scale });
+  const exportMarkup = (scale: number, animate = false, freezeAt?: number) =>
+    buildExportMarkup({ animate, freezeAt, items: canvasItems, palette, settings, scale });
 
   const announceExport = (tone: ExportStatusMessage['tone'], text: string) => {
     exportStatusId.current += 1;
@@ -94,18 +108,13 @@ export function useExport({ canvasItems, palette, settings }: UseExportOptions):
     }
   };
 
-  const exportPng = async (scaleOverride?: ExportScale) => {
-    const scale = scaleOverride ?? exportScale;
-    if (scaleOverride !== undefined) setExportScale(scaleOverride);
-    const { width, height } = exportPixelSize(scale);
-    let url: string | null = null;
-
-    // Every step here can fail for real -- a browser that will not decode the
-    // SVG, a refused 2D context, an encode that runs out of memory at 4x -- and
-    // each one used to end with no file and no word about it.
+  // Rasterizing a piece of markup into a 2D context, which the PNG export does
+  // once and the GIF export does per frame. The context is handed in rather
+  // than made here so the GIF can reuse one canvas across every frame instead
+  // of allocating a full-size one each time.
+  const drawMarkup = async (markup: string, context: CanvasRenderingContext2D, width: number, height: number) => {
+    const url = URL.createObjectURL(new Blob([markup], { type: 'image/svg+xml;charset=utf-8' }));
     try {
-      const blob = new Blob([exportMarkup(scale)], { type: 'image/svg+xml;charset=utf-8' });
-      url = URL.createObjectURL(blob);
       const image = new Image();
       image.decoding = 'async';
       image.src = url;
@@ -116,12 +125,36 @@ export function useExport({ canvasItems, palette, settings }: UseExportOptions):
         throw new Error('this browser could not read the generated image');
       }
 
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const context = canvas.getContext('2d');
-      if (!context) throw new Error('this browser gave no 2D canvas to draw into');
+      // Cleared first: the GIF draws frame after frame into the same context,
+      // and an entrance is transparent at its start, so without this every
+      // frame would show the one before it underneath.
+      context.clearRect(0, 0, width, height);
       context.drawImage(image, 0, 0, width, height);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const canvasContext = (width: number, height: number) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) throw new Error('this browser gave no 2D canvas to draw into');
+    return { canvas, context };
+  };
+
+  const exportPng = async (scaleOverride?: ExportScale) => {
+    const scale = scaleOverride ?? exportScale;
+    if (scaleOverride !== undefined) setExportScale(scaleOverride);
+    const { width, height } = exportPixelSize(scale);
+
+    // Every step here can fail for real -- a browser that will not decode the
+    // SVG, a refused 2D context, an encode that runs out of memory at 4x -- and
+    // each one used to end with no file and no word about it.
+    try {
+      const { canvas, context } = canvasContext(width, height);
+      await drawMarkup(exportMarkup(scale), context, width, height);
 
       const png = await new Promise<Blob>((resolve, reject) => {
         // toBlob hands back null when it cannot encode -- most plausibly
@@ -137,10 +170,47 @@ export function useExport({ canvasItems, palette, settings }: UseExportOptions):
       announceExport('success', `Saved micrographic.png (${width} × ${height}).`);
     } catch (error) {
       announceExport('error', `Could not export the PNG: ${reason(error)}.`);
-    } finally {
-      if (url) URL.revokeObjectURL(url);
     }
   };
 
-  return { exportPng, exportScale, exportStatus, exportSvg, setExportScale };
+  const exportGif = async () => {
+    // Encoding is slow enough to press twice through, and a second run would
+    // race the first for the same filename. The guard is a ref, not the state
+    // below it: state read from this closure is the value at the last render,
+    // so two clicks inside one frame would both see `false` and both start.
+    if (gifInFlight.current) return;
+    gifInFlight.current = true;
+
+    const runTime = animationRunTime(canvasItems);
+    if (runTime === 0) {
+      gifInFlight.current = false;
+      announceExport('error', 'Nothing on the canvas is animated, so there is no GIF to make.');
+      return;
+    }
+
+    const { width, height } = exportPixelSize(1);
+    const times = gifFrameTimes(runTime);
+    setExportingGif(true);
+
+    try {
+      const { context } = canvasContext(width, height);
+      const frames: Uint8ClampedArray[] = [];
+
+      for (const at of times) {
+        await drawMarkup(exportMarkup(1, false, at), context, width, height);
+        frames.push(context.getImageData(0, 0, width, height).data);
+      }
+
+      const delay = gifFrameDelay(runTime, frames.length);
+      downloadBlob(encodeGif(frames, width, height, delay), 'micrographic.gif');
+      announceExport('success', `Saved micrographic.gif (${width} × ${height}, ${frames.length} frames).`);
+    } catch (error) {
+      announceExport('error', `Could not export the GIF: ${reason(error)}.`);
+    } finally {
+      gifInFlight.current = false;
+      setExportingGif(false);
+    }
+  };
+
+  return { exportGif, exportingGif, exportPng, exportScale, exportStatus, exportSvg, setExportScale };
 }

@@ -1,4 +1,4 @@
-import { animationStyleSheet } from './animations';
+import { animationClassName, animationStateAt, animationStyleSheet } from './animations';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { MicrographicSvg } from './components/MicrographicSvg';
@@ -36,6 +36,16 @@ export type ExportInput = {
    * first frame of an entrance.
    */
   animate?: boolean;
+  /**
+   * Seconds into the entrance sequence to freeze the artwork at, baking each
+   * animated item's state in as an inline style instead of writing CSS.
+   *
+   * This is the GIF export's whole mechanism. A GIF is a stack of finished
+   * pictures with no engine behind them, so each frame is rendered with the
+   * animation already applied rather than described. Mutually exclusive with
+   * `animate` in practice, and ignored when nothing on the canvas animates.
+   */
+  freezeAt?: number;
   // Multiplier on the artboard size for the width/height written onto the SVG
   // root. The downloaded .svg stays at 1x; the PNG path raises it.
   scale?: number;
@@ -69,7 +79,7 @@ function exportScopeId() {
 // Each item still carries its transparent hit-target rect. It paints nothing,
 // so the exported artwork is unaffected, and dropping it would mean a second
 // render mode -- exactly the kind of special case this approach avoids.
-export function buildExportMarkup({ animate = false, items, palette, settings, scale = 1 }: ExportInput): string {
+export function buildExportMarkup({ animate = false, freezeAt, items, palette, settings, scale = 1 }: ExportInput): string {
   // Detached from the document: it is never laid out and never painted, so the
   // canvas the user is looking at is untouched.
   const host = document.createElement('div');
@@ -145,6 +155,22 @@ export function buildExportMarkup({ animate = false, items, palette, settings, s
       // to come first.
       const title = svg.querySelector('title');
       svg.insertBefore(style, title ? title.nextSibling : svg.firstChild);
+    }
+
+    // A frozen frame carries its state on the elements themselves. The
+    // stylesheet path above cannot serve this: the frames are rasterized
+    // through an <img>, and an SVG loaded that way is a separate document that
+    // runs no animation, so a CSS `@keyframes` would render as its filled
+    // starting state for every frame.
+    if (freezeAt !== undefined) {
+      items.forEach((item, index) => {
+        if (!item.animation) return;
+        const layer = svg.querySelector(`.${animationClassName(index)}`);
+        if (!(layer instanceof SVGElement)) return;
+        const state = animationStateAt(item.animation, freezeAt);
+        layer.style.opacity = String(state.opacity);
+        layer.style.transform = state.transform;
+      });
     }
 
     // XMLSerializer, not markup built by hand: it declares the SVG namespace on

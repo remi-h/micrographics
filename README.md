@@ -1,6 +1,6 @@
 # Micrographics Creator
 
-A React + Base UI micrographic generator for building dense, print-inspired layouts with rules, glyphs, labels, modules, and exportable SVG/PNG output.
+A React + Base UI micrographic generator for building dense, print-inspired layouts with rules, glyphs, labels, modules, and exportable SVG, PNG, and animated GIF output.
 
 ## Setup
 
@@ -105,18 +105,24 @@ everything is a reformatting change of its own.
 - Toggle `Grid` and `Include background` in the right panel, or upload your
   own background image.
 - Use the toolbar to randomize, restart the current template, undo/redo, and
-  export SVG or PNG. Exports hold the artwork only: selection outlines, the
-  rotate and resize handles, and the alignment toolbar stay in the editor.
-- Entrances travel with `Export SVG`: the file animates when it is opened in
-  a browser or embedded in a page. They are written as CSS that moves each item
+  export. Exports hold the artwork only: selection outlines, the rotate and
+  resize handles, and the alignment toolbar stay in the editor.
+- `Export` opens one dialog with every format in it: SVG, PNG at three sizes,
+  and GIF. When anything on the canvas has an entrance, the dialog says so —
+  only SVG and GIF carry the animation, because a PNG is a single frame.
+- The PNG sizes are `1x`, `2x` or `4x` of the 1200 x 800 artboard, so
+  1200 x 800, 2400 x 1600 or 4800 x 3200 pixels. Choosing a size exports at it
+  and remembers it as the default for next time; `2x` is the default until you
+  change it. The SVG always writes the artboard size, and that file scales to
+  any size wherever it is placed.
+- Entrances travel with the SVG: the file animates when it is opened in a
+  browser or embedded in a page. They are written as CSS that moves each item
   *away from* its own position and back, so a viewer that does not run CSS —
-  and every `Export PNG` — shows the finished artwork rather than the first
-  frame.
-- `Export PNG` asks which size first: `1x`, `2x` or `4x` of the 1200 x 800
-  artboard, so 1200 x 800, 2400 x 1600 or 4800 x 3200 pixels. Choosing a size
-  exports at it and remembers it as the default for next time; `2x` is the
-  default until you change it. `Export SVG` always writes the artboard size,
-  and that file scales to any size wherever it is placed.
+  and every PNG — shows the finished artwork rather than the first frame.
+- The GIF plays the same entrances for anywhere that will not run an SVG. It
+  is always 1200 x 800, since a GIF stores every frame as its own picture, and
+  it holds on the finished artwork for a moment before looping. The option is
+  only offered once at least one layer has an entrance.
 - Each export reports back in the corner of the window, naming the file it
   wrote, or saying what went wrong if the browser could not produce it.
 - Your work is saved automatically in the browser, so closing the tab or

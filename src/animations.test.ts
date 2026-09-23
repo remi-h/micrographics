@@ -9,9 +9,11 @@ import {
   animationFrames,
   animationLabel,
   animationRunTime,
+  animationStateAt,
   animationStyleSheet,
   animationTiming,
   type AnimationKind,
+  type ItemAnimation,
 } from './animations';
 import type { CanvasItem, CanvasSymbol } from './types';
 
@@ -196,5 +198,62 @@ describe('the range the editor offers', () => {
     expect(MAX_DURATION).toBeLessThan(Infinity);
     expect(MAX_DELAY).toBeLessThan(Infinity);
     expect(MIN_DURATION).toBeGreaterThan(0);
+  });
+});
+
+// The GIF export has no animation engine behind it: each frame is rendered
+// with the state already applied. These pin the interpolation that does that,
+// since a mistake here is a file that plays wrong rather than a crash.
+describe('animationStateAt', () => {
+  const slide: ItemAnimation = { delay: 1, duration: 2, kind: 'slide-left' };
+
+  it('holds the starting offset through the delay', () => {
+    // `fill: both` in the preview and `both` in the exported CSS. Without it
+    // the item sits finished in place and then jumps back to start.
+    expect(animationStateAt(slide, 0)).toEqual({ opacity: 0, transform: 'translateX(-240px)' });
+    expect(animationStateAt(slide, 0.99)).toEqual({ opacity: 0, transform: 'translateX(-240px)' });
+  });
+
+  it('holds the finished artwork after it ends', () => {
+    expect(animationStateAt(slide, 3)).toEqual({ opacity: 1, transform: 'none' });
+    expect(animationStateAt(slide, 60)).toEqual({ opacity: 1, transform: 'none' });
+  });
+
+  it('is somewhere in between while it runs', () => {
+    const middle = animationStateAt(slide, 2);
+
+    expect(middle.opacity).toBeGreaterThan(0);
+    expect(middle.opacity).toBeLessThan(1);
+    expect(middle.transform).toMatch(/^translateX\(-?\d/);
+  });
+
+  it('eases rather than running at a constant rate', () => {
+    // The entrance is `cubic-bezier(0.22, 1, 0.36, 1)` -- quick to arrive,
+    // slow to settle -- so it is well past half way at its own half time.
+    const halfway = animationStateAt({ delay: 0, duration: 1, kind: 'fade' }, 0.5);
+
+    expect(halfway.opacity).toBeGreaterThan(0.8);
+  });
+
+  it('never goes backwards', () => {
+    const at = (time: number) => animationStateAt({ delay: 0, duration: 1, kind: 'fade' }, time).opacity;
+    const samples = Array.from({ length: 21 }, (_, index) => at(index / 20));
+
+    for (let index = 1; index < samples.length; index += 1) {
+      expect(samples[index]).toBeGreaterThanOrEqual(samples[index - 1]);
+    }
+  });
+
+  it('scales rather than translates for a pop', () => {
+    const middle = animationStateAt({ delay: 0, duration: 1, kind: 'pop' }, 0.5);
+
+    expect(middle.transform).toMatch(/^scale\(/);
+    expect(Number(/scale\(([\d.]+)\)/.exec(middle.transform)![1])).toBeGreaterThan(0.4);
+  });
+
+  it('arrives exactly, so the last frame is the artwork itself', () => {
+    // A frame that is 0.999 opacity and a hair off position would make the
+    // poster the GIF loops on subtly wrong.
+    expect(animationStateAt({ delay: 0, duration: 1, kind: 'pop' }, 1)).toEqual({ opacity: 1, transform: 'none' });
   });
 });

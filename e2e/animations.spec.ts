@@ -11,6 +11,18 @@ const animateButtons = (page: Page) => page.locator('.layer-animate');
 const playButton = (page: Page) => page.locator('.stage-play');
 const wrappers = (page: Page) => page.locator('g[class^="mg-anim-"]');
 
+// Every format is chosen inside one Export dialog now, so both downloads are
+// two steps.
+async function openExportDialog(page: Page) {
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+}
+
+async function exportSvg(page: Page) {
+  await openExportDialog(page);
+  await page.locator('.export-option').filter({ hasText: 'SVG' }).click();
+}
+
 async function giveTopLayerAnEntrance(page: Page, label: string) {
   await animateButtons(page).first().click();
   await expect(page.locator('.dialog-popup')).toBeVisible();
@@ -135,7 +147,7 @@ test('the exported SVG carries the entrance, and still reads as the finished art
 
   const download = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('button', { name: 'Export SVG' }).click(),
+    exportSvg(page),
   ]).then(([event]) => event);
   const markup = await readFile(await download.path(), 'utf8');
 
@@ -175,7 +187,7 @@ test('the PNG export is the finished artwork, not the first frame of an entrance
   const download = await Promise.all([
     page.waitForEvent('download'),
     (async () => {
-      await page.getByRole('button', { name: 'Export PNG' }).click();
+      await openExportDialog(page);
       await page.locator('.size-option').first().click();
     })(),
   ]).then(([event]) => event);
@@ -298,4 +310,55 @@ test('the Layers list fits its panel, however long a layer is named', async ({ p
   // The default template has a label long enough to need it, so this also
   // pins that the name truncates rather than pushing the row wider.
   expect(fit.truncatedSomething).toBe(true);
+});
+
+// One Export control, three formats, and the dialog has to be honest about
+// which of them keep the animation: a PNG is a single frame, so choosing it
+// silently drops the entrances the user just set up.
+test('the export dialog offers every format and says which ones animate', async ({ page }) => {
+  await page.goto('/creator');
+  await openExportDialog(page);
+
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.locator('.export-option').filter({ hasText: 'SVG' })).toBeVisible();
+  await expect(dialog.locator('.size-option')).toHaveCount(3);
+
+  const gif = dialog.locator('.export-option').filter({ hasText: 'GIF' });
+  await expect(gif).toBeVisible();
+  // Nothing animates yet, so there is no GIF to make and nothing to warn about.
+  await expect(gif).toBeDisabled();
+  await expect(dialog).not.toContainText('Only SVG and GIF');
+
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await giveTopLayerAnEntrance(page, 'Slide in from left');
+  await openExportDialog(page);
+
+  await expect(dialog).toContainText('Only SVG and GIF carry the animation');
+  await expect(dialog.locator('.export-option').filter({ hasText: 'GIF' })).toBeEnabled();
+});
+
+test('the GIF export writes a real animated gif', async ({ page }) => {
+  test.setTimeout(60_000);
+  await page.goto('/creator');
+  await giveTopLayerAnEntrance(page, 'Pop in');
+
+  await openExportDialog(page);
+  const download = await Promise.all([
+    page.waitForEvent('download'),
+    page.locator('.export-option').filter({ hasText: 'GIF' }).click(),
+  ]).then(([event]) => event);
+
+  expect(download.suggestedFilename()).toBe('micrographic.gif');
+  const file = await readFile(await download.path());
+
+  // GIF89a, then the logical screen size as two little-endian uint16s.
+  expect(file.subarray(0, 6).toString('latin1')).toBe('GIF89a');
+  expect(file.readUInt16LE(6)).toBe(1200);
+  expect(file.readUInt16LE(8)).toBe(800);
+
+  // More than one image descriptor (0x2C) means it actually animates rather
+  // than being a still wearing a .gif extension.
+  let frames = 0;
+  for (let at = 0; at < file.length; at += 1) if (file[at] === 0x2c) frames += 1;
+  expect(frames).toBeGreaterThan(5);
 });

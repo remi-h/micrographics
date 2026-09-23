@@ -34,7 +34,7 @@ test('an export taken with items selected has no editor chrome in it', async ({ 
 
   const download = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('button', { name: 'Export SVG' }).click(),
+    exportSvg(page),
   ]).then(([event]) => event);
 
   expect(download.suggestedFilename()).toBe('micrographic.svg');
@@ -85,18 +85,27 @@ test('the PNG export rasterizes with items selected', async ({ page }) => {
 // The PNG used to be a hardcoded 2400x1600 with no way to ask for anything
 // else, and every failure along the way was silent. Both are user-visible, so
 // check them the way a user meets them: pick a size, export, read the file.
+async function exportSvg(page: Page) {
+  await openExportDialog(page);
+  await page.locator('.export-option').filter({ hasText: 'SVG' }).click();
+}
+
 function pngSize(png: Buffer) {
   // IHDR is the first chunk of every PNG: width and height as big-endian
   // uint32s at byte 16 and byte 20.
   return { width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
 }
 
-// Export PNG opens a size dialog rather than exporting straight away, so a
-// download is two steps: open it, then choose a size. Passing no scale picks
-// whichever option is already marked current.
-async function choosePngSize(page: Page, scale?: 1 | 2 | 4) {
-  await page.getByRole('button', { name: 'Export PNG' }).click();
+// Every format is chosen in one Export dialog rather than from its own
+// toolbar button, so a download is two steps: open it, then pick. Passing no
+// scale picks whichever PNG size is already marked current.
+async function openExportDialog(page: Page) {
+  await page.getByRole('button', { name: 'Export', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
+}
+
+async function choosePngSize(page: Page, scale?: 1 | 2 | 4) {
+  await openExportDialog(page);
   const option =
     scale === undefined
       ? page.locator('.size-option[data-active="true"]')
@@ -143,7 +152,7 @@ test('the exported SVG declares its own size alongside the viewBox', async ({ pa
 
   const download = await Promise.all([
     page.waitForEvent('download'),
-    page.getByRole('button', { name: 'Export SVG' }).click(),
+    exportSvg(page),
   ]).then(([event]) => event);
 
   const markup = await readFile(await download.path(), 'utf8');
