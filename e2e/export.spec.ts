@@ -65,7 +65,7 @@ test('the PNG export rasterizes with items selected', async ({ page }) => {
   await page.keyboard.press('ControlOrMeta+a');
   await expect(page.locator('.artboard foreignObject')).toHaveCount(1);
 
-  const sizeOption = await choosePngSize(page);
+  const sizeOption = await choosePngSize(page, 2);
   const download = await Promise.all([page.waitForEvent('download'), sizeOption.click()]).then(
     ([event]) => event,
   );
@@ -97,23 +97,20 @@ function pngSize(png: Buffer) {
 }
 
 // Every format is chosen in one Export dialog rather than from its own
-// toolbar button, so a download is two steps: open it, then pick. Passing no
-// scale picks whichever PNG size is already marked current.
+// toolbar button, so a download is two steps: open it, then pick the size.
+// No size is marked as current: a tick would read as a selection, and the
+// dialog has no button to confirm one with.
 async function openExportDialog(page: Page) {
   await page.getByRole('button', { name: 'Export', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
 }
 
-async function choosePngSize(page: Page, scale?: 1 | 2 | 4) {
+async function choosePngSize(page: Page, scale: 1 | 2 | 4) {
   await openExportDialog(page);
-  const option =
-    scale === undefined
-      ? page.locator('.size-option[data-active="true"]')
-      : page.locator('.size-option').filter({ hasText: new RegExp(`^${scale}×`) });
-  return option;
+  return page.locator('.size-option').filter({ hasText: new RegExp(`^${scale}×`) });
 }
 
-async function downloadPng(page: Page, scale?: 1 | 2 | 4) {
+async function downloadPng(page: Page, scale: 1 | 2 | 4) {
   const option = await choosePngSize(page, scale);
   const download = await Promise.all([page.waitForEvent('download'), option.click()]).then(
     ([event]) => event,
@@ -123,11 +120,17 @@ async function downloadPng(page: Page, scale?: 1 | 2 | 4) {
   return readFile(await download.path());
 }
 
-test('the PNG export size is selectable and the default is unchanged', async ({ page }) => {
+test('every PNG size exports at the size it names, with nothing pre-chosen', async ({ page }) => {
   await page.goto('/creator');
   await page.locator('.symbol-button').first().click();
 
-  const defaultPng = await downloadPng(page);
+  // Nothing is marked as the current size, before or after exporting: these
+  // are three buttons, not a radio group waiting on a confirm.
+  await openExportDialog(page);
+  await expect(page.locator('.size-option[data-active="true"]')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Cancel' }).click();
+
+  const defaultPng = await downloadPng(page, 2);
   expect(pngSize(defaultPng)).toEqual({ width: 2400, height: 1600 });
   // Success is confirmed, naming the file that was written -- exports used to
   // say nothing at all, whether they worked or not.
@@ -141,6 +144,10 @@ test('the PNG export size is selectable and the default is unchanged', async ({ 
   // The smallest option is there too, and it really is smaller.
   const smallPng = await downloadPng(page, 1);
   expect(pngSize(smallPng)).toEqual({ width: 1200, height: 800 });
+
+  // And exporting one size does not leave it marked for next time.
+  await openExportDialog(page);
+  await expect(page.locator('.size-option[data-active="true"]')).toHaveCount(0);
 });
 
 // Firefox will not rasterize an SVG loaded through an <img> unless its root
@@ -177,7 +184,7 @@ test('a PNG export that fails says so instead of going quiet', async ({ page }) 
   });
 
   await page.goto('/creator');
-  await (await choosePngSize(page)).click();
+  await (await choosePngSize(page, 2)).click();
 
   await expect(page.getByRole('status')).toHaveText('Could not export the PNG: this browser gave no 2D canvas to draw into.');
 });

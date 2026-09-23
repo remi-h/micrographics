@@ -1,7 +1,7 @@
-import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useRef, useState } from 'react';
 import { animationRunTime } from './animations';
 import type { ExportStatusMessage } from './components/ExportStatus';
-import { buildExportMarkup, DEFAULT_EXPORT_SCALE, exportPixelSize, type ExportScale } from './exportMarkup';
+import { buildExportMarkup, exportPixelSize, type ExportScale } from './exportMarkup';
 import { encodeGif, gifFrameDelay, gifFrameTimes } from './gif';
 import type { CanvasItem, Palette, Settings } from './types';
 import { downloadBlob } from './utils';
@@ -46,12 +46,15 @@ export type Export = {
   /** Downloads the artboard as a standalone .svg, at the artboard's own size. */
   exportSvg: () => void;
   /**
-   * Rasterizes the artboard to a .png. Pass a scale to export at that size and
-   * make it the new default; the size picker does, because setting state and
-   * exporting in one call would otherwise rasterize at the previous scale --
-   * state is not updated until the next render.
+   * Rasterizes the artboard to a .png at the size asked for.
+   *
+   * The scale is a parameter and not state. It used to be remembered as a
+   * default, which only ever showed up as a tick beside one size in the export
+   * dialog -- and a tick means a selection, which means something to confirm,
+   * which that dialog has no button for. Every row there is a button that
+   * exports on the spot, so there is nothing for a default to be.
    */
-  exportPng: (scale?: ExportScale) => Promise<void>;
+  exportPng: (scale: ExportScale) => Promise<void>;
   /**
    * Renders the entrance sequence to an animated .gif. Always at the
    * artboard's own size: a GIF carries every frame as its own picture, so the
@@ -60,9 +63,6 @@ export type Export = {
   exportGif: () => Promise<void>;
   /** Whether a GIF is being encoded, so the control can say so and not be pressed twice. */
   exportingGif: boolean;
-  /** The multiplier the PNG export rasterizes at. Session state; never persisted. */
-  exportScale: ExportScale;
-  setExportScale: Dispatch<SetStateAction<ExportScale>>;
   /** The result of the last export, for `App` to hand to `<ExportStatus>`. */
   exportStatus: ExportStatusMessage | null;
 };
@@ -75,7 +75,6 @@ function reason(error: unknown) {
 }
 
 export function useExport({ canvasItems, palette, settings }: UseExportOptions): Export {
-  const [exportScale, setExportScale] = useState<ExportScale>(DEFAULT_EXPORT_SCALE);
   const [exportStatus, setExportStatus] = useState<ExportStatusMessage | null>(null);
   const [exportingGif, setExportingGif] = useState(false);
   const exportStatusId = useRef(0);
@@ -168,9 +167,7 @@ export function useExport({ canvasItems, palette, settings }: UseExportOptions):
     return { canvas, context };
   };
 
-  const exportPng = async (scaleOverride?: ExportScale) => {
-    const scale = scaleOverride ?? exportScale;
-    if (scaleOverride !== undefined) setExportScale(scaleOverride);
+  const exportPng = async (scale: ExportScale) => {
     const { width, height } = exportPixelSize(scale);
 
     // Every step here can fail for real -- a browser that will not decode the
@@ -236,5 +233,5 @@ export function useExport({ canvasItems, palette, settings }: UseExportOptions):
     }
   };
 
-  return { exportGif, exportingGif, exportPng, exportScale, exportStatus, exportSvg, setExportScale };
+  return { exportGif, exportingGif, exportPng, exportStatus, exportSvg };
 }

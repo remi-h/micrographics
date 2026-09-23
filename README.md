@@ -113,10 +113,10 @@ everything is a reformatting change of its own.
   and GIF. When anything on the canvas has an entrance, the dialog says so —
   only SVG and GIF carry the animation, because a PNG is a single frame.
 - The PNG sizes are `1x`, `2x` or `4x` of the 1200 x 800 artboard, so
-  1200 x 800, 2400 x 1600 or 4800 x 3200 pixels. Choosing a size exports at it
-  and remembers it as the default for next time; `2x` is the default until you
-  change it. The SVG always writes the artboard size, and that file scales to
-  any size wherever it is placed.
+  1200 x 800, 2400 x 1600 or 4800 x 3200 pixels. Every row in the dialog is a
+  button that exports on the spot — there is nothing to select and nothing to
+  confirm, and no size is marked as the current one. The SVG always writes the
+  artboard size, and that file scales to any size wherever it is placed.
 - Entrances travel with the SVG: the file animates when it is opened in a
   browser or embedded in a page. They are written as CSS that moves each item
   *away from* its own position and back, so a viewer that does not run CSS —

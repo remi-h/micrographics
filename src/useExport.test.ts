@@ -115,7 +115,7 @@ function setUp() {
   return renderHook(() => useExport({ canvasItems, palette: palettes[0], settings: initialSettings }));
 }
 
-async function exportPng(result: { current: ReturnType<typeof useExport> }, scale?: ExportScale) {
+async function exportPng(result: { current: ReturnType<typeof useExport> }, scale: ExportScale = 2) {
   await act(async () => {
     await result.current.exportPng(scale);
   });
@@ -196,8 +196,7 @@ describe('useExport PNG', () => {
   it('rasterizes at the chosen scale, and quotes that size', async () => {
     const { result } = setUp();
 
-    act(() => result.current.setExportScale(4));
-    await exportPng(result);
+    await exportPng(result, 4);
 
     expect(buildExportMarkup).toHaveBeenCalledWith(expect.objectContaining({ scale: 4 }));
     expect(stubs.canvases[0].width).toBe(4800);
@@ -205,29 +204,20 @@ describe('useExport PNG', () => {
     expect(result.current.exportStatus?.text).toBe('Saved micrographic.png (4800 × 3200).');
   });
 
-  // The size picker sets the scale and exports in one click. Reading the scale
-  // off state would rasterize at the previous one, because state is not updated
-  // until the next render, so the scale is passed in instead.
-  it('rasterizes at a scale passed in, not the one still in state', async () => {
-    const { result } = setUp();
-    expect(result.current.exportScale).toBe(2);
-
-    await exportPng(result, 4);
-
-    expect(buildExportMarkup).toHaveBeenCalledWith(expect.objectContaining({ scale: 4 }));
-    expect(stubs.canvases[0].width).toBe(4800);
-    expect(result.current.exportStatus?.text).toBe('Saved micrographic.png (4800 × 3200).');
-  });
-
-  it('remembers a scale passed in as the new default', async () => {
+  // The scale is a parameter, not remembered state. It used to be remembered,
+  // which only ever showed as a tick beside one size in the export dialog --
+  // and a tick reads as a selection, so it implied a confirm button the dialog
+  // does not have and does not need: every row there exports on the spot.
+  it('rasterizes at whatever scale the caller asked for, every time', async () => {
     const { result } = setUp();
 
     await exportPng(result, 1);
-    expect(result.current.exportScale).toBe(1);
+    expect(stubs.canvases[0].width).toBe(1200);
 
-    // A later export with no scale uses what the picker last chose.
-    await exportPng(result);
-    expect(stubs.canvases[1].width).toBe(1200);
+    // No carry-over from the previous call.
+    await exportPng(result, 4);
+    expect(stubs.canvases[1].width).toBe(4800);
+    expect(result.current.exportStatus?.text).toBe('Saved micrographic.png (4800 × 3200).');
   });
 
   // 1 of 4: the serializer itself throws, before there is anything to decode.
@@ -288,8 +278,7 @@ describe('useExport PNG', () => {
     stubs.toBlob.mockImplementationOnce((callback: BlobCallback) => callback(null));
     const { result } = setUp();
 
-    act(() => result.current.setExportScale(4));
-    await exportPng(result);
+    await exportPng(result, 4);
 
     expect(result.current.exportStatus).toEqual({
       id: 1,
@@ -367,7 +356,6 @@ describe('useExport status messages', () => {
     const { result } = setUp();
 
     expect(result.current.exportStatus).toBeNull();
-    expect(result.current.exportScale).toBe(2);
   });
 });
 
@@ -443,7 +431,7 @@ describe('useExport GIF', () => {
     const { result } = setUpGif();
 
     await act(async () => {
-      await result.current.exportPng();
+      await result.current.exportPng(2);
     });
 
     expect(stubs.fillRect).not.toHaveBeenCalled();

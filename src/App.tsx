@@ -100,7 +100,7 @@ function App() {
     visibleCanvasRect,
   });
   const palette = palettes[settings.paletteIndex];
-  const { exportGif, exportingGif, exportPng, exportScale, exportStatus, exportSvg } = useExport({
+  const { exportGif, exportingGif, exportPng, exportStatus, exportSvg } = useExport({
     canvasItems,
     palette,
     settings,
@@ -261,7 +261,6 @@ function App() {
       <main className="app-shell">
         <ControlPanel
           canvasItems={canvasItems}
-          exportScale={exportScale}
           exportingGif={exportingGif}
           itemLabel={itemLabel}
           selectedIds={selectedIds}

@@ -3,7 +3,6 @@ import {
   ARTBOARD_HEIGHT,
   ARTBOARD_WIDTH,
   buildExportMarkup,
-  DEFAULT_EXPORT_SCALE,
   EXPORT_SCALES,
   exportPixelSize,
 } from './exportMarkup';
@@ -186,10 +185,11 @@ describe('exportPixelSize', () => {
     expect(exportPixelSize(4)).toEqual({ width: 4800, height: 3200 });
   });
 
-  it('offers screen, retina and print scales, defaulting to what PNG export always produced', () => {
+  it('offers screen, retina and print scales', () => {
+    // No default among them: the export dialog asks every time, because there
+    // is nowhere for a remembered choice to show without implying a selection
+    // the dialog cannot confirm.
     expect(EXPORT_SCALES).toEqual([1, 2, 4]);
-    expect(DEFAULT_EXPORT_SCALE).toBe(2);
-    expect(exportPixelSize(DEFAULT_EXPORT_SCALE)).toEqual({ width: 2400, height: 1600 });
   });
 
 });

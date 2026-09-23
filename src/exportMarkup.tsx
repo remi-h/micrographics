@@ -15,10 +15,6 @@ export const EXPORT_SCALES = [1, 2, 4] as const;
 
 export type ExportScale = (typeof EXPORT_SCALES)[number];
 
-// What the export produced before the scale was selectable, kept as the default
-// so nobody's habitual export changes size under them.
-export const DEFAULT_EXPORT_SCALE: ExportScale = 2;
-
 // Pixel size of an export at a given scale. Pure, so the PNG canvas, the labels
 // on the size control and the status message all quote the same numbers.
 export function exportPixelSize(scale: number) {

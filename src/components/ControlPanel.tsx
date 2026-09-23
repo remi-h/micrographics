@@ -22,7 +22,6 @@ import { Field, ToolButton } from './Controls';
 
 export function ControlPanel({
   canvasItems,
-  exportScale,
   exportingGif,
   itemLabel,
   selectedIds,
@@ -40,7 +39,6 @@ export function ControlPanel({
   onUndo,
 }: {
   canvasItems: CanvasItem[];
-  exportScale: ExportScale;
   exportingGif: boolean;
   itemLabel: (item: CanvasItem, index: number) => string;
   selectedIds: string[];
@@ -48,7 +46,7 @@ export function ControlPanel({
   template: Template;
   onChooseTemplate: (template: Template) => void;
   onExportGif: () => void;
-  onExportPng: (scale?: ExportScale) => void;
+  onExportPng: (scale: ExportScale) => void;
   onExportSvg: () => void;
   onRandomize: () => void;
   onRedo: () => void;
@@ -130,19 +128,19 @@ export function ControlPanel({
 
               <div className="export-group">
                 <p className="export-group-label">PNG{animated ? ' — one frame, no animation' : ''}</p>
+                {/* Three buttons, not a radio group. None is marked as chosen:
+                    a tick reads as a selection, which implies a confirm button
+                    this dialog does not have -- every row here exports on the
+                    spot. */}
                 <div className="size-options">
                   {EXPORT_SCALES.map((scale) => {
                     const { width, height } = exportPixelSize(scale);
                     return (
                       <button
                         className="size-option"
-                        data-active={scale === exportScale}
                         key={scale}
                         onClick={() => {
                           setExportOpen(false);
-                          // The scale goes to the exporter directly: setting it
-                          // as state here and exporting in the same click would
-                          // rasterize at the previously chosen size.
                           void onExportPng(scale);
                         }}
                         type="button"
@@ -151,7 +149,6 @@ export function ControlPanel({
                         <span className="size-option-pixels">
                           {width} &times; {height}
                         </span>
-                        {scale === exportScale && <Check size={14} aria-hidden="true" />}
                       </button>
                     );
                   })}
