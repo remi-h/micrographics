@@ -15,6 +15,50 @@ export const SELECTION_PAD = 6;
 // same place. Floor the outline so it stays grabbable.
 export const MIN_SELECTION_SIZE = 20;
 
+// Dragging the handle past the anchor would otherwise invert the ratio and
+// flip the selection through itself. The items have their own size floor; this
+// only has to keep the arithmetic the right way up.
+export const MIN_RESIZE_RATIO = 0.02;
+
+// A selection grabbed exactly at its own anchor has no axis to scale along.
+// Floor the span so the unit vector stays finite.
+export const MIN_RESIZE_SPAN = 1;
+
+/** Where a resize drag started: the corner that stays put, and the axis out to the handle. */
+export type ResizeGrip = { anchorX: number; anchorY: number; axisX: number; axisY: number; span: number };
+
+/**
+ * The grip a drag starts from. The anchor is the corner opposite the handle,
+ * and the axis runs from it to wherever the pointer actually grabbed, so the
+ * ratio is exactly 1 at the grab point and the item does not jump on the first
+ * move.
+ */
+export function resizeGrip(bounds: { left: number; top: number }, point: { x: number; y: number }): ResizeGrip {
+  const reachX = point.x - bounds.left;
+  const reachY = point.y - bounds.top;
+  const span = Math.max(MIN_RESIZE_SPAN, Math.hypot(reachX, reachY));
+  return { anchorX: bounds.left, anchorY: bounds.top, axisX: reachX / span, axisY: reachY / span, span };
+}
+
+/**
+ * How much bigger the selection should be, given where the pointer is now.
+ *
+ * The pointer is projected onto the grip's axis rather than measured straight
+ * to it, so wandering sideways off the diagonal does not change the size. The
+ * result is linear in how far the pointer has travelled along that axis: move
+ * twice as far, get twice the growth.
+ *
+ * Scaling used to run from the selection's *centre*, which made the box grow
+ * in both directions at once -- twice the pointer's own rate -- while the far
+ * corner slid away from the cursor. On a small item the centre is barely
+ * twenty pixels from the handle, so ten pixels of travel was most of its size
+ * again, and the size ceiling arrived within one flick of the wrist.
+ */
+export function resizeRatio(grip: ResizeGrip, point: { x: number; y: number }): number {
+  const along = (point.x - grip.anchorX) * grip.axisX + (point.y - grip.anchorY) * grip.axisY;
+  return Math.max(MIN_RESIZE_RATIO, along / grip.span);
+}
+
 // Letter spacing on the canvas text, in canvas units. Absolute: it is the same
 // number of units between two characters at any font size, which is why
 // `scaleInk` below has to take it out before scaling a measurement.
@@ -171,13 +215,9 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
     x: number;
     y: number;
   } | null>(null);
-  const resizeRef = useRef<{
-    centerX: number;
-    centerY: number;
-    items: Array<{ id: string; size: number; x: number; y: number }>;
-    pointerId: number;
-    startDistance: number;
-  } | null>(null);
+  const resizeRef = useRef<
+    (ResizeGrip & { items: Array<{ id: string; size: number; x: number; y: number }>; pointerId: number }) | null
+  >(null);
 
   const setRefs = (node: SVGSVGElement | null) => {
     localRef.current = node;
@@ -279,15 +319,16 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
     }
 
     if (resizeRef.current) {
+      const resize = resizeRef.current;
       const point = getSvgPoint(event);
-      const distance = Math.hypot(point.x - resizeRef.current.centerX, point.y - resizeRef.current.centerY);
-      const ratio = resizeRef.current.startDistance === 0 ? 1 : distance / resizeRef.current.startDistance;
+      const ratio = resizeRatio(resize, point);
+
       onScaleItems(
-        resizeRef.current.items.map((item) => ({
+        resize.items.map((item) => ({
           id: item.id,
           size: item.size * ratio,
-          x: resizeRef.current ? resizeRef.current.centerX + (item.x - resizeRef.current.centerX) * ratio : item.x,
-          y: resizeRef.current ? resizeRef.current.centerY + (item.y - resizeRef.current.centerY) * ratio : item.y,
+          x: resize.anchorX + (item.x - resize.anchorX) * ratio,
+          y: resize.anchorY + (item.y - resize.anchorY) * ratio,
         })),
       );
       return;
@@ -336,19 +377,22 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
     const ids = selectedIds.includes(item.id) ? selectedIds : [item.id];
     const selectedItems = items.filter((entry) => ids.includes(entry.id));
     const bounds = selectedItems.map(hitBounds);
-    const left = Math.min(...bounds.map((entry) => entry.x));
-    const top = Math.min(...bounds.map((entry) => entry.y));
-    const right = Math.max(...bounds.map((entry) => entry.x + entry.width));
-    const bottom = Math.max(...bounds.map((entry) => entry.y + entry.height));
-    const centerX = (left + right) / 2;
-    const centerY = (top + bottom) / 2;
+    // The handle sits at the bottom-right of the selection, so the top-left
+    // corner is what stays put -- the same anchoring every drawing tool uses.
+    // Scaling about the centre instead made the box grow in both directions at
+    // once, so it moved twice as fast as the pointer and the far corner ran
+    // away from the cursor; on a small item that was most of its size for ten
+    // pixels of travel, and the size clamp arrived almost immediately.
+    const grip = resizeGrip(
+      { left: Math.min(...bounds.map((entry) => entry.x)), top: Math.min(...bounds.map((entry) => entry.y)) },
+      point,
+    );
+
     onBeginHistoryAction();
     resizeRef.current = {
-      centerX,
-      centerY,
+      ...grip,
       items: selectedItems.map((entry) => ({ id: entry.id, size: entry.size, x: entry.x, y: entry.y })),
       pointerId: event.pointerId,
-      startDistance: Math.max(1, Math.hypot(point.x - centerX, point.y - centerY)),
     };
     event.currentTarget.setPointerCapture(event.pointerId);
     selectForPointerAction(event, item);

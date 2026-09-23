@@ -161,3 +161,60 @@ test('a symbol stays inside its outline all the way through a resize', async ({ 
     expect(worst, `symbol crossed the outline's ${edge} edge mid-drag`).toBeGreaterThanOrEqual(0);
   }
 });
+
+// Resizing used to scale from the selection's centre, so the box grew at twice
+// the pointer's rate: a size-42 symbol reached 67 after ten pixels of travel,
+// hit its ceiling after eighty, and then sat still through another three
+// hundred pixels of dragging. That last part is what reads as "delayed" --
+// the pointer moves and nothing does.
+test('resizing tracks the pointer steadily, without running out of room', async ({ page }) => {
+  await page.goto('/creator');
+  await page.locator('.symbol-button').first().click();
+  await expect(page.locator('.canvas-item rect[stroke-dasharray]')).toHaveCount(1);
+
+  const handle = page.locator('.resize-handle').first();
+  const box = await handle.boundingBox();
+  expect(box).not.toBeNull();
+  const x = box!.x + box!.width / 2;
+  const y = box!.y + box!.height / 2;
+
+  const trail = await page.evaluate(
+    async ({ hx, hy }) => {
+      const target = document.elementFromPoint(hx, hy)!;
+      const ev = (type: string, px: number, py: number) =>
+        new PointerEvent(type, { bubbles: true, cancelable: true, clientX: px, clientY: py, pointerId: 1, isPrimary: true, buttons: 1 });
+      const size = () => {
+        const glyph = document.querySelector('.resize-handle')?.closest('.canvas-item')?.querySelector('g[transform^="scale"]');
+        return Number(/scale\(([\d.]+)\)/.exec(glyph?.getAttribute('transform') ?? '')?.[1] ?? 0) * 36;
+      };
+
+      const start = size();
+      target.dispatchEvent(ev('pointerdown', hx, hy));
+      const sizes: number[] = [];
+      for (let travel = 20; travel <= 300; travel += 20) {
+        target.dispatchEvent(ev('pointermove', hx + travel * 0.707, hy + travel * 0.707));
+        await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+        await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+        sizes.push(size());
+      }
+      target.dispatchEvent(ev('pointerup', hx, hy));
+      return { start, sizes };
+    },
+    { hx: x, hy: y },
+  );
+
+  // Still growing after 300px of travel: the drag has somewhere to go.
+  const steps = trail.sizes.map((size, index) => size - (index === 0 ? trail.start : trail.sizes[index - 1]));
+  expect(trail.sizes[trail.sizes.length - 1], 'a drag should not run into the ceiling this early').toBeGreaterThan(
+    trail.sizes[trail.sizes.length - 2],
+  );
+
+  // Every 20px of travel grows the item by about the same amount, so the
+  // response is predictable rather than accelerating away.
+  const smallest = Math.min(...steps);
+  const largest = Math.max(...steps);
+  expect(largest - smallest, 'growth per unit of travel should be steady').toBeLessThan(6);
+
+  // And that amount is modest: the centre-anchored mapping moved twice as fast.
+  expect(largest, 'twenty pixels of travel should not be half the item again').toBeLessThan(35);
+});
