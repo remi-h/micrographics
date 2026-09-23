@@ -1,6 +1,6 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { ItemAnimation } from './animations';
-import { hitBounds, type Box } from './canvasGeometry';
+import { hitBounds, inkBounds, type Box } from './canvasGeometry';
 import { createItemId } from './itemIds';
 import type { CanvasItem, CanvasSymbol, CanvasText } from './types';
 import { clamp } from './utils';
@@ -86,21 +86,29 @@ export type CanvasItems = {
   textDraft: string;
 };
 
-// Auto-placement and align/distribute work from the same padded interaction
-// box the pointer uses, so the gap the user sees when dragging an item next to
-// another is the gap the app leaves when it places one for them.
+// The middle of what an item actually draws. Align, distribute and the scroll
+// that brings a selection into view all work from this, and all three are
+// judged by eye -- so it has to be the middle of the glyphs, not of the box
+// the pointer grabs.
 //
-// `App` used to carry its own copy of that box with a 10-unit symbol pad
-// against canvasGeometry's 8, so placement and hit-testing disagreed by two
-// units on every symbol. 8 is the one that is true: MicrographicSvg draws the
-// symbol's hit rect at (-size/2 - 8, size + 16), so 8 is a measurable fact
-// about the rendered canvas, while the 10 matched nothing on screen. Adopting
-// it lets newly added items sit two units closer to existing symbols.
+// It used to measure `hitBounds`, which is that grab box, and the two are not
+// the same thing for text:
+//
+//   - the box is floored at TEXT_MIN_HIT_WIDTH so a short label stays a
+//     workable mouse target, and the floor is all added on the right. "CE"
+//     centred 19 units right of its own glyphs;
+//   - its vertical padding is 10 above and 12 below, so every text item sat a
+//     unit high;
+//   - and it ignores `rotate` entirely, while the glyphs turn about the text's
+//     anchor rather than about their own middle. A side label rotated 90
+//     degrees centred 111 units across and 148 down from where it appears.
+//
+// A symbol's two boxes are identical, so nothing about symbols changes.
 //
 // Pure geometry, so it lives outside the hook: nothing here reads state, which
 // lets effects call it without listing it as a dependency.
 export function visualCenter(item: CanvasItem) {
-  const bounds = hitBounds(item);
+  const bounds = inkBounds(item);
   return {
     x: bounds.x + bounds.width / 2,
     y: bounds.y + bounds.height / 2,
@@ -364,7 +372,18 @@ export function useCanvasItems({
     if (selected.length < 2) return;
 
     beginHistoryAction();
-    const target = selected.reduce((sum, item) => sum + visualCenter(item)[axis], 0) / selected.length;
+    // The middle of the selection, not the average of its items' middles.
+    // Those are the same number for two items and drift apart for three or
+    // more: the average is pulled towards wherever the items are densest, so
+    // aligning two clustered marks and one far one used to leave all three
+    // sitting near the cluster rather than between the outer edges. The
+    // bounding box is what "align centres" means in every drawing tool, and
+    // it is the one a user can check by eye against the outer two items.
+    const spans = selected.map((item) => {
+      const box = inkBounds(item);
+      return axis === 'x' ? { low: box.x, high: box.x + box.width } : { low: box.y, high: box.y + box.height };
+    });
+    const target = (Math.min(...spans.map((span) => span.low)) + Math.max(...spans.map((span) => span.high))) / 2;
     setCanvasItems((current) =>
       current.map((item) => {
         if (!selectedIds.includes(item.id)) return item;

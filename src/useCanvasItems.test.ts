@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { useState } from 'react';
-import { hitBounds, intersects, type Box } from './canvasGeometry';
+import { hitBounds, inkBounds, intersects, type Box } from './canvasGeometry';
 import type { CanvasItem, CanvasSymbol, CanvasText } from './types';
 import { MAX_ITEM_SIZE, MIN_ITEM_SIZE, useCanvasItems } from './useCanvasItems';
 
@@ -143,6 +143,62 @@ describe('useCanvasItems align and distribute', () => {
     expect(itemById(result.current.canvasItems, 'symbol-1').y).toBe(300);
     expect(itemById(result.current.canvasItems, 'symbol-2').y).toBe(300);
     expect(beginHistoryAction).toHaveBeenCalledTimes(1);
+  });
+
+  // Align works from what an item draws, not from the padded box the pointer
+  // grabs. The two differ for text in three ways, and all three were visible.
+  it('centres a short label on its glyphs, not on its padded click target', () => {
+    // A short label's grab box is floored at a minimum width so it stays a
+    // workable mouse target, and the floor is all added on the right. "CE" is
+    // 52 units of glyphs in a 106-unit box, so measured from that box it
+    // centred 19 units right of where it is drawn. The default label here is
+    // wide enough to clear the floor, which is exactly why it has to be short.
+    const short: CanvasText = { ...text('text-1', 400, 400), text: 'CE' };
+    const { result } = setUp({
+      canvasItems: [symbol('symbol-1', 400, 200), short],
+      selectedIds: ['symbol-1', 'text-1'],
+    });
+
+    act(() => result.current.alignSelected('x'));
+
+    const ink = (id: string) => inkBounds(itemById(result.current.canvasItems, id));
+    const middle = (id: string) => ink(id).x + ink(id).width / 2;
+    expect(middle('text-1')).toBeCloseTo(middle('symbol-1'), 6);
+  });
+
+  it('centres a rotated label where it appears, not where its unrotated box is', () => {
+    // Text turns about its own anchor rather than about the middle of its
+    // glyphs, and the grab box does not turn at all -- so a side label used to
+    // land more than a hundred units from the mark it was aligned to.
+    const rotated: CanvasText = { ...text('text-1', 400, 400), rotate: 90 };
+    const { result } = setUp({
+      canvasItems: [symbol('symbol-1', 400, 200), rotated],
+      selectedIds: ['symbol-1', 'text-1'],
+    });
+
+    act(() => result.current.alignSelected('x'));
+
+    const ink = (id: string) => inkBounds(itemById(result.current.canvasItems, id));
+    const middle = (id: string) => ink(id).x + ink(id).width / 2;
+    expect(middle('text-1')).toBeCloseTo(middle('symbol-1'), 6);
+  });
+
+  it('centres on the middle of the selection, not on where its items are densest', () => {
+    // Two marks together and one far off. The average of the three centres
+    // sits inside the pair, so aligning used to pull the lone item back to
+    // them rather than meeting in the middle of the whole selection.
+    const { result } = setUp({
+      canvasItems: [symbol('symbol-1', 100, 100), symbol('symbol-2', 100, 140), symbol('symbol-3', 100, 600)],
+      selectedIds: ['symbol-1', 'symbol-2', 'symbol-3'],
+    });
+
+    act(() => result.current.alignSelected('y'));
+
+    // Outer edges at 100 - 29 and 600 + 29, so the middle of the selection is
+    // 350. The average of the centres is 280.
+    for (const id of ['symbol-1', 'symbol-2', 'symbol-3']) {
+      expect(itemById(result.current.canvasItems, id).y).toBeCloseTo(350, 6);
+    }
   });
 
   it('leaves a selection of fewer than two items alone', () => {

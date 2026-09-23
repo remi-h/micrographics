@@ -95,7 +95,9 @@ everything is a reformatting change of its own.
 - Drag items on the canvas to move them; select one to rotate or resize it
   with its handles. Resizing keeps the opposite corner of the selection
   pinned, so the item grows along with the pointer. Select several to align or
-  distribute them.
+  distribute them; aligning centres works from what each item draws and meets
+  in the middle of the selection, so a label lines up with a mark by its
+  glyphs rather than by its click target.
 - Reorder and select items through the `Layers` list in the left panel.
 - Give a layer an entrance with the sparkle button on its row in `Layers`:
   dissolve, slide in from any side, or pop. Set how long it takes and how long
