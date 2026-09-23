@@ -1,5 +1,15 @@
 import { act, render } from '@testing-library/react';
-import { useInkBox, selectionBox, MIN_SELECTION_SIZE, SELECTION_PAD, type Box } from './MicrographicSvg';
+import {
+  useInkBox,
+  resizeGrip,
+  resizeRatio,
+  scaleInk,
+  selectionBox,
+  LETTER_SPACING,
+  MIN_SELECTION_SIZE,
+  SELECTION_PAD,
+  type Box,
+} from './MicrographicSvg';
 
 // The selection outline is measured from what an item actually renders rather
 // than estimated from its size. e2e/selection-outline.spec.ts proves the
@@ -45,8 +55,18 @@ describe('selectionBox', () => {
 
 // Exercises the hook through a real component so the ref attaches to a real
 // node, which is what the effect reads.
-function Probe({ active, deps, bbox }: { active: boolean; deps: unknown[]; bbox?: () => DOMRect }) {
-  const [ref, box] = useInkBox<SVGGElement>(active, deps);
+function Probe({
+  active,
+  deps,
+  bbox,
+  measuredAt,
+}: {
+  active: boolean;
+  deps: unknown[];
+  bbox?: () => DOMRect;
+  measuredAt?: number;
+}) {
+  const [ref, box] = useInkBox<SVGGElement>(active, deps, measuredAt);
   return (
     <svg>
       <g
@@ -54,6 +74,7 @@ function Probe({ active, deps, bbox }: { active: boolean; deps: unknown[]; bbox?
           if (node && bbox) (node as unknown as { getBBox: () => DOMRect }).getBBox = bbox;
           ref.current = node;
         }}
+        data-at={box ? String(box.at) : 'null'}
         data-box={box ? `${box.x},${box.y},${box.width},${box.height}` : 'null'}
       />
     </svg>
@@ -65,6 +86,10 @@ const rect = (x: number, y: number, width: number, height: number) =>
 
 function measured(container: HTMLElement) {
   return container.querySelector('g')?.getAttribute('data-box');
+}
+
+function measuredAt(container: HTMLElement) {
+  return container.querySelector('g')?.getAttribute('data-at');
 }
 
 describe('useInkBox', () => {
@@ -122,5 +147,190 @@ describe('useInkBox', () => {
     });
 
     expect(measured(container)).toBe('0,0,40,40');
+  });
+
+  it('records the size a measurement was taken at', () => {
+    const { container } = render(<Probe active deps={[]} measuredAt={48} bbox={() => rect(0, -40, 300, 50)} />);
+
+    expect(measuredAt(container)).toBe('48');
+  });
+
+  it('does not re-measure when only the size changes', () => {
+    // This is what makes a resize drag cheap and the outline honest. Putting
+    // the size back in `deps` costs a forced synchronous layout per frame, and
+    // lands the new measurement a render *after* the glyph has already grown,
+    // so for one frame the outline is drawn around the previous size.
+    const bbox = jest.fn(() => rect(0, -40, 300, 50));
+    const { container, rerender } = render(<Probe active deps={['LABEL']} measuredAt={48} bbox={bbox} />);
+    expect(bbox).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      rerender(<Probe active deps={['LABEL']} measuredAt={96} bbox={bbox} />);
+    });
+
+    expect(bbox).toHaveBeenCalledTimes(1);
+    expect(measuredAt(container)).toBe('48');
+  });
+});
+
+// The numbers below come from measuring a real <text> in Chromium at the font
+// the canvas uses (IBM Plex Mono 800, letter-spacing 2) with the 26-character
+// line 'Some reasonably long label'. The box is affine in the font size, not
+// proportional to it, which is the whole reason this function exists.
+describe('scaleInk', () => {
+  const GAPS = 25; // 26 characters, so 25 letter-spacing gaps
+  const atFortyEight = { at: 48, x: 0, y: -44.63, width: 802.79, height: 108.87 };
+
+  // Within a SELECTION_PAD of the real box is close enough to draw: the outline
+  // is padded by that much anyway, so an error this size only widens or narrows
+  // the gap around the glyphs, it never crosses them. The residual comes from
+  // the last glyph's side bearing, which the model folds into the scaling part.
+  // Proportional scaling misses by 24x that, in both directions.
+  const TOLERANCE = SELECTION_PAD;
+
+  it('scales proportionally when there is no letter spacing to hold back', () => {
+    const ink = scaleInk({ at: 10, x: 2, y: -8, width: 100, height: 20 }, 30, 0);
+
+    expect(ink).toEqual({ x: 6, y: -24, width: 300, height: 60 });
+  });
+
+  it('is a no-op at the size it was measured at', () => {
+    expect(scaleInk(atFortyEight, 48, GAPS)).toEqual({
+      x: 0,
+      y: -44.63,
+      width: 802.79,
+      height: 108.87,
+    });
+  });
+
+  it('matches the real box when the text is scaled up', () => {
+    // Chromium measures 2868.84 here. Scaling the whole box by 3.75 instead
+    // gives 3010.46 -- 142 units of slack hanging off the right of the glyphs.
+    expect(Math.abs(scaleInk(atFortyEight, 180, GAPS).width - 2868.84)).toBeLessThan(TOLERANCE);
+  });
+
+  it('matches the real box when the text is scaled down', () => {
+    // Chromium measures 239.42. Scaling the whole box by 0.25 gives 200.70,
+    // which would draw the outline 39 units *inside* the text it contains.
+    expect(Math.abs(scaleInk(atFortyEight, 12, GAPS).width - 239.42)).toBeLessThan(TOLERANCE);
+  });
+
+  it('holds the letter spacing out of the scaling entirely', () => {
+    // A box that is nothing but letter spacing is the same width at any size.
+    const spacing = { at: 20, x: 0, y: 0, width: LETTER_SPACING * 4, height: 0 };
+
+    expect(scaleInk(spacing, 200, 4).width).toBe(LETTER_SPACING * 4);
+  });
+
+  it('never reports a negative width when the spacing exceeds the measurement', () => {
+    // A one-character item measures narrower than the gaps its line would have
+    // if it were longer; the subtraction must not run past zero.
+    const ink = scaleInk({ at: 10, x: 0, y: 0, width: 4, height: 10 }, 20, 25);
+
+    expect(ink.width).toBeGreaterThanOrEqual(0);
+  });
+
+  it('leaves the box alone rather than dividing by a zero reference', () => {
+    const ink = scaleInk({ at: 0, x: 1, y: 2, width: 30, height: 40 }, 96, 0);
+
+    expect(ink).toEqual({ x: 1, y: 2, width: 30, height: 40 });
+  });
+});
+
+// Resizing. The old mapping scaled from the selection's centre, so the box
+// grew at twice the pointer's rate and the far corner slid away from the
+// cursor; measured in a browser, ten pixels of travel took a size-42 symbol to
+// 67 and the size ceiling arrived after eighty. These pin the mapping that
+// replaced it: anchored on the opposite corner, and linear in travel.
+describe('resizeGrip', () => {
+  const bounds = { left: 100, top: 100, right: 200, bottom: 180 };
+
+  it('is exactly neutral at the point the handle was grabbed', () => {
+    // Anything else makes the item jump the instant the pointer moves.
+    const grab = { x: 200, y: 180 };
+
+    expect(resizeRatio(resizeGrip(bounds, grab), grab)).toBeCloseTo(1);
+  });
+
+  it('is neutral even when the grab point is nowhere near the corner', () => {
+    // Which is the normal case for a rotated item: the handle is drawn inside
+    // the item's rotated group, so it can be grabbed on the far side of the
+    // selection from the corner it belongs to.
+    const grab = { x: 104, y: 104 };
+
+    expect(resizeRatio(resizeGrip(bounds, grab), grab)).toBeCloseTo(1);
+  });
+
+  it('keeps the anchor on the corner opposite the handle', () => {
+    const grip = resizeGrip(bounds, { x: 200, y: 180 });
+
+    expect(grip.anchorX).toBe(100);
+    expect(grip.anchorY).toBe(100);
+  });
+
+  it('takes its axis from the selection, not from where the pointer went down', () => {
+    // A rotated item's handle sits at the selection's *top-left* in canvas
+    // coordinates. Measuring the axis to the pointer collapsed the span to
+    // almost nothing there, and one small drag ran the item to its ceiling.
+    const fromCorner = resizeGrip(bounds, { x: 200, y: 180 });
+    const fromRotated = resizeGrip(bounds, { x: 100, y: 100 });
+
+    expect(fromRotated.span).toBeCloseTo(fromCorner.span);
+    expect(fromRotated.axisX).toBeCloseTo(fromCorner.axisX);
+    expect(fromRotated.axisY).toBeCloseTo(fromCorner.axisY);
+  });
+
+  it('answers the same push the same way wherever the handle was grabbed', () => {
+    // Several items selected means several handles, one per item. Grabbing the
+    // near one used to scale many times faster than grabbing the far one.
+    const wide = { left: 200, top: 200, right: 1000, bottom: 600 };
+    const near = resizeGrip(wide, { x: 260, y: 240 });
+    const far = resizeGrip(wide, { x: 1000, y: 600 });
+
+    expect(resizeRatio(near, { x: 280, y: 260 })).toBeCloseTo(resizeRatio(far, { x: 1020, y: 620 }));
+  });
+
+  it('survives a selection with no extent at all', () => {
+    const grip = resizeGrip({ left: 100, top: 100, right: 100, bottom: 100 }, { x: 100, y: 100 });
+
+    // A zero axis would pin the ratio at its floor for the rest of the drag,
+    // collapsing the item with no way back.
+    expect(Math.hypot(grip.axisX, grip.axisY)).toBeCloseTo(1);
+    expect(resizeRatio(grip, { x: 200, y: 200 })).toBeGreaterThan(1);
+  });
+});
+
+describe('resizeRatio', () => {
+  // A selection 100 units wide and none tall, grabbed on its far corner, so
+  // the axis is the x axis and the span is 100.
+  const grip = resizeGrip({ left: 0, top: 0, right: 100, bottom: 0 }, { x: 100, y: 0 });
+
+  it('grows in step with the pointer rather than faster than it', () => {
+    // Anchored on the opposite corner, travel and growth are one to one. The
+    // centre-anchored mapping doubled this, because the box grew both ways.
+    expect(resizeRatio(grip, { x: 150, y: 0 })).toBeCloseTo(1.5);
+    expect(resizeRatio(grip, { x: 200, y: 0 })).toBeCloseTo(2);
+  });
+
+  it('is linear, so the same push means the same growth wherever it starts', () => {
+    const first = resizeRatio(grip, { x: 150, y: 0 }) - resizeRatio(grip, { x: 100, y: 0 });
+    const later = resizeRatio(grip, { x: 350, y: 0 }) - resizeRatio(grip, { x: 300, y: 0 });
+
+    expect(first).toBeCloseTo(later);
+  });
+
+  it('ignores wandering sideways off the axis it was grabbed on', () => {
+    // Otherwise a drag that drifts perpendicular would keep inflating the item
+    // through sheer distance from the anchor.
+    expect(resizeRatio(grip, { x: 150, y: 80 })).toBeCloseTo(1.5);
+    expect(resizeRatio(grip, { x: 150, y: -80 })).toBeCloseTo(1.5);
+  });
+
+  it('shrinks when the pointer comes back past where it started', () => {
+    expect(resizeRatio(grip, { x: 50, y: 0 })).toBeCloseTo(0.5);
+  });
+
+  it('will not turn the selection inside out when dragged past the anchor', () => {
+    expect(resizeRatio(grip, { x: -400, y: 0 })).toBeGreaterThan(0);
   });
 });
