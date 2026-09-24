@@ -115,6 +115,58 @@ export function visualCenter(item: CanvasItem) {
   };
 }
 
+// The artboard the selection is kept on, in canvas units.
+const ARTBOARD = { width: 1200, height: 800 };
+
+/**
+ * Applies a set of per-item moves -- the ones align and distribute compute --
+ * and keeps the result on the artboard *as a group*.
+ *
+ * Both used to clamp each item's own anchor into 52..1148 after moving it.
+ * That undid the very relation they had just established for whichever item
+ * the clamp touched, and it was the wrong box to clamp besides: a text item's
+ * anchor is the left end of its line, not its middle, so an ordinary label
+ * sitting near the left margin was pulled right, off the axis it had been
+ * aligned to. Measured on a long label, the clamp moved it 136 units.
+ *
+ * Instead every item moves by exactly its own offset, and if the selection as
+ * a whole then pokes past an edge, all of it shifts back by the same amount,
+ * so the items stay aligned to each other. A selection too big for the
+ * artboard on an axis is left where it lands on that axis: there is no
+ * position that fits it, and shifting would only trade one overhang for
+ * another.
+ */
+export function moveKeepingTogether(
+  items: CanvasItem[],
+  moves: Map<string, { dx: number; dy: number }>,
+): Map<string, { x: number; y: number }> {
+  const moved = items
+    .filter((item) => moves.has(item.id))
+    .map((item) => {
+      const { dx, dy } = moves.get(item.id)!;
+      return { box: inkBounds({ ...item, x: item.x + dx, y: item.y + dy }), dx, dy, item };
+    });
+  if (moved.length === 0) return new Map();
+
+  const left = Math.min(...moved.map(({ box }) => box.x));
+  const right = Math.max(...moved.map(({ box }) => box.x + box.width));
+  const top = Math.min(...moved.map(({ box }) => box.y));
+  const bottom = Math.max(...moved.map(({ box }) => box.y + box.height));
+
+  const back = (low: number, high: number, limit: number) => {
+    if (high - low > limit) return 0;
+    if (low < 0) return -low;
+    if (high > limit) return limit - high;
+    return 0;
+  };
+  const shiftX = back(left, right, ARTBOARD.width);
+  const shiftY = back(top, bottom, ARTBOARD.height);
+
+  return new Map(
+    moved.map(({ dx, dy, item }) => [item.id, { x: item.x + dx + shiftX, y: item.y + dy + shiftY }]),
+  );
+}
+
 // Two entrances are the same entrance when they would play the same way. Used
 // to keep a no-op out of the undo stack; an `ItemAnimation` is three flat
 // fields, so this is the whole of it.
@@ -215,14 +267,16 @@ export function useCanvasItems({
     if (!text) return;
     beginHistoryAction();
     const size = 42;
-    const width = Math.max(90, text.length * size * 0.62) + 16;
-    const height = size + 22;
-    const position = findOpenPosition(width, height);
+    // Placed by the box it will actually hit-test as, so the slot found for it
+    // is the room it takes: an item at the origin, measured, then moved so
+    // its padded box lands on the free position.
+    const probe = hitBounds({ id: '', kind: 'text', rotate: 0, size, text, x: 0, y: 0 });
+    const position = findOpenPosition(probe.width, probe.height);
     const item: CanvasText = {
       id: createItemId('text'),
       kind: 'text',
-      x: position.x + 8,
-      y: position.y + size + 10,
+      x: position.x - probe.x,
+      y: position.y - probe.y,
       rotate: 0,
       size,
       text,
@@ -384,15 +438,14 @@ export function useCanvasItems({
       return axis === 'x' ? { low: box.x, high: box.x + box.width } : { low: box.y, high: box.y + box.height };
     });
     const target = (Math.min(...spans.map((span) => span.low)) + Math.max(...spans.map((span) => span.high))) / 2;
-    setCanvasItems((current) =>
-      current.map((item) => {
-        if (!selectedIds.includes(item.id)) return item;
+    const moves = new Map(
+      selected.map((item) => {
         const center = visualCenter(item);
-        const dx = axis === 'x' ? target - center.x : 0;
-        const dy = axis === 'y' ? target - center.y : 0;
-        return { ...item, x: clamp(item.x + dx, 52, 1148), y: clamp(item.y + dy, 48, 752) };
+        return [item.id, { dx: axis === 'x' ? target - center.x : 0, dy: axis === 'y' ? target - center.y : 0 }];
       }),
     );
+    const placed = moveKeepingTogether(selected, moves);
+    setCanvasItems((current) => current.map((item) => ({ ...item, ...placed.get(item.id) })));
   };
 
   const distributeSelected = (axis: 'x' | 'y') => {
@@ -409,16 +462,17 @@ export function useCanvasItems({
     const step = (last - first) / (selected.length - 1);
     const updates = new Map(selected.map((entry, index) => [entry.item.id, first + step * index]));
 
-    setCanvasItems((current) =>
-      current.map((item) => {
-        const target = updates.get(item.id);
-        if (target === undefined) return item;
-        const center = visualCenter(item);
-        const dx = axis === 'x' ? target - center.x : 0;
-        const dy = axis === 'y' ? target - center.y : 0;
-        return { ...item, x: clamp(item.x + dx, 52, 1148), y: clamp(item.y + dy, 48, 752) };
+    const moves = new Map(
+      selected.map(({ center, item }) => {
+        const target = updates.get(item.id)!;
+        return [item.id, { dx: axis === 'x' ? target - center.x : 0, dy: axis === 'y' ? target - center.y : 0 }];
       }),
     );
+    const placed = moveKeepingTogether(
+      selected.map(({ item }) => item),
+      moves,
+    );
+    setCanvasItems((current) => current.map((item) => ({ ...item, ...placed.get(item.id) })));
   };
 
   const nudgeSelected = (dx: number, dy: number) => {

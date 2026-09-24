@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { useState } from 'react';
 import { hitBounds, inkBounds, intersects, type Box } from './canvasGeometry';
 import type { CanvasItem, CanvasSymbol, CanvasText } from './types';
-import { MAX_ITEM_SIZE, MIN_ITEM_SIZE, useCanvasItems } from './useCanvasItems';
+import { MAX_ITEM_SIZE, MIN_ITEM_SIZE, moveKeepingTogether, useCanvasItems } from './useCanvasItems';
 
 // Like useHistory, the hook is a layer over state App owns, so the tests stand
 // up the smallest possible owner: the two pieces of state and their setters,
@@ -512,5 +512,49 @@ describe('useCanvasItems animation', () => {
 
     const copy = result.current.canvasItems.find((item) => item.id !== 'symbol-1');
     expect(copy?.animation).toEqual(slide);
+  });
+});
+
+// Align and distribute used to clamp each item's own anchor into 52..1148
+// after moving it, which undid the alignment for whichever item the clamp
+// touched -- and for text the anchor is the left end of the line, not its
+// middle, so an ordinary label near the left margin was pulled off the axis.
+describe('moveKeepingTogether', () => {
+  it('moves every item by exactly its own offset when the result fits', () => {
+    const items = [symbol('a', 300, 300), symbol('b', 500, 400)];
+    const placed = moveKeepingTogether(items, new Map([['a', { dx: 100, dy: 0 }], ['b', { dx: -100, dy: 0 }]]));
+
+    expect(placed.get('a')).toEqual({ x: 400, y: 300 });
+    expect(placed.get('b')).toEqual({ x: 400, y: 400 });
+  });
+
+  it('shifts the whole selection back together, so what was just aligned stays aligned', () => {
+    // A text item anchored 20 units in from the left, aligned with a symbol.
+    // The old per-item clamp would have pulled the label's anchor to 52 and
+    // left it 32 units off the symbol it had just been lined up with.
+    const label = text('t', 20, 300);
+    const mark = symbol('s', 60, 400);
+    const placed = moveKeepingTogether([label, mark], new Map([['t', { dx: -30, dy: 0 }], ['s', { dx: 0, dy: 0 }]]));
+
+    // The label would land 10 units off the left edge, so both come back 10.
+    expect(placed.get('t')!.x).toBeCloseTo(0, 6);
+    expect(placed.get('s')!.x).toBeCloseTo(70, 6);
+    // Their relation -- the thing align established -- is untouched.
+    expect(placed.get('s')!.x - placed.get('t')!.x).toBeCloseTo(70 - 0, 6);
+  });
+
+  it('leaves a selection wider than the artboard where it lands on that axis', () => {
+    // No position fits it, so shifting would only trade one overhang for
+    // another -- and would move the items off the axis they were aligned on.
+    const wide: CanvasText = { ...text('w', -40, 300), text: 'X'.repeat(60) };
+    const placed = moveKeepingTogether([wide], new Map([['w', { dx: 5, dy: 0 }]]));
+
+    expect(placed.get('w')!.x).toBeCloseTo(-35, 6);
+  });
+
+  it('ignores items it was not given a move for', () => {
+    const placed = moveKeepingTogether([symbol('a'), symbol('b')], new Map([['a', { dx: 1, dy: 1 }]]));
+
+    expect([...placed.keys()]).toEqual(['a']);
   });
 });

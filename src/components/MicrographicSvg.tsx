@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalSpaceBetween, AlignVerticalSpaceBetween } from 'lucide-react';
 import type { MouseEvent, PointerEvent, ReactNode } from 'react';
 import { ANIMATION_ORIGIN_STYLE, animationClassName, animationFrames, animationTiming } from '../animations';
-import { hitBounds, intersects } from '../canvasGeometry';
+import { hitBounds, intersects, LETTER_SPACING, textBox as modelTextBox } from '../canvasGeometry';
 import type { ItemAnimation } from '../animations';
 import type { CanvasItem, CanvasSymbol, CanvasText, Palette, Settings } from '../types';
 import { MicroMark } from './MicroMark';
@@ -107,8 +107,10 @@ export function resizeRatio(grip: ResizeGrip, point: { x: number; y: number }): 
 
 // Letter spacing on the canvas text, in canvas units. Absolute: it is the same
 // number of units between two characters at any font size, which is why
-// `scaleInk` below has to take it out before scaling a measurement.
-export const LETTER_SPACING = 2;
+// `scaleInk` below has to take it out before scaling a measurement. Defined
+// with the rest of the text model in canvasGeometry, so the estimate and the
+// renderer cannot disagree about it; re-exported for the callers here.
+export { LETTER_SPACING };
 
 // A measurement, and the font size it was taken at, so it can answer for other
 // sizes. `at` is 1 for a measurement that does not depend on a font size.
@@ -117,8 +119,9 @@ export type Measured = Box & { at: number };
 // The selection outline is drawn from what the item actually renders, not from
 // an estimate of it. Estimates were wrong in both directions: symbol glyphs
 // don't fill their nominal 36-unit design box, and the text width formula
-// (chars * size * 0.62) ignores the letterSpacing="2" that <text> below
-// applies, so long strings overflowed their own outline to the right.
+// used to ignore the letterSpacing="2" that <text> below applies, so long
+// strings overflowed their own outline to the right. (The estimate is now
+// calibrated -- see textBox -- but a real measurement still beats it.)
 //
 // `deps` are the things that change the *shape* being measured -- a symbol's
 // mark, a text item's characters. An item's `size` is deliberately not one of
@@ -752,8 +755,6 @@ function GraphicText({
   const displayText = editing ? editingValue : item.text;
   const lines = displayText.split('\n');
   const widestLine = Math.max(...lines.map((line) => line.length));
-  const estimatedWidth = widestLine * item.size * 0.62;
-  const estimatedHeight = lines.length * item.size * 1.08;
   const [textRef, textBox] = useInkBox<SVGTextElement>(selected || editing, [displayText], item.size);
 
   // <text> sits at the item group's origin with no transform of its own, so a
@@ -767,7 +768,7 @@ function GraphicText({
   // takes a fresh measurement at the size it ended up.
   const ink: Box = textBox
     ? scaleInk(textBox, item.size, widestLine - 1)
-    : { x: 0, y: -item.size, width: estimatedWidth, height: estimatedHeight };
+    : modelTextBox(displayText, item.size);
   const outline = selectionBox(ink);
 
   return (

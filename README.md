@@ -97,7 +97,9 @@ everything is a reformatting change of its own.
   pinned, so the item grows along with the pointer. Select several to align or
   distribute them; aligning centres works from what each item draws and meets
   in the middle of the selection, so a label lines up with a mark by its
-  glyphs rather than by its click target.
+  glyphs rather than by its click target. If aligning would push the selection
+  past an edge of the artboard, the whole selection shifts back together, so
+  the items stay aligned with each other.
 - Reorder and select items through the `Layers` list in the left panel.
 - Give a layer an entrance with the sparkle button on its row in `Layers`:
   dissolve, slide in from any side, or pop. Set how long it takes and how long
