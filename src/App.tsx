@@ -6,9 +6,11 @@ import { animationRunTime } from './animations';
 import { AssetPanel } from './components/AssetPanel';
 import { ControlPanel } from './components/ControlPanel';
 import { ExportStatus } from './components/ExportStatus';
+import { GroupMenu } from './components/GroupMenu';
 import { MicrographicSvg } from './components/MicrographicSvg';
 import { StageHeader } from './components/StageHeader';
 import { initialSettings, loadTemplateItems, palettes, symbolTabs, templates } from './data';
+import { groupActions } from './groups';
 import { loadEditorState, saveEditorState, type PersistedEditorState } from './persistence';
 import type { CanvasItem, Settings, Template } from './types';
 import { useCanvasItems, visualCenter } from './useCanvasItems';
@@ -103,6 +105,7 @@ function App() {
     visibleCanvasRect,
   });
   const palette = palettes[settings.paletteIndex];
+  const canvasGroupActions = groupActions(canvasItems, selectedIds);
   const { exportGif, exportingGif, exportPng, exportStatus, exportSvg } = useExport({
     canvasItems,
     palette,
@@ -313,6 +316,17 @@ function App() {
             }}
           >
             <div className="artboard-zoom" style={{ width: `min(${canvasZoom * 100}%, ${1180 * canvasZoom}px)` }}>
+              {/* The same Group / Ungroup menu the Layers list has, on the
+                  selection itself. A right-click on an item selects it first
+                  (see startDrag), so the menu is always about what is under
+                  the pointer. */}
+              <GroupMenu
+                canGroup={canvasGroupActions.canGroup}
+                canUngroup={canvasGroupActions.canUngroup}
+                className="artboard-menu"
+                onGroup={groupSelected}
+                onUngroup={ungroupSelected}
+              >
               <MicrographicSvg
                 ref={svgRef}
                 editingTextId={editingTextId}
@@ -325,18 +339,17 @@ function App() {
                 onChangeEditingText={setEditingTextDraft}
                 onCommitTextEdit={commitTextEdit}
                 onDistributeSelected={distributeSelected}
-                onGroupSelected={groupSelected}
                 onMoveItem={moveItem}
                 onRotateItems={rotateItems}
                 onScaleItems={scaleItems}
                 onSelectItems={selectItems}
                 onSelectItem={selectItem}
-                onUngroupSelected={ungroupSelected}
                 palette={palette}
                 playToken={playToken}
                 selectedIds={selectedIds}
                 settings={settings}
               />
+              </GroupMenu>
             </div>
           </div>
         </section>

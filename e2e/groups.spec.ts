@@ -9,8 +9,18 @@ import { test, expect, type Page } from '@playwright/test';
 const layerRows = (page: Page) => page.locator('.layer-row');
 const groupRows = (page: Page) => page.locator('.layer-row[data-group]');
 const selectedOutlines = (page: Page) => page.locator('.canvas-item rect[stroke-dasharray]');
-const groupButton = (page: Page) => page.locator('.layer-action', { hasText: 'Group' }).first();
-const ungroupButton = (page: Page) => page.locator('.layer-action', { hasText: 'Ungroup' }).first();
+// Grouping is offered on right-click, on a layer or on the canvas, and the
+// menu holds only what applies to the selection.
+const menuItem = (page: Page, action: 'Group' | 'Ungroup') =>
+  page.locator('.context-menu-item').filter({ has: page.locator('.context-menu-label', { hasText: new RegExp(`^${action}$`) }) });
+const selectedLayer = (page: Page) => page.locator('.layer-row[data-active="true"] .layer-select').first();
+
+/** Right-clicks a layer that is part of the selection and picks an action. */
+async function fromLayerMenu(page: Page, action: 'Group' | 'Ungroup') {
+  await selectedLayer(page).click({ button: 'right' });
+  await menuItem(page, action).click();
+  await expect(page.locator('.context-menu')).toHaveCount(0);
+}
 
 /** Selects the top two layers and groups them. Returns the row count before. */
 async function groupTopTwo(page: Page) {
@@ -18,7 +28,7 @@ async function groupTopTwo(page: Page) {
   await layerRows(page).nth(0).click();
   await layerRows(page).nth(1).click({ modifiers: ['Shift'] });
   await expect(selectedOutlines(page)).toHaveCount(2);
-  await groupButton(page).click();
+  await fromLayerMenu(page, 'Group');
   await expect(groupRows(page)).toHaveCount(1);
   return before;
 }
@@ -31,23 +41,128 @@ test('two layers become one group row', async ({ page }) => {
   await expect(groupRows(page).first()).toContainText('Group of 2');
 });
 
-test('the group buttons are only offered when they can do something', async ({ page }) => {
+test('the right-click menu offers only what applies, so it reads as a toggle', async ({ page }) => {
   await page.goto('/creator');
 
-  // Nothing selected: neither applies.
-  await expect(groupButton(page)).toBeDisabled();
-  await expect(ungroupButton(page)).toBeDisabled();
-
-  // One item is not a group.
+  // One item is not a group, and there is nothing to group it with: the menu
+  // says how to get there instead of offering either action.
   await layerRows(page).nth(0).click();
-  await expect(groupButton(page)).toBeDisabled();
+  await selectedLayer(page).click({ button: 'right' });
+  await expect(page.locator('.context-menu')).toContainText('Select two or more to group');
+  await expect(menuItem(page, 'Group')).toHaveCount(0);
+  await expect(menuItem(page, 'Ungroup')).toHaveCount(0);
+  await page.keyboard.press('Escape');
 
+  // Two loose items: Group, and only Group.
   await layerRows(page).nth(1).click({ modifiers: ['Shift'] });
-  await expect(groupButton(page)).toBeEnabled();
-  await expect(ungroupButton(page)).toBeDisabled();
+  await selectedLayer(page).click({ button: 'right' });
+  await expect(menuItem(page, 'Group')).toHaveCount(1);
+  await expect(menuItem(page, 'Ungroup')).toHaveCount(0);
+  await menuItem(page, 'Group').click();
 
-  await groupButton(page).click();
-  await expect(ungroupButton(page)).toBeEnabled();
+  // Now one whole group: Ungroup, and only Ungroup.
+  await selectedLayer(page).click({ button: 'right' });
+  await expect(menuItem(page, 'Ungroup')).toHaveCount(1);
+  await expect(menuItem(page, 'Group')).toHaveCount(0);
+});
+
+test('the standalone group buttons are gone from the panel and the canvas toolbar', async ({ page }) => {
+  await page.goto('/creator');
+  await layerRows(page).nth(0).click();
+  await layerRows(page).nth(1).click({ modifiers: ['Shift'] });
+  await expect(selectedOutlines(page)).toHaveCount(2);
+
+  await expect(page.locator('.layer-actions')).toHaveCount(0);
+  // The canvas toolbar keeps its four alignment buttons, and only those.
+  await expect(page.locator('.canvas-selection-actions button')).toHaveCount(4);
+  await expect(page.getByTitle('Group', { exact: true })).toHaveCount(0);
+});
+
+test('right-clicking a layer that is not selected makes it the selection first', async ({ page }) => {
+  await page.goto('/creator');
+  await groupTopTwo(page);
+
+  // Select something else, then right-click the group row: the menu has to be
+  // about the group under the pointer, not the unrelated selection.
+  await layerRows(page).nth(1).click();
+  await groupRows(page).first().locator('.layer-select').click({ button: 'right' });
+  await expect(selectedOutlines(page)).toHaveCount(2);
+  await expect(menuItem(page, 'Ungroup')).toHaveCount(1);
+});
+
+test('grouping from the canvas: right-click the selection', async ({ page }) => {
+  await page.goto('/creator');
+  const before = await layerRows(page).count();
+  await layerRows(page).nth(0).click();
+  await layerRows(page).nth(1).click({ modifiers: ['Shift'] });
+  await expect(selectedOutlines(page)).toHaveCount(2);
+
+  // Right-click on one of the selected items on the artboard. It is already
+  // part of the selection, so the selection stays whole for the menu.
+  await page.locator('.canvas-item:has(rect[stroke-dasharray])').first().click({ button: 'right', force: true });
+  await expect(selectedOutlines(page)).toHaveCount(2);
+  await menuItem(page, 'Group').click();
+
+  await expect(groupRows(page)).toHaveCount(1);
+  await expect(layerRows(page)).toHaveCount(before - 1);
+});
+
+test('right-clicking an unselected item on the canvas selects it, and its group', async ({ page }) => {
+  await page.goto('/creator');
+  await groupTopTwo(page);
+
+  // Select one loose item, then right-click a member of the group on the
+  // artboard. The menu has to be about the group under the pointer -- so the
+  // group, whole, becomes the selection before the menu opens.
+  await layerRows(page).nth(1).click();
+  await expect(selectedOutlines(page)).toHaveCount(1);
+  const selectedBefore = await page.locator('.canvas-item:has(rect[stroke-dasharray])').getAttribute('transform');
+
+  // The group is the top two layers, and the topmost layer is drawn last, so
+  // the last item on the artboard is a member of it.
+  const box = (await page.locator('g.canvas-item').last().boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2, { button: 'right' });
+
+  await expect(selectedOutlines(page)).toHaveCount(2);
+  expect(await page.locator('.canvas-item:has(rect[stroke-dasharray])').first().getAttribute('transform')).not.toBe(
+    selectedBefore,
+  );
+  await expect(menuItem(page, 'Ungroup')).toHaveCount(1);
+});
+
+test('a right-click on the canvas does not start a marquee or drag', async ({ page }) => {
+  await page.goto('/creator');
+  await layerRows(page).nth(0).click();
+  await layerRows(page).nth(1).click({ modifiers: ['Shift'] });
+  await expect(selectedOutlines(page)).toHaveCount(2);
+
+  // Empty artboard, top-left corner. A primary press there starts a marquee
+  // that clears the selection; a right-click must leave it for the menu.
+  const board = (await page.locator('svg.artboard').boundingBox())!;
+  await page.mouse.click(board.x + 4, board.y + 4, { button: 'right' });
+  await expect(selectedOutlines(page)).toHaveCount(2);
+  await expect(menuItem(page, 'Group')).toHaveCount(1);
+});
+
+test('the disclosure on a group row shows and hides the layers inside', async ({ page }) => {
+  await page.goto('/creator');
+  await groupTopTwo(page);
+  const disclosure = groupRows(page).first().locator('.layer-disclosure');
+
+  await expect(page.locator('.layer-member')).toHaveCount(0);
+  await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+
+  await disclosure.click();
+  await expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('.layer-member')).toHaveCount(2);
+
+  // A member row selects the whole group: a group is never half-selected.
+  await layerRows(page).nth(1).click();
+  await page.locator('.layer-member').first().click();
+  await expect(selectedOutlines(page)).toHaveCount(2);
+
+  await disclosure.click();
+  await expect(page.locator('.layer-member')).toHaveCount(0);
 });
 
 test('clicking one member of a group selects the whole group', async ({ page }) => {
@@ -109,7 +224,7 @@ test('ungrouping puts the members back as their own layers', async ({ page }) =>
   await page.goto('/creator');
   const before = await groupTopTwo(page);
 
-  await ungroupButton(page).click();
+  await fromLayerMenu(page, 'Ungroup');
 
   await expect(groupRows(page)).toHaveCount(0);
   await expect(layerRows(page)).toHaveCount(before);
@@ -144,7 +259,7 @@ test('editing a grouped text item leaves the group whole afterwards', async ({ p
 
   await rows.nth(textRow).click();
   await rows.nth(textRow === 0 ? 1 : 0).click({ modifiers: ['Shift'] });
-  await groupButton(page).click();
+  await fromLayerMenu(page, 'Group');
   await expect(groupRows(page)).toHaveCount(1);
 
   const before = await page.evaluate(() =>
@@ -177,7 +292,7 @@ test('two groups can be merged from the Layers list', async ({ page }) => {
   await groupTopTwo(page);
   await layerRows(page).nth(1).click();
   await layerRows(page).nth(2).click({ modifiers: ['Shift'] });
-  await groupButton(page).click();
+  await fromLayerMenu(page, 'Group');
   await expect(groupRows(page)).toHaveCount(2);
 
   // A group row has to honour the modifier, or a selection spanning both
@@ -186,7 +301,7 @@ test('two groups can be merged from the Layers list', async ({ page }) => {
   await groupRows(page).nth(1).click({ modifiers: ['Shift'] });
   await expect(selectedOutlines(page)).toHaveCount(4);
 
-  await groupButton(page).click();
+  await fromLayerMenu(page, 'Group');
 
   await expect(groupRows(page)).toHaveCount(1);
   await expect(groupRows(page).first()).toContainText('Group of 4');

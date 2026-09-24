@@ -65,6 +65,29 @@ export function isOneWholeGroup(items: CanvasItem[], ids: string[]): boolean {
 }
 
 /**
+ * Which grouping actions make sense for a selection. The layer list and the
+ * canvas each offer these on right-click, and both ask here, so the two menus
+ * cannot disagree about what a selection can do.
+ *
+ * - Group: two or more items that are not already exactly one whole group.
+ *   Two groups, or a group plus a loose item, can be grouped -- that merges
+ *   them.
+ * - Ungroup: any selected item belongs to a group.
+ *
+ * Usually only one applies, so the menu reads as a toggle. Both apply in the
+ * one case where both are real choices: a group selected together with other
+ * items, which can either be merged into one group or have its group taken
+ * apart.
+ */
+export function groupActions(items: CanvasItem[], ids: string[]): { canGroup: boolean; canUngroup: boolean } {
+  const selected = items.filter((item) => ids.includes(item.id));
+  return {
+    canGroup: selected.length > 1 && !isOneWholeGroup(items, ids),
+    canUngroup: selected.some((item) => item.groupId !== undefined),
+  };
+}
+
+/**
  * Puts every item in `ids` — and every group any of them belongs to — into one
  * new group, gathered together at the topmost member's position in the z-order.
  * Returns `items` unchanged when there is nothing to group.

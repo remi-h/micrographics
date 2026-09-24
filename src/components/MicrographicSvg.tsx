@@ -1,9 +1,9 @@
 import { forwardRef, useEffect, useEffectEvent, useRef, useState } from 'react';
-import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalSpaceBetween, AlignVerticalSpaceBetween, Group, Ungroup } from 'lucide-react';
+import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalSpaceBetween, AlignVerticalSpaceBetween } from 'lucide-react';
 import type { MouseEvent, PointerEvent, ReactNode } from 'react';
 import { ANIMATION_ORIGIN_STYLE, animationClassName, animationFrames, animationTiming } from '../animations';
 import { hitBounds, intersects } from '../canvasGeometry';
-import { expandToGroups, isOneWholeGroup } from '../groups';
+import { expandToGroups } from '../groups';
 import type { ItemAnimation } from '../animations';
 import type { CanvasItem, CanvasSymbol, CanvasText, Palette, Settings } from '../types';
 import { MicroMark } from './MicroMark';
@@ -23,7 +23,8 @@ export const MIN_SELECTION_SIZE = 20;
 // wide enough to hold the widest arrangement of buttons -- and it has to be
 // the same number the placement below centres and clamps against, which is
 // what went wrong when a button was added and only the foreignObject grew.
-export const SELECTION_TOOLBAR_WIDTH = 260;
+// Four buttons: Group and Ungroup moved to the right-click menu.
+export const SELECTION_TOOLBAR_WIDTH = 200;
 export const SELECTION_TOOLBAR_HEIGHT = 52;
 
 // Where the toolbar sits over a selection: centred on it, then kept inside the
@@ -245,8 +246,6 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
    */
   playToken: number;
   onAlignSelected: (axis: 'x' | 'y') => void;
-  onGroupSelected: () => void;
-  onUngroupSelected: () => void;
   onDistributeSelected: (axis: 'x' | 'y') => void;
   onMoveItem: (id: string, x: number, y: number) => void;
   onRotateItems: (updates: Array<{ id: string; rotate: number }>) => void;
@@ -269,8 +268,6 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
       onCommitTextEdit,
       playToken,
       onAlignSelected,
-      onGroupSelected,
-      onUngroupSelected,
       onDistributeSelected,
       onMoveItem,
       onRotateItems,
@@ -326,6 +323,16 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
 
   const startDrag = (event: PointerEvent<SVGGElement>, item: CanvasItem) => {
     event.stopPropagation();
+    // Only the primary button drags. A right-click opens the grouping menu,
+    // and it has to act on the item under the pointer: pointerdown fires
+    // before contextmenu, so an item not yet selected is selected here, in
+    // time for the menu to see it. One already part of a larger selection
+    // leaves that selection alone, so several items can be right-clicked and
+    // grouped.
+    if (event.button !== 0) {
+      if (event.button === 2 && !selectedIds.includes(item.id)) onSelectItem(item.id);
+      return;
+    }
     const point = getSvgPoint(event);
     onBeginHistoryAction();
     dragRef.current = {
@@ -364,6 +371,10 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
   };
 
   const startMarquee = (event: PointerEvent<SVGElement>) => {
+    // A right-click on empty canvas opens the grouping menu for the current
+    // selection, so it must not start a marquee -- which would clear the very
+    // selection the menu is about.
+    if (event.button !== 0) return;
     const point = getSvgPoint(event);
     marqueeRef.current = {
       additive: event.shiftKey || event.metaKey || event.ctrlKey,
@@ -438,6 +449,7 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
 
   const startRotate = (event: PointerEvent<SVGElement>, item: CanvasItem) => {
     event.stopPropagation();
+    if (event.button !== 0) return;
     const point = getSvgPoint(event);
     const ids = selectedIds.includes(item.id) ? selectedIds : [item.id];
     onBeginHistoryAction();
@@ -454,6 +466,7 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
 
   const startItemResize = (event: PointerEvent<SVGElement>, item: CanvasItem) => {
     event.stopPropagation();
+    if (event.button !== 0) return;
     const point = getSvgPoint(event);
     const ids = selectedIds.includes(item.id) ? selectedIds : [item.id];
     const selectedItems = items.filter((entry) => ids.includes(entry.id));
@@ -485,11 +498,6 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
   };
 
     const selectionToolbar = selectedBounds();
-    // One button, not two: a selection is either already a single whole group
-    // -- in which case the useful action is to take it apart -- or it is not,
-    // and the useful action is to make one. Two groups, or a group plus a
-    // loose item, is the second case.
-    const selectionGrouped = isOneWholeGroup(items, selectedIds);
 
     return (
       <svg
@@ -582,16 +590,6 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
               <button className="icon-button" onClick={() => onDistributeSelected('y')} title="Even space vertically" type="button">
                 <AlignVerticalSpaceBetween size={17} aria-hidden="true" />
               </button>
-              <span className="canvas-selection-divider" />
-              {selectionGrouped ? (
-                <button className="icon-button" onClick={onUngroupSelected} title="Ungroup" type="button">
-                  <Ungroup size={17} aria-hidden="true" />
-                </button>
-              ) : (
-                <button className="icon-button" onClick={onGroupSelected} title="Group" type="button">
-                  <Group size={17} aria-hidden="true" />
-                </button>
-              )}
             </div>
           </foreignObject>
         )}

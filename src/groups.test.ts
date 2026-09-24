@@ -1,4 +1,5 @@
 import {
+  groupActions,
   expandToGroups,
   groupItems,
   isOneWholeGroup,
@@ -257,5 +258,32 @@ describe('layerRows', () => {
 
   it('has no rows for an empty canvas', () => {
     expect(layerRows([])).toEqual([]);
+  });
+});
+
+describe('groupActions', () => {
+  const loose = (id: string): CanvasItem => ({ id, kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 });
+  const member = (id: string, groupId: string): CanvasItem => ({ ...loose(id), groupId });
+  const items = [loose('a'), loose('b'), member('c', 'g1'), member('d', 'g1'), member('e', 'g2'), member('f', 'g2')];
+
+  it('offers nothing for a single loose item', () => {
+    expect(groupActions(items, ['a'])).toEqual({ canGroup: false, canUngroup: false });
+  });
+
+  it('offers Group for several loose items', () => {
+    expect(groupActions(items, ['a', 'b'])).toEqual({ canGroup: true, canUngroup: false });
+  });
+
+  it('offers only Ungroup for exactly one whole group, so the menu reads as a toggle', () => {
+    expect(groupActions(items, ['c', 'd'])).toEqual({ canGroup: false, canUngroup: true });
+  });
+
+  it('offers both for a group selected with something else -- merging and splitting are both real', () => {
+    expect(groupActions(items, ['c', 'd', 'a'])).toEqual({ canGroup: true, canUngroup: true });
+    expect(groupActions(items, ['c', 'd', 'e', 'f'])).toEqual({ canGroup: true, canUngroup: true });
+  });
+
+  it('offers nothing for an empty selection', () => {
+    expect(groupActions(items, [])).toEqual({ canGroup: false, canUngroup: false });
   });
 });
