@@ -335,3 +335,41 @@ test('a group has one entrance, and every member plays it', async ({ page }) => 
   await expect(page.locator('g[class^="mg-anim-"]')).toHaveCount(0);
   await expect(groupRows(page)).toHaveCount(1);
 });
+
+test('a group can stagger its entrance, each member starting after the one listed above it', async ({ page }) => {
+  await page.goto('/creator');
+  await page.getByRole('button', { name: 'Start from scratch' }).click();
+  for (const label of ['AAA', 'BBB', 'CCC']) {
+    await page.locator('.text-input').fill(label);
+    await page.locator('.add-button').click();
+  }
+  // Listed top first: CCC, BBB, AAA. Group all three.
+  await layerRows(page).nth(0).click();
+  await layerRows(page).nth(2).click({ modifiers: ['Shift'] });
+  await layerRows(page).nth(1).click({ modifiers: ['Shift'] });
+  await expect(selectedOutlines(page)).toHaveCount(3);
+  await fromLayerMenu(page, 'Group');
+
+  const groupRow = groupRows(page).first();
+  await groupRow.locator('.layer-animate').click();
+  await page.locator('.animation-kinds button', { hasText: 'Pop in' }).first().click();
+  await page.getByRole('slider', { name: 'Stagger' }).fill('0.5');
+  await expect(page.locator('.dialog-popup')).toContainText('+0.5s');
+  await page.getByRole('button', { name: 'Done' }).click();
+
+  // What each member actually plays, read off its running animation.
+  await page.locator('.stage-play').click();
+  const delays = await page.evaluate(() =>
+    Object.fromEntries(
+      [...document.querySelectorAll('g[class^="mg-anim-"]')].map((node) => [
+        node.querySelector('text')?.textContent,
+        (node as SVGGElement).getAnimations()[0]?.effect?.getTiming().delay,
+      ]),
+    ),
+  );
+  expect(delays).toEqual({ AAA: 1000, BBB: 500, CCC: 0 });
+
+  // Reopening reads the stagger back from the members.
+  await groupRow.locator('.layer-animate').click();
+  await expect(page.locator('.dialog-popup')).toContainText('+0.5s');
+});

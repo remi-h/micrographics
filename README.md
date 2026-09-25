@@ -118,6 +118,9 @@ everything is a reformatting change of its own.
   it waits first — the wait is what puts a sequence in order, and two layers
   can share a moment by sharing a delay. `Play`, above the canvas, previews the
   whole sequence; it only appears once something has an entrance.
+- A group's row gives the whole group one entrance, plus `Each next layer`:
+  a stagger, so each member starts that long after the one listed above it
+  in the open group. At 0 they all arrive together.
 - Choose a palette from the swatches above the canvas, and zoom with the
   controls next to them.
 - Toggle `Grid` and `Include background` in the right panel, or upload your

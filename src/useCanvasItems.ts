@@ -92,6 +92,14 @@ export type CanvasItems = {
    * after. Pass false for the steps after the first.
    */
   setItemAnimation: (id: string, animation: ItemAnimation | null, record?: boolean) => void;
+  /**
+   * Sets several items' entrances as one change: one history entry for all of
+   * them, or none when none of them changes. A group's entrance goes through
+   * here, since a staggered group gives each member a different one; setting
+   * them one at a time would hang the undo snapshot on whichever went first,
+   * and changing only the stagger leaves the first member exactly as it was.
+   */
+  setItemAnimations: (updates: Array<{ id: string; animation: ItemAnimation | null }>, record?: boolean) => void;
   setEditingTextDraft: Dispatch<SetStateAction<string>>;
   setTextDraft: Dispatch<SetStateAction<string>>;
   textDraft: string;
@@ -423,18 +431,26 @@ export function useCanvasItems({
     setCanvasItems(ungrouped);
   };
 
-  const setItemAnimation = (id: string, animation: ItemAnimation | null, record = true) => {
-    const target = canvasItems.find((item) => item.id === id);
-    if (!target) return;
-    // Nothing to do at all when the item already has exactly this entrance, or
-    // already has none: an undo entry for a no-op reads as a broken undo, and
-    // clicking the entrance that is already chosen is an easy way to make one.
-    if (sameAnimation(target.animation, animation)) return;
+  const setItemAnimations = (updates: Array<{ id: string; animation: ItemAnimation | null }>, record = true) => {
+    // Nothing to do at all when every item already has exactly this entrance,
+    // or already has none: an undo entry for a no-op reads as a broken undo,
+    // and clicking the entrance that is already chosen is an easy way to make
+    // one.
+    const changes = new Map(
+      updates
+        .filter(({ id, animation }) => {
+          const target = canvasItems.find((item) => item.id === id);
+          return target && !sameAnimation(target.animation, animation);
+        })
+        .map(({ id, animation }) => [id, animation]),
+    );
+    if (changes.size === 0) return;
 
     if (record) beginHistoryAction();
     setCanvasItems((current) =>
       current.map((item) => {
-        if (item.id !== id) return item;
+        if (!changes.has(item.id)) return item;
+        const animation = changes.get(item.id);
         if (!animation) {
           const next = { ...item };
           delete next.animation;
@@ -444,6 +460,9 @@ export function useCanvasItems({
       }),
     );
   };
+
+  const setItemAnimation = (id: string, animation: ItemAnimation | null, record = true) =>
+    setItemAnimations([{ id, animation }], record);
 
   const copySelected = () => {
     clipboardRef.current = canvasItems.filter((item) => selectedIds.includes(item.id));
@@ -561,6 +580,7 @@ export function useCanvasItems({
     selectItems,
     setEditingTextDraft,
     setItemAnimation,
+    setItemAnimations,
     setTextDraft,
     textDraft,
     ungroupSelected,

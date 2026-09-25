@@ -12,7 +12,9 @@ import {
   MIN_DURATION,
   animationLabel,
   animationRunTime,
-  sharedAnimation,
+  groupAnimation,
+  maxStagger,
+  staggeredAnimation,
   type ItemAnimation,
 } from '../animations';
 import { templates } from '../data';
@@ -39,7 +41,7 @@ export function ControlPanel({
   onRestartTemplate,
   onSelectItem,
   onSelectItems,
-  onSetItemAnimation,
+  onSetItemAnimations,
   onGroupSelected,
   onUngroupSelected,
   onUndo,
@@ -59,7 +61,7 @@ export function ControlPanel({
   onRestartTemplate: () => void;
   onSelectItem: (id: string, additive: boolean) => void;
   onSelectItems: (ids: string[], additive?: boolean) => void;
-  onSetItemAnimation: (id: string, animation: ItemAnimation | null, record?: boolean) => void;
+  onSetItemAnimations: (updates: Array<{ id: string; animation: ItemAnimation | null }>, record?: boolean) => void;
   onGroupSelected: () => void;
   onUngroupSelected: () => void;
   onUndo: () => void;
@@ -306,17 +308,25 @@ export function ControlPanel({
                       {/* A group is one thing everywhere else -- it moves,
                           scales and rotates as one -- so it gets one entrance
                           that every member plays, rather than a control per
-                          member. The first write takes the history snapshot
-                          and the rest ride along, so setting a group's
-                          entrance is one undo step however many items are in
-                          it. */}
-                      <AnimationControl
-                        animation={row.kind === 'group' ? sharedAnimation(row.items) : row.item.animation}
-                        label={label}
-                        onChange={(animation, record) =>
-                          ids.forEach((id, member) => onSetItemAnimation(id, animation, record && member === 0))
-                        }
-                      />
+                          member. What it adds is a stagger: each member
+                          starting a set time after the one listed above it.
+                          All of it is one write, so it is one undo step
+                          however many members there are. */}
+                      {row.kind === 'group' ? (
+                        <GroupAnimationControl
+                          // Top of the list first: the order the members are
+                          // shown in when the group is opened.
+                          items={[...row.items].reverse()}
+                          label={label}
+                          onSetItemAnimations={onSetItemAnimations}
+                        />
+                      ) : (
+                        <AnimationControl
+                          animation={row.item.animation}
+                          label={label}
+                          onChange={(animation, record) => onSetItemAnimations([{ id: row.id, animation }], record)}
+                        />
+                      )}
                     </div>
                     {open &&
                       // The members, top of the z-order first like the list
@@ -350,6 +360,41 @@ export function ControlPanel({
 }
 
 /**
+ * A group row's entrance control: the one for a single layer, plus a stagger.
+ * It reads the entrance and stagger back from the members (see
+ * `groupAnimation`) and writes one entrance per member, each starting one
+ * stagger after the member listed above it.
+ */
+function GroupAnimationControl({
+  items,
+  label,
+  onSetItemAnimations,
+}: {
+  /** The members, in the order they start: top of the list first. */
+  items: CanvasItem[];
+  label: string;
+  onSetItemAnimations: (updates: Array<{ id: string; animation: ItemAnimation | null }>, record?: boolean) => void;
+}) {
+  const shared = groupAnimation(items);
+  return (
+    <AnimationControl
+      animation={shared?.animation}
+      label={label}
+      onChange={(animation, record, stagger = 0) =>
+        onSetItemAnimations(
+          items.map((item, index) => ({
+            id: item.id,
+            animation: animation && staggeredAnimation(animation, stagger, index),
+          })),
+          record,
+        )
+      }
+      stagger={{ count: items.length, seconds: shared?.stagger ?? 0 }}
+    />
+  );
+}
+
+/**
  * The per-layer entrance control from the Layers list: a button that says
  * whether this layer animates, and a dialog to set what it does, how long it
  * takes and how long it waits.
@@ -362,13 +407,25 @@ function AnimationControl({
   animation,
   label,
   onChange,
+  stagger,
 }: {
   animation: ItemAnimation | undefined;
   label: string;
-  onChange: (animation: ItemAnimation | null, record?: boolean) => void;
+  /** `stagger` comes back only from a control that was given one. */
+  onChange: (animation: ItemAnimation | null, record?: boolean, stagger?: number) => void;
+  /**
+   * For a group: how far apart its members start, and how many there are,
+   * which bounds it. Leave it out for a single layer, which has no stagger.
+   */
+  stagger?: { count: number; seconds: number };
 }) {
   const [open, setOpen] = useState(false);
   const current = animation ?? DEFAULT_ANIMATION;
+  const seconds = stagger?.seconds ?? 0;
+  // The last member of a staggered group starts (count - 1) staggers after the
+  // first, and that has to stay within MAX_DELAY -- a reload clamps any delay
+  // past it -- so the first one's delay and the stagger bound each other.
+  const delayLimit = stagger ? Math.max(MIN_DELAY, MAX_DELAY - seconds * (stagger.count - 1)) : MAX_DELAY;
 
   // A range input fires a change per step of a drag, and each one that took a
   // history entry would be a separate undo step -- a single drag across the
@@ -383,10 +440,10 @@ function AnimationControl({
   const endGesture = () => {
     midGesture.current = false;
   };
-  const slide = (next: ItemAnimation) => {
+  const slide = (next: ItemAnimation, nextStagger = seconds) => {
     const record = !midGesture.current;
     midGesture.current = true;
-    onChange(next, record);
+    onChange(next, record, nextStagger);
   };
 
   return (
@@ -413,7 +470,7 @@ function AnimationControl({
                 className="size-option"
                 data-active={animation ? kind === animation.kind : undefined}
                 key={kind}
-                onClick={() => onChange({ ...current, kind })}
+                onClick={() => onChange({ ...current, kind }, true, seconds)}
                 type="button"
               >
                 <span className="size-option-scale">{animationLabel(kind)}</span>
@@ -445,7 +502,7 @@ function AnimationControl({
               Starts after <strong>{current.delay.toFixed(1)}s</strong>
             </span>
             <input
-              max={MAX_DELAY}
+              max={delayLimit}
               min={MIN_DELAY}
               onBlur={endGesture}
               onChange={(event) => slide({ ...current, delay: Number(event.target.value) })}
@@ -457,6 +514,27 @@ function AnimationControl({
               value={current.delay}
             />
           </label>
+
+          {stagger && (
+            <label className="animation-field">
+              <span>
+                Each next layer <strong>+{seconds.toFixed(1)}s</strong>
+              </span>
+              <input
+                aria-label="Stagger"
+                max={maxStagger(stagger.count, current.delay)}
+                min={0}
+                onBlur={endGesture}
+                onChange={(event) => slide(current, Number(event.target.value))}
+                onKeyUp={endGesture}
+                onPointerCancel={endGesture}
+                onPointerUp={endGesture}
+                step={0.1}
+                type="range"
+                value={seconds}
+              />
+            </label>
+          )}
 
           <div className="dialog-footer">
             <button
