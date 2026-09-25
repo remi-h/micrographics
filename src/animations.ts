@@ -261,6 +261,30 @@ export function animationStateAt(animation: ItemAnimation, seconds: number): { o
   };
 }
 
+/**
+ * Two entrances are the same entrance when they would play the same way. Used
+ * to keep a no-op out of the undo stack, and to decide whether a group of
+ * items has one entrance to show or several; an `ItemAnimation` is three flat
+ * fields, so this is the whole of it.
+ */
+export function sameAnimation(left: ItemAnimation | undefined, right: ItemAnimation | null | undefined) {
+  if (!left && !right) return true;
+  if (!left || !right) return false;
+  return left.kind === right.kind && left.duration === right.duration && left.delay === right.delay;
+}
+
+/**
+ * The one entrance a set of items share, or undefined when they do not agree
+ * -- which includes some having none. A group is one thing everywhere else in
+ * the editor, so its layer row shows one entrance; when its members disagree
+ * there is no single answer to show, and the control reads as unset until one
+ * is chosen for all of them.
+ */
+export function sharedAnimation(items: CanvasItem[]): ItemAnimation | undefined {
+  const first = items[0]?.animation;
+  return items.every((item) => sameAnimation(item.animation, first)) ? first : undefined;
+}
+
 /** How long the whole sequence runs, in seconds. Zero when nothing animates. */
 export function animationRunTime(items: CanvasItem[]): number {
   return items.reduce((longest, item) => {

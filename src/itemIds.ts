@@ -67,3 +67,13 @@ export function createItemId(kind: CanvasItem['kind']): string {
   sequence += 1;
   return `${kind}-${sessionToken}-${sequence.toString(36)}`;
 }
+
+/**
+ * Mints a group id, from the same counter as item ids so a group id can never
+ * equal an item id either. Group ids are compared, never parsed, and are
+ * round-tripped by persistence exactly as item ids are.
+ */
+export function createGroupId(): string {
+  sequence += 1;
+  return `group-${sessionToken}-${sequence.toString(36)}`;
+}

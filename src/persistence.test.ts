@@ -171,6 +171,65 @@ describe('saveEditorState / loadEditorState', () => {
     expect(loadEditorState()).toBeNull();
   });
 
+  // Groups are newer than the saved shape, so the two directions that matter
+  // are that a group survives a reload and that a save written before groups
+  // existed still loads.
+  it('round-trips a group', () => {
+    const withGroup: PersistedEditorState = {
+      ...state,
+      canvasItems: [
+        { groupId: 'group-1', id: 'symbol-1', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 100, y: 200 },
+        { groupId: 'group-1', id: 'text-1', kind: 'text', rotate: 0, size: 42, text: 'MICRO', x: 300, y: 400 },
+      ],
+    };
+
+    expect(saveEditorState(withGroup)).toBe(true);
+    expect(loadEditorState()).toEqual(withGroup);
+  });
+
+  it('restores a save written before groups existed, ungrouped', () => {
+    writeRaw(
+      JSON.stringify({
+        version: STORAGE_VERSION,
+        settings: state.settings,
+        canvasItems: [{ id: 'symbol-1', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 100, y: 200 }],
+        canvasZoom: 1,
+      }),
+    );
+
+    expect(loadEditorState()?.canvasItems[0].groupId).toBeUndefined();
+  });
+
+  it('drops a group id that no second item shares, rather than restoring a group of one', () => {
+    writeRaw(
+      JSON.stringify({
+        version: STORAGE_VERSION,
+        settings: state.settings,
+        canvasItems: [{ groupId: 'group-1', id: 'symbol-1', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 100, y: 200 }],
+        canvasZoom: 1,
+      }),
+    );
+
+    expect(loadEditorState()?.canvasItems[0].groupId).toBeUndefined();
+  });
+
+  it('keeps the rest of an item whose group id is unusable', () => {
+    writeRaw(
+      JSON.stringify({
+        version: STORAGE_VERSION,
+        settings: state.settings,
+        canvasItems: [
+          { groupId: 7, id: 'symbol-1', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 100, y: 200 },
+          { groupId: 7, id: 'symbol-2', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 400, y: 200 },
+        ],
+        canvasZoom: 1,
+      }),
+    );
+
+    const loaded = loadEditorState();
+    expect(loaded?.canvasItems).toHaveLength(2);
+    expect(loaded?.canvasItems[0].groupId).toBeUndefined();
+  });
   // Animations, like groups, are newer than the saved shape.
   it('round-trips an animation', () => {
     const animated: PersistedEditorState = {

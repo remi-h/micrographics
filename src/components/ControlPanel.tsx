@@ -1,8 +1,8 @@
-import { useRef, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import { Dialog } from '@base-ui/react/dialog';
 import { Select } from '@base-ui/react/select';
 import { Toolbar } from '@base-ui/react/toolbar';
-import { Check, ChevronDown, Download, FileCode2, Film, RefreshCcw, Shuffle, Sparkles, Trash2, Undo2, Redo2 } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Download, FileCode2, Film, Group, RefreshCcw, Shuffle, Sparkles, Trash2, Undo2, Redo2 } from 'lucide-react';
 import {
   ANIMATION_KINDS,
   DEFAULT_ANIMATION,
@@ -11,14 +11,17 @@ import {
   MIN_DELAY,
   MIN_DURATION,
   animationLabel,
+  animationRunTime,
+  sharedAnimation,
   type ItemAnimation,
 } from '../animations';
 import { templates } from '../data';
-import { animationRunTime } from '../animations';
+import { groupActions, layerRows, rowItemIds } from '../groups';
 import { EXPORT_SCALES, exportPixelSize, type ExportScale } from '../exportMarkup';
 import type { CanvasItem, Template } from '../types';
 import { BrandIcon } from './BrandIcon';
 import { Field, ToolButton } from './Controls';
+import { GroupMenu } from './GroupMenu';
 
 export function ControlPanel({
   canvasItems,
@@ -35,7 +38,10 @@ export function ControlPanel({
   onRedo,
   onRestartTemplate,
   onSelectItem,
+  onSelectItems,
   onSetItemAnimation,
+  onGroupSelected,
+  onUngroupSelected,
   onUndo,
 }: {
   canvasItems: CanvasItem[];
@@ -52,10 +58,25 @@ export function ControlPanel({
   onRedo: () => void;
   onRestartTemplate: () => void;
   onSelectItem: (id: string, additive: boolean) => void;
+  onSelectItems: (ids: string[], additive?: boolean) => void;
   onSetItemAnimation: (id: string, animation: ItemAnimation | null, record?: boolean) => void;
+  onGroupSelected: () => void;
+  onUngroupSelected: () => void;
   onUndo: () => void;
 }) {
   const selectedIdSet = new Set(selectedIds);
+  const rows = layerRows(canvasItems);
+  const { canGroup, canUngroup } = groupActions(canvasItems, selectedIds);
+  // Which group rows are open to show their members. View state for this
+  // panel only: not part of the drawing, not persisted, and not undoable.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const toggleExpanded = (groupId: string) =>
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
   const [exportOpen, setExportOpen] = useState(false);
   // Whether anything on the canvas actually animates decides how the dialog
   // talks about the formats: with no entrances there is no animation to lose
@@ -218,33 +239,110 @@ export function ControlPanel({
           </Select.Root>
         </Field>
         <Field label="Layers">
-          <div className="layer-list">
-            {canvasItems.length === 0 ? (
+          {/* Right-click for Group / Ungroup. The menu acts on the selection
+              after the right-click has picked its row, so it is always about
+              the layer under the pointer. */}
+          <GroupMenu
+            canGroup={canGroup}
+            canUngroup={canUngroup}
+            className="layer-list"
+            onGroup={onGroupSelected}
+            onUngroup={onUngroupSelected}
+          >
+            {rows.length === 0 ? (
               <div className="empty-layer">No symbols or text</div>
             ) : (
-              [...canvasItems].reverse().map((item, index) => (
-                // A row, not a button: it holds two of them. The animation
-                // control cannot be nested inside the row's own button, and
-                // making the whole row open the dialog would cost the click
-                // that selects a layer.
-                <div className="layer-row" data-active={selectedIdSet.has(item.id)} key={item.id}>
-                  <button
-                    className="layer-select"
-                    onClick={(event) => onSelectItem(item.id, event.shiftKey || event.metaKey || event.ctrlKey)}
-                    type="button"
-                  >
-                    <span>{String(canvasItems.length - index).padStart(2, '0')}</span>
-                    <span className="layer-name">{itemLabel(item, index)}</span>
-                  </button>
-                  <AnimationControl
-                    animation={item.animation}
-                    label={itemLabel(item, index)}
-                    onChange={(animation, record) => onSetItemAnimation(item.id, animation, record)}
-                  />
-                </div>
-              ))
+              rows.map((row, index) => {
+                const ids = rowItemIds(row);
+                const label = row.kind === 'group' ? `Group of ${row.items.length}` : itemLabel(row.item, index);
+                const open = row.kind === 'group' && expanded.has(row.id);
+                const selectRow = (additive: boolean) => {
+                  // A group row stands for several items, so it goes through
+                  // the whole-set selector rather than the single-item one;
+                  // both honour the modifier, so a selection spanning two
+                  // groups can still be built here.
+                  if (row.kind === 'group') onSelectItems(ids, additive);
+                  else onSelectItem(row.id, additive);
+                };
+                return (
+                  <Fragment key={row.id}>
+                    {/* A row, not a button: it holds two of them. The
+                        animation control cannot be nested inside the row's own
+                        button, and making the whole row open the dialog would
+                        cost the click that selects a layer. */}
+                    <div
+                      className="layer-row"
+                      data-active={ids.every((id) => selectedIdSet.has(id))}
+                      data-group={row.kind === 'group' || undefined}
+                      data-open={open || undefined}
+                    >
+                      {row.kind === 'group' && (
+                        <button
+                          aria-expanded={open}
+                          aria-label={open ? 'Hide the layers in this group' : 'Show the layers in this group'}
+                          className="layer-disclosure"
+                          onClick={() => toggleExpanded(row.id)}
+                          type="button"
+                        >
+                          {open ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
+                        </button>
+                      )}
+                      <button
+                        className="layer-select"
+                        onClick={(event) => selectRow(event.shiftKey || event.metaKey || event.ctrlKey)}
+                        onContextMenu={() => {
+                          // Right-clicking a layer that is not selected makes
+                          // it the selection, as a left click would; one that
+                          // is already part of a larger selection keeps it,
+                          // so several layers can be selected and grouped.
+                          if (!ids.every((id) => selectedIdSet.has(id))) selectRow(false);
+                        }}
+                        type="button"
+                      >
+                        <span>{String(rows.length - index).padStart(2, '0')}</span>
+                        {row.kind === 'group' && <Group size={13} aria-hidden="true" />}
+                        <span className="layer-name">{label}</span>
+                      </button>
+                      {/* A group is one thing everywhere else -- it moves,
+                          scales and rotates as one -- so it gets one entrance
+                          that every member plays, rather than a control per
+                          member. The first write takes the history snapshot
+                          and the rest ride along, so setting a group's
+                          entrance is one undo step however many items are in
+                          it. */}
+                      <AnimationControl
+                        animation={row.kind === 'group' ? sharedAnimation(row.items) : row.item.animation}
+                        label={label}
+                        onChange={(animation, record) =>
+                          ids.forEach((id, member) => onSetItemAnimation(id, animation, record && member === 0))
+                        }
+                      />
+                    </div>
+                    {open &&
+                      // The members, top of the z-order first like the list
+                      // itself. Clicking one selects the whole group: a group
+                      // is never half-selected, anywhere. The disclosure is
+                      // for seeing what is inside, not for splitting it --
+                      // that is Ungroup.
+                      [...row.items].reverse().map((member) => (
+                        <button
+                          className="layer-member"
+                          data-active={selectedIdSet.has(member.id)}
+                          key={member.id}
+                          onClick={(event) => selectRow(event.shiftKey || event.metaKey || event.ctrlKey)}
+                          onContextMenu={() => {
+                            if (!ids.every((id) => selectedIdSet.has(id))) selectRow(false);
+                          }}
+                          type="button"
+                        >
+                          <span className="layer-name">{itemLabel(member, canvasItems.indexOf(member))}</span>
+                        </button>
+                      ))}
+                  </Fragment>
+                );
+              })
             )}
-          </div>
+          </GroupMenu>
         </Field>
       </div>
     </aside>

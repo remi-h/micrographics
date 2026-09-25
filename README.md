@@ -100,6 +100,18 @@ everything is a reformatting change of its own.
   glyphs rather than by its click target. If aligning would push the selection
   past an edge of the artboard, the whole selection shifts back together, so
   the items stay aligned with each other.
+- Select several items and right-click them — on a layer in the `Layers`
+  list, or on the canvas — and choose `Group` to lock them together. The menu
+  offers only what applies: `Group` for loose items, `Ungroup` for a group,
+  both only when a group is selected together with other items. Right-clicking
+  a layer or item that is not selected selects it first, so the menu is always
+  about what is under the pointer. `Cmd`/`Ctrl` + `G` and
+  `Shift` + `Cmd`/`Ctrl` + `G` do the same from the keyboard.
+- A group is one row in `Layers`. Its `>` shows the layers inside it; clicking
+  any of them, or any member on the canvas, selects the whole group, and
+  moving, resizing, rotating, copying or deleting the group treats it as one
+  thing. Copying a group gives you a second, independent group rather than
+  enlarging the first.
 - Reorder and select items through the `Layers` list in the left panel.
 - Give a layer an entrance with the sparkle button on its row in `Layers`:
   dissolve, slide in from any side, or pop. Set how long it takes and how long
