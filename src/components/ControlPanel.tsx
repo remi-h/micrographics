@@ -425,7 +425,12 @@ function AnimationControl({
   // The last member of a staggered group starts (count - 1) staggers after the
   // first, and that has to stay within MAX_DELAY -- a reload clamps any delay
   // past it -- so the first one's delay and the stagger bound each other.
-  const delayLimit = stagger ? Math.max(MIN_DELAY, MAX_DELAY - seconds * (stagger.count - 1)) : MAX_DELAY;
+  // A group's members can also arrive already set further apart than these
+  // sliders allow -- animated one by one, then grouped -- and a slider cannot
+  // show a value past its max, so each max also reaches what is stored.
+  const delayLimit = stagger
+    ? Math.max(MIN_DELAY, MAX_DELAY - seconds * (stagger.count - 1), current.delay)
+    : MAX_DELAY;
 
   // A range input fires a change per step of a drag, and each one that took a
   // history entry would be a separate undo step -- a single drag across the
@@ -521,8 +526,7 @@ function AnimationControl({
                 Each next layer <strong>+{seconds.toFixed(1)}s</strong>
               </span>
               <input
-                aria-label="Stagger"
-                max={maxStagger(stagger.count, current.delay)}
+                max={Math.max(maxStagger(stagger.count, current.delay), seconds)}
                 min={0}
                 onBlur={endGesture}
                 onChange={(event) => slide(current, Number(event.target.value))}

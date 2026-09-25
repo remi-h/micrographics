@@ -324,7 +324,10 @@ export function staggeredAnimation(animation: ItemAnimation, stagger: number, in
  */
 export function maxStagger(count: number, delay: number): number {
   if (count < 2) return 0;
-  return Math.max(0, Math.min(MAX_STAGGER, Math.floor(((MAX_DELAY - delay) / (count - 1)) * 10) / 10));
+  // In whole tenths, the slider's step: (10 - 9.4) / 2 * 10 is 2.9999999999999982
+  // in floating point, which floors a whole step short of the 0.3 that fits.
+  const tenths = Math.floor(Math.round((MAX_DELAY - delay) * 10) / (count - 1));
+  return Math.max(0, Math.min(MAX_STAGGER, tenths / 10));
 }
 
 /** How long the whole sequence runs, in seconds. Zero when nothing animates. */

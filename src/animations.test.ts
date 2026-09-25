@@ -364,6 +364,14 @@ describe('maxStagger', () => {
     expect(maxStagger(7, 0.5)).toBe(1.5);
   });
 
+  it('does not lose a step to floating point', () => {
+    // (10 - 9.4) / 2 is 0.29999999999999982, which a plain floor made 0.2 --
+    // a step short of what the delay slider had just allowed.
+    expect(maxStagger(3, 9.4)).toBe(0.3);
+    expect(maxStagger(2, 9.9)).toBe(0.1);
+    expect(maxStagger(2, 8.3)).toBe(1.7);
+  });
+
   it('allows none for a single item, or with no room left', () => {
     expect(maxStagger(1, 0)).toBe(0);
     expect(maxStagger(4, MAX_DELAY)).toBe(0);

@@ -353,7 +353,7 @@ test('a group can stagger its entrance, each member starting after the one liste
   const groupRow = groupRows(page).first();
   await groupRow.locator('.layer-animate').click();
   await page.locator('.animation-kinds button', { hasText: 'Pop in' }).first().click();
-  await page.getByRole('slider', { name: 'Stagger' }).fill('0.5');
+  await page.getByRole('slider', { name: /Each next layer/ }).fill('0.5');
   await expect(page.locator('.dialog-popup')).toContainText('+0.5s');
   await page.getByRole('button', { name: 'Done' }).click();
 
