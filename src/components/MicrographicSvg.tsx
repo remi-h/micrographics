@@ -3,6 +3,7 @@ import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalSpaceBetween
 import type { MouseEvent, PointerEvent, ReactNode } from 'react';
 import { ANIMATION_ORIGIN_STYLE, animationClassName, animationFrames, animationTiming } from '../animations';
 import { hitBounds, intersects } from '../canvasGeometry';
+import { expandToGroups } from '../groups';
 import type { ItemAnimation } from '../animations';
 import type { CanvasItem, CanvasSymbol, CanvasText, Palette, Settings } from '../types';
 import { MicroMark } from './MicroMark';
@@ -16,6 +17,28 @@ export const SELECTION_PAD = 6;
 // zero-height outline would collapse onto the ink and put both handles in the
 // same place. Floor the outline so it stays grabbable.
 export const MIN_SELECTION_SIZE = 20;
+
+// The box the selection toolbar is laid out in, in canvas units. The toolbar
+// itself is `width: max-content` centred inside it, so this only has to be
+// wide enough to hold the widest arrangement of buttons -- and it has to be
+// the same number the placement below centres and clamps against, which is
+// what went wrong when a button was added and only the foreignObject grew.
+// Four buttons: Group and Ungroup moved to the right-click menu.
+export const SELECTION_TOOLBAR_WIDTH = 200;
+export const SELECTION_TOOLBAR_HEIGHT = 52;
+
+// Where the toolbar sits over a selection: centred on it, then kept inside the
+// 1200 x 800 artboard. The outer <svg> clips anything past its viewBox, so a
+// selection near an edge would otherwise lose whichever button ran off it.
+export function selectionToolbarPosition(bounds: { left: number; right: number; top: number }) {
+  return {
+    toolbarX: Math.min(
+      1200 - SELECTION_TOOLBAR_WIDTH - 16,
+      Math.max(16, (bounds.left + bounds.right) / 2 - SELECTION_TOOLBAR_WIDTH / 2),
+    ),
+    toolbarY: Math.max(16, bounds.top - 58),
+  };
+}
 
 // Dragging the handle past the anchor would otherwise invert the ratio and
 // flip the selection through itself. The items have their own size floor; this
@@ -300,6 +323,16 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
 
   const startDrag = (event: PointerEvent<SVGGElement>, item: CanvasItem) => {
     event.stopPropagation();
+    // Only the primary button drags. A right-click opens the grouping menu,
+    // and it has to act on the item under the pointer: pointerdown fires
+    // before contextmenu, so an item not yet selected is selected here, in
+    // time for the menu to see it. One already part of a larger selection
+    // leaves that selection alone, so several items can be right-clicked and
+    // grouped.
+    if (event.button !== 0) {
+      if (event.button === 2 && !selectedIds.includes(item.id)) onSelectItem(item.id);
+      return;
+    }
     const point = getSvgPoint(event);
     onBeginHistoryAction();
     dragRef.current = {
@@ -321,10 +354,7 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
     const top = Math.min(...bounds.map((item) => item.y));
     const right = Math.max(...bounds.map((item) => item.x + item.width));
 
-    return {
-      toolbarX: Math.min(1000, Math.max(16, (left + right) / 2 - 100)),
-      toolbarY: Math.max(16, top - 58),
-    };
+    return selectionToolbarPosition({ left, right, top });
   };
 
   const getMarqueeRect = (event: PointerEvent<SVGElement>) => {
@@ -341,6 +371,10 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
   };
 
   const startMarquee = (event: PointerEvent<SVGElement>) => {
+    // A right-click on empty canvas opens the grouping menu for the current
+    // selection, so it must not start a marquee -- which would clear the very
+    // selection the menu is about.
+    if (event.button !== 0) return;
     const point = getSvgPoint(event);
     marqueeRef.current = {
       additive: event.shiftKey || event.metaKey || event.ctrlKey,
@@ -358,7 +392,12 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
       const rect = getMarqueeRect(event);
       if (!rect) return;
       setMarqueeRect(rect);
-      const ids = items.filter((item) => intersects(rect, hitBounds(item))).map((item) => item.id);
+      // Touching one member of a group sweeps the whole group in, so a
+      // marquee can never leave a group partly selected.
+      const ids = expandToGroups(
+        items.filter((item) => intersects(rect, hitBounds(item))).map((item) => item.id),
+        items,
+      );
       onSelectItems(marqueeRef.current.additive ? Array.from(new Set([...selectedIds, ...ids])) : ids);
       return;
     }
@@ -410,6 +449,7 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
 
   const startRotate = (event: PointerEvent<SVGElement>, item: CanvasItem) => {
     event.stopPropagation();
+    if (event.button !== 0) return;
     const point = getSvgPoint(event);
     const ids = selectedIds.includes(item.id) ? selectedIds : [item.id];
     onBeginHistoryAction();
@@ -426,6 +466,7 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
 
   const startItemResize = (event: PointerEvent<SVGElement>, item: CanvasItem) => {
     event.stopPropagation();
+    if (event.button !== 0) return;
     const point = getSvgPoint(event);
     const ids = selectedIds.includes(item.id) ? selectedIds : [item.id];
     const selectedItems = items.filter((entry) => ids.includes(entry.id));
@@ -530,11 +571,13 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
           <foreignObject
             x={selectionToolbar.toolbarX}
             y={selectionToolbar.toolbarY}
-            width="200"
-            height="44"
+            width={SELECTION_TOOLBAR_WIDTH}
+            // 36px buttons in 6px of padding inside a 1px border come to 50,
+            // which the previous height of 44 clipped.
+            height={SELECTION_TOOLBAR_HEIGHT}
             onPointerDown={(event) => event.stopPropagation()}
           >
-            <div className="canvas-selection-actions" aria-label="Selection alignment tools">
+            <div className="canvas-selection-actions" aria-label="Selection tools">
               <button className="icon-button" onClick={() => onAlignSelected('x')} title="Align vertical centers" type="button">
                 <AlignCenterVertical size={17} aria-hidden="true" />
               </button>

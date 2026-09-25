@@ -22,6 +22,13 @@ export type Settings = {
 export type CanvasText = {
   id: string;
   /**
+   * Set when this item is part of a group. Items sharing a groupId are
+   * selected, moved and deleted together. Optional because most items are not
+   * grouped, and because a save written before groups existed has no such
+   * field. See groups.ts.
+   */
+  groupId?: string;
+  /**
    * The entrance this item plays, if it has one. Optional because most items
    * have none, and because a save written before animations existed has no
    * such field. See animations.ts.
@@ -37,6 +44,8 @@ export type CanvasText = {
 
 export type CanvasSymbol = {
   id: string;
+  /** Set when this item is part of a group; see CanvasText above and groups.ts. */
+  groupId?: string;
   /** The entrance this item plays, if it has one; see CanvasText above. */
   animation?: ItemAnimation;
   kind: 'symbol';

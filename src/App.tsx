@@ -6,9 +6,11 @@ import { animationRunTime } from './animations';
 import { AssetPanel } from './components/AssetPanel';
 import { ControlPanel } from './components/ControlPanel';
 import { ExportStatus } from './components/ExportStatus';
+import { GroupMenu } from './components/GroupMenu';
 import { MicrographicSvg } from './components/MicrographicSvg';
 import { StageHeader } from './components/StageHeader';
 import { initialSettings, loadTemplateItems, palettes, symbolTabs, templates } from './data';
+import { groupActions } from './groups';
 import { loadEditorState, saveEditorState, type PersistedEditorState } from './persistence';
 import type { CanvasItem, Settings, Template } from './types';
 import { useCanvasItems, visualCenter } from './useCanvasItems';
@@ -80,6 +82,7 @@ function App() {
     duplicateSelected,
     editingTextDraft,
     editingTextId,
+    groupSelected,
     moveItem,
     nudgeSelected,
     pasteClipboard,
@@ -87,10 +90,12 @@ function App() {
     rotateItems,
     scaleItems,
     selectItem,
+    selectItems,
     setEditingTextDraft,
     setItemAnimation,
     setTextDraft,
     textDraft,
+    ungroupSelected,
   } = useCanvasItems({
     beginHistoryAction,
     canvasItems,
@@ -100,6 +105,7 @@ function App() {
     visibleCanvasRect,
   });
   const palette = palettes[settings.paletteIndex];
+  const canvasGroupActions = groupActions(canvasItems, selectedIds);
   const { exportGif, exportingGif, exportPng, exportStatus, exportSvg } = useExport({
     canvasItems,
     palette,
@@ -229,6 +235,7 @@ function App() {
     copySelected,
     cutSelected,
     duplicateSelected,
+    groupSelected,
     nudgeSelected,
     pasteClipboard,
     redo,
@@ -238,6 +245,7 @@ function App() {
     selectedIds,
     setSelectedIds,
     undo,
+    ungroupSelected,
     zoomCanvas,
   });
 
@@ -272,10 +280,13 @@ function App() {
           onExportSvg={exportSvg}
           onRandomize={randomize}
           onRedo={redo}
+          onGroupSelected={groupSelected}
           onRestartTemplate={restartTemplate}
           onSelectItem={selectItem}
+          onSelectItems={selectItems}
           onSetItemAnimation={setItemAnimation}
           onUndo={undo}
+          onUngroupSelected={ungroupSelected}
         />
 
         <section className="preview-stage" aria-label="Micrographic preview">
@@ -305,6 +316,17 @@ function App() {
             }}
           >
             <div className="artboard-zoom" style={{ width: `min(${canvasZoom * 100}%, ${1180 * canvasZoom}px)` }}>
+              {/* The same Group / Ungroup menu the Layers list has, on the
+                  selection itself. A right-click on an item selects it first
+                  (see startDrag), so the menu is always about what is under
+                  the pointer. */}
+              <GroupMenu
+                canGroup={canvasGroupActions.canGroup}
+                canUngroup={canvasGroupActions.canUngroup}
+                className="artboard-menu"
+                onGroup={groupSelected}
+                onUngroup={ungroupSelected}
+              >
               <MicrographicSvg
                 ref={svgRef}
                 editingTextId={editingTextId}
@@ -320,13 +342,14 @@ function App() {
                 onMoveItem={moveItem}
                 onRotateItems={rotateItems}
                 onScaleItems={scaleItems}
-                onSelectItems={setSelectedIds}
+                onSelectItems={selectItems}
                 onSelectItem={selectItem}
                 palette={palette}
                 playToken={playToken}
                 selectedIds={selectedIds}
                 settings={settings}
               />
+              </GroupMenu>
             </div>
           </div>
         </section>

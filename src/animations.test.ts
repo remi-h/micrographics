@@ -11,6 +11,7 @@ import {
   animationRunTime,
   animationStateAt,
   animationStyleSheet,
+  sharedAnimation,
   animationTiming,
   type AnimationKind,
   type ItemAnimation,
@@ -255,5 +256,43 @@ describe('animationStateAt', () => {
     // A frame that is 0.999 opacity and a hair off position would make the
     // poster the GIF loops on subtly wrong.
     expect(animationStateAt({ delay: 0, duration: 1, kind: 'pop' }, 1)).toEqual({ opacity: 1, transform: 'none' });
+  });
+});
+
+// A group is one thing everywhere else in the editor, so its layer row shows
+// one entrance rather than a control per member.
+describe('sharedAnimation', () => {
+  const item = (animation?: ItemAnimation): CanvasSymbol => ({
+    id: `symbol-${Math.random()}`,
+    kind: 'symbol',
+    mark: 'ring',
+    rotate: 0,
+    size: 42,
+    x: 0,
+    y: 0,
+    ...(animation ? { animation } : {}),
+  });
+  const pop: ItemAnimation = { delay: 0.4, duration: 1.2, kind: 'pop' };
+
+  it('reports the entrance when every member plays the same one', () => {
+    expect(sharedAnimation([item(pop), item({ ...pop })])).toEqual(pop);
+  });
+
+  it('reports nothing when the members disagree', () => {
+    // There is no single answer to show, so the control reads as unset until
+    // one is chosen for all of them.
+    expect(sharedAnimation([item(pop), item({ ...pop, kind: 'fade' })])).toBeUndefined();
+  });
+
+  it('counts a member with no entrance as a disagreement', () => {
+    expect(sharedAnimation([item(pop), item()])).toBeUndefined();
+  });
+
+  it('reports nothing when no member has an entrance', () => {
+    expect(sharedAnimation([item(), item()])).toBeUndefined();
+  });
+
+  it('answers for an empty set rather than throwing', () => {
+    expect(sharedAnimation([])).toBeUndefined();
   });
 });
