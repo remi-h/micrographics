@@ -677,7 +677,7 @@ h1 {
 
 .palette-list,
 .symbol-grid,
-.layer-list {
+.layer-stack {
   display: grid;
   gap: 8px;
 }
@@ -802,6 +802,73 @@ h1 {
   font-variant-numeric: tabular-nums;
 }
 
+/* One layer in the list: its place number in a gutter of its own, then the
+   row, then -- for an open group -- the layers inside it, under the row.
+   The number is outside the row because it numbers the place in the stack,
+   not the layer, so it holds still while a dragged layer moves past it. */
+.layer-entry {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  column-gap: 6px;
+  align-items: center;
+}
+
+.layer-index {
+  grid-column: 1;
+  grid-row: 1;
+  color: #9a978f;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.layer-entry > .layer-row,
+.layer-members {
+  grid-column: 2;
+}
+
+.layer-members {
+  display: grid;
+  gap: 4px;
+  padding-top: 4px;
+}
+
+/* Room at both ends of the stack for the drop line. The list scrolls, so a
+   line drawn in the gap above the first row or below the last would fall
+   outside its box and be clipped -- at exactly the two drops that mean "to
+   the front" and "to the back". */
+.layer-stack {
+  padding: 6px 0;
+}
+
+/* The layer being dragged stays in its place, faded, until it is dropped:
+   the line below shows where it will go. */
+.layer-row[data-dragging] {
+  opacity: 0.4;
+}
+
+/* Where a dragged layer will land: a line in the gap above or below an entry,
+   centred in the list's 8px gap and spanning the rows, not the numbers. */
+.layer-entry[data-drop]::before {
+  content: "";
+  position: absolute;
+  left: 26px;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: #f4f0e8;
+  pointer-events: none;
+}
+
+.layer-entry[data-drop="before"]::before {
+  top: -5px;
+}
+
+.layer-entry[data-drop="after"]::before {
+  bottom: -5px;
+}
+
 .layer-row[data-active="true"] {
   border-color: #f4f0e8;
   box-shadow: inset 0 0 0 1px #f4f0e8;
@@ -846,7 +913,7 @@ h1 {
   min-height: 30px;
   display: flex;
   align-items: center;
-  margin: -4px 0 0 28px;
+  margin-left: 28px;
   padding: 6px 11px;
   border: 0;
   border-left: 1px solid rgba(245, 242, 234, 0.16);
@@ -874,6 +941,36 @@ h1 {
 .layer-member[data-active="true"] {
   color: #f4f0e8;
   border-left-color: #f4f0e8;
+}
+
+/* A member being dragged among the others, and where it will land: the same
+   fade and line as a whole row, inside the group's list and centred in the
+   4px between two members. */
+.layer-member {
+  position: relative;
+}
+
+.layer-member[data-dragging] {
+  opacity: 0.4;
+}
+
+.layer-member[data-drop]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: #f4f0e8;
+  pointer-events: none;
+}
+
+.layer-member[data-drop="before"]::before {
+  top: -3px;
+}
+
+.layer-member[data-drop="after"]::before {
+  bottom: -3px;
 }
 
 /* The right-click menu for Group / Ungroup, on the layers and the canvas. */

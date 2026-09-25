@@ -1,7 +1,7 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { sameAnimation, type ItemAnimation } from './animations';
 import { hitBounds, inkBounds, type Box } from './canvasGeometry';
-import { expandToGroups, groupItems, pruneGroups, regroupCopies, ungroupItems } from './groups';
+import { expandToGroups, groupItems, moveMember, moveRow, pruneGroups, regroupCopies, ungroupItems } from './groups';
 import { createItemId } from './itemIds';
 import type { CanvasItem, CanvasSymbol, CanvasText } from './types';
 import { clamp } from './utils';
@@ -72,6 +72,18 @@ export type CanvasItems = {
   nudgeSelected: (dx: number, dy: number) => void;
   pasteClipboard: () => void;
   removeSelected: () => void;
+  /**
+   * Moves a Layers row -- an item, or a whole group -- to the gap `gap` in
+   * the list, topmost first, and so to that place in the paint order. One
+   * undo step; none for a drop that leaves the row where it was.
+   */
+  reorderLayer: (rowId: string, gap: number) => void;
+  /**
+   * Moves one member of a group to the gap `gap` among the group's members,
+   * as an open group lists them. It stays in its group. One undo step; none
+   * for a drop that leaves it where it was.
+   */
+  reorderGroupMember: (memberId: string, gap: number) => void;
   rotateItems: (updates: Array<{ id: string; rotate: number }>) => void;
   scaleItems: (updates: Array<{ id: string; size: number; x: number; y: number }>) => void;
   selectItem: (id: string | null, additive?: boolean) => void;
@@ -416,6 +428,20 @@ export function useCanvasItems({
     setSelectedIds(expandToGroups(selectedIds, grouped));
   };
 
+  const reorderLayer = (rowId: string, gap: number) => {
+    const reordered = moveRow(canvasItems, rowId, gap);
+    if (reordered === canvasItems) return;
+    beginHistoryAction();
+    setCanvasItems(reordered);
+  };
+
+  const reorderGroupMember = (memberId: string, gap: number) => {
+    const reordered = moveMember(canvasItems, memberId, gap);
+    if (reordered === canvasItems) return;
+    beginHistoryAction();
+    setCanvasItems(reordered);
+  };
+
   const ungroupSelected = () => {
     const ungrouped = ungroupItems(canvasItems, selectedIds);
     if (ungrouped === canvasItems) return;
@@ -555,6 +581,8 @@ export function useCanvasItems({
     nudgeSelected,
     pasteClipboard,
     removeSelected,
+    reorderGroupMember,
+    reorderLayer,
     rotateItems,
     scaleItems,
     selectItem,
