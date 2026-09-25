@@ -1,6 +1,6 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { sameAnimation, type ItemAnimation } from './animations';
-import { hitBounds, type Box } from './canvasGeometry';
+import { hitBounds, inkBounds, type Box } from './canvasGeometry';
 import { expandToGroups, groupItems, pruneGroups, regroupCopies, ungroupItems } from './groups';
 import { createItemId } from './itemIds';
 import type { CanvasItem, CanvasSymbol, CanvasText } from './types';
@@ -99,25 +99,85 @@ export type CanvasItems = {
   ungroupSelected: () => void;
 };
 
-// Auto-placement and align/distribute work from the same padded interaction
-// box the pointer uses, so the gap the user sees when dragging an item next to
-// another is the gap the app leaves when it places one for them.
+// The middle of what an item actually draws. Align, distribute and the scroll
+// that brings a selection into view all work from this, and all three are
+// judged by eye -- so it has to be the middle of the glyphs, not of the box
+// the pointer grabs.
 //
-// `App` used to carry its own copy of that box with a 10-unit symbol pad
-// against canvasGeometry's 8, so placement and hit-testing disagreed by two
-// units on every symbol. 8 is the one that is true: MicrographicSvg draws the
-// symbol's hit rect at (-size/2 - 8, size + 16), so 8 is a measurable fact
-// about the rendered canvas, while the 10 matched nothing on screen. Adopting
-// it lets newly added items sit two units closer to existing symbols.
+// It used to measure `hitBounds`, which is that grab box, and the two are not
+// the same thing for text:
+//
+//   - the box is floored at TEXT_MIN_HIT_WIDTH so a short label stays a
+//     workable mouse target, and the floor is all added on the right. "CE"
+//     centred 19 units right of its own glyphs;
+//   - its vertical padding is 10 above and 12 below, so every text item sat a
+//     unit high;
+//   - and it ignores `rotate` entirely, while the glyphs turn about the text's
+//     anchor rather than about their own middle. A side label rotated 90
+//     degrees centred 111 units across and 148 down from where it appears.
+//
+// A symbol's two boxes are identical, so nothing about symbols changes.
 //
 // Pure geometry, so it lives outside the hook: nothing here reads state, which
 // lets effects call it without listing it as a dependency.
 export function visualCenter(item: CanvasItem) {
-  const bounds = hitBounds(item);
+  const bounds = inkBounds(item);
   return {
     x: bounds.x + bounds.width / 2,
     y: bounds.y + bounds.height / 2,
   };
+}
+
+// The artboard the selection is kept on, in canvas units.
+const ARTBOARD = { width: 1200, height: 800 };
+
+/**
+ * Applies a set of per-item moves -- the ones align and distribute compute --
+ * and keeps the result on the artboard *as a group*.
+ *
+ * Both used to clamp each item's own anchor into 52..1148 after moving it.
+ * That undid the very relation they had just established for whichever item
+ * the clamp touched, and it was the wrong box to clamp besides: a text item's
+ * anchor is the left end of its line, not its middle, so an ordinary label
+ * sitting near the left margin was pulled right, off the axis it had been
+ * aligned to. Measured on a long label, the clamp moved it 136 units.
+ *
+ * Instead every item moves by exactly its own offset, and if the selection as
+ * a whole then pokes past an edge, all of it shifts back by the same amount,
+ * so the items stay aligned to each other. A selection too big for the
+ * artboard on an axis is left where it lands on that axis: there is no
+ * position that fits it, and shifting would only trade one overhang for
+ * another.
+ */
+export function moveKeepingTogether(
+  items: CanvasItem[],
+  moves: Map<string, { dx: number; dy: number }>,
+): Map<string, { x: number; y: number }> {
+  const moved = items
+    .filter((item) => moves.has(item.id))
+    .map((item) => {
+      const { dx, dy } = moves.get(item.id)!;
+      return { box: inkBounds({ ...item, x: item.x + dx, y: item.y + dy }), dx, dy, item };
+    });
+  if (moved.length === 0) return new Map();
+
+  const left = Math.min(...moved.map(({ box }) => box.x));
+  const right = Math.max(...moved.map(({ box }) => box.x + box.width));
+  const top = Math.min(...moved.map(({ box }) => box.y));
+  const bottom = Math.max(...moved.map(({ box }) => box.y + box.height));
+
+  const back = (low: number, high: number, limit: number) => {
+    if (high - low > limit) return 0;
+    if (low < 0) return -low;
+    if (high > limit) return limit - high;
+    return 0;
+  };
+  const shiftX = back(left, right, ARTBOARD.width);
+  const shiftY = back(top, bottom, ARTBOARD.height);
+
+  return new Map(
+    moved.map(({ dx, dy, item }) => [item.id, { x: item.x + dx + shiftX, y: item.y + dy + shiftY }]),
+  );
 }
 
 // A copy of each item, nudged clear of the original so the user can see that
@@ -217,14 +277,16 @@ export function useCanvasItems({
     if (!text) return;
     beginHistoryAction();
     const size = 42;
-    const width = Math.max(90, text.length * size * 0.62) + 16;
-    const height = size + 22;
-    const position = findOpenPosition(width, height);
+    // Placed by the box it will actually hit-test as, so the slot found for it
+    // is the room it takes: an item at the origin, measured, then moved so
+    // its padded box lands on the free position.
+    const probe = hitBounds({ id: '', kind: 'text', rotate: 0, size, text, x: 0, y: 0 });
+    const position = findOpenPosition(probe.width, probe.height);
     const item: CanvasText = {
       id: createItemId('text'),
       kind: 'text',
-      x: position.x + 8,
-      y: position.y + size + 10,
+      x: position.x - probe.x,
+      y: position.y - probe.y,
       rotate: 0,
       size,
       text,
@@ -415,16 +477,26 @@ export function useCanvasItems({
     if (selected.length < 2) return;
 
     beginHistoryAction();
-    const target = selected.reduce((sum, item) => sum + visualCenter(item)[axis], 0) / selected.length;
-    setCanvasItems((current) =>
-      current.map((item) => {
-        if (!selectedIds.includes(item.id)) return item;
+    // The middle of the selection, not the average of its items' middles.
+    // Those are the same number for two items and drift apart for three or
+    // more: the average is pulled towards wherever the items are densest, so
+    // aligning two clustered marks and one far one used to leave all three
+    // sitting near the cluster rather than between the outer edges. The
+    // bounding box is what "align centres" means in every drawing tool, and
+    // it is the one a user can check by eye against the outer two items.
+    const spans = selected.map((item) => {
+      const box = inkBounds(item);
+      return axis === 'x' ? { low: box.x, high: box.x + box.width } : { low: box.y, high: box.y + box.height };
+    });
+    const target = (Math.min(...spans.map((span) => span.low)) + Math.max(...spans.map((span) => span.high))) / 2;
+    const moves = new Map(
+      selected.map((item) => {
         const center = visualCenter(item);
-        const dx = axis === 'x' ? target - center.x : 0;
-        const dy = axis === 'y' ? target - center.y : 0;
-        return { ...item, x: clamp(item.x + dx, 52, 1148), y: clamp(item.y + dy, 48, 752) };
+        return [item.id, { dx: axis === 'x' ? target - center.x : 0, dy: axis === 'y' ? target - center.y : 0 }];
       }),
     );
+    const placed = moveKeepingTogether(selected, moves);
+    setCanvasItems((current) => current.map((item) => ({ ...item, ...placed.get(item.id) })));
   };
 
   const distributeSelected = (axis: 'x' | 'y') => {
@@ -441,16 +513,17 @@ export function useCanvasItems({
     const step = (last - first) / (selected.length - 1);
     const updates = new Map(selected.map((entry, index) => [entry.item.id, first + step * index]));
 
-    setCanvasItems((current) =>
-      current.map((item) => {
-        const target = updates.get(item.id);
-        if (target === undefined) return item;
-        const center = visualCenter(item);
-        const dx = axis === 'x' ? target - center.x : 0;
-        const dy = axis === 'y' ? target - center.y : 0;
-        return { ...item, x: clamp(item.x + dx, 52, 1148), y: clamp(item.y + dy, 48, 752) };
+    const moves = new Map(
+      selected.map(({ center, item }) => {
+        const target = updates.get(item.id)!;
+        return [item.id, { dx: axis === 'x' ? target - center.x : 0, dy: axis === 'y' ? target - center.y : 0 }];
       }),
     );
+    const placed = moveKeepingTogether(
+      selected.map(({ item }) => item),
+      moves,
+    );
+    setCanvasItems((current) => current.map((item) => ({ ...item, ...placed.get(item.id) })));
   };
 
   const nudgeSelected = (dx: number, dy: number) => {

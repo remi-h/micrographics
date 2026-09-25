@@ -1,8 +1,8 @@
 import { act, renderHook } from '@testing-library/react';
 import { useState } from 'react';
-import { hitBounds, intersects, type Box } from './canvasGeometry';
+import { hitBounds, inkBounds, intersects, type Box } from './canvasGeometry';
 import type { CanvasItem, CanvasSymbol, CanvasText } from './types';
-import { MAX_ITEM_SIZE, MIN_ITEM_SIZE, useCanvasItems } from './useCanvasItems';
+import { MAX_ITEM_SIZE, MIN_ITEM_SIZE, moveKeepingTogether, useCanvasItems } from './useCanvasItems';
 
 // Like useHistory, the hook is a layer over state App owns, so the tests stand
 // up the smallest possible owner: the two pieces of state and their setters,
@@ -143,6 +143,62 @@ describe('useCanvasItems align and distribute', () => {
     expect(itemById(result.current.canvasItems, 'symbol-1').y).toBe(300);
     expect(itemById(result.current.canvasItems, 'symbol-2').y).toBe(300);
     expect(beginHistoryAction).toHaveBeenCalledTimes(1);
+  });
+
+  // Align works from what an item draws, not from the padded box the pointer
+  // grabs. The two differ for text in three ways, and all three were visible.
+  it('centres a short label on its glyphs, not on its padded click target', () => {
+    // A short label's grab box is floored at a minimum width so it stays a
+    // workable mouse target, and the floor is all added on the right. "CE" is
+    // 52 units of glyphs in a 106-unit box, so measured from that box it
+    // centred 19 units right of where it is drawn. The default label here is
+    // wide enough to clear the floor, which is exactly why it has to be short.
+    const short: CanvasText = { ...text('text-1', 400, 400), text: 'CE' };
+    const { result } = setUp({
+      canvasItems: [symbol('symbol-1', 400, 200), short],
+      selectedIds: ['symbol-1', 'text-1'],
+    });
+
+    act(() => result.current.alignSelected('x'));
+
+    const ink = (id: string) => inkBounds(itemById(result.current.canvasItems, id));
+    const middle = (id: string) => ink(id).x + ink(id).width / 2;
+    expect(middle('text-1')).toBeCloseTo(middle('symbol-1'), 6);
+  });
+
+  it('centres a rotated label where it appears, not where its unrotated box is', () => {
+    // Text turns about its own anchor rather than about the middle of its
+    // glyphs, and the grab box does not turn at all -- so a side label used to
+    // land more than a hundred units from the mark it was aligned to.
+    const rotated: CanvasText = { ...text('text-1', 400, 400), rotate: 90 };
+    const { result } = setUp({
+      canvasItems: [symbol('symbol-1', 400, 200), rotated],
+      selectedIds: ['symbol-1', 'text-1'],
+    });
+
+    act(() => result.current.alignSelected('x'));
+
+    const ink = (id: string) => inkBounds(itemById(result.current.canvasItems, id));
+    const middle = (id: string) => ink(id).x + ink(id).width / 2;
+    expect(middle('text-1')).toBeCloseTo(middle('symbol-1'), 6);
+  });
+
+  it('centres on the middle of the selection, not on where its items are densest', () => {
+    // Two marks together and one far off. The average of the three centres
+    // sits inside the pair, so aligning used to pull the lone item back to
+    // them rather than meeting in the middle of the whole selection.
+    const { result } = setUp({
+      canvasItems: [symbol('symbol-1', 100, 100), symbol('symbol-2', 100, 140), symbol('symbol-3', 100, 600)],
+      selectedIds: ['symbol-1', 'symbol-2', 'symbol-3'],
+    });
+
+    act(() => result.current.alignSelected('y'));
+
+    // Outer edges at 100 - 29 and 600 + 29, so the middle of the selection is
+    // 350. The average of the centres is 280.
+    for (const id of ['symbol-1', 'symbol-2', 'symbol-3']) {
+      expect(itemById(result.current.canvasItems, id).y).toBeCloseTo(350, 6);
+    }
   });
 
   it('leaves a selection of fewer than two items alone', () => {
@@ -659,5 +715,49 @@ describe('useCanvasItems animation', () => {
 
     const copy = result.current.canvasItems.find((item) => item.id !== 'symbol-1');
     expect(copy?.animation).toEqual(slide);
+  });
+});
+
+// Align and distribute used to clamp each item's own anchor into 52..1148
+// after moving it, which undid the alignment for whichever item the clamp
+// touched -- and for text the anchor is the left end of the line, not its
+// middle, so an ordinary label near the left margin was pulled off the axis.
+describe('moveKeepingTogether', () => {
+  it('moves every item by exactly its own offset when the result fits', () => {
+    const items = [symbol('a', 300, 300), symbol('b', 500, 400)];
+    const placed = moveKeepingTogether(items, new Map([['a', { dx: 100, dy: 0 }], ['b', { dx: -100, dy: 0 }]]));
+
+    expect(placed.get('a')).toEqual({ x: 400, y: 300 });
+    expect(placed.get('b')).toEqual({ x: 400, y: 400 });
+  });
+
+  it('shifts the whole selection back together, so what was just aligned stays aligned', () => {
+    // A text item anchored 20 units in from the left, aligned with a symbol.
+    // The old per-item clamp would have pulled the label's anchor to 52 and
+    // left it 32 units off the symbol it had just been lined up with.
+    const label = text('t', 20, 300);
+    const mark = symbol('s', 60, 400);
+    const placed = moveKeepingTogether([label, mark], new Map([['t', { dx: -30, dy: 0 }], ['s', { dx: 0, dy: 0 }]]));
+
+    // The label would land 10 units off the left edge, so both come back 10.
+    expect(placed.get('t')!.x).toBeCloseTo(0, 6);
+    expect(placed.get('s')!.x).toBeCloseTo(70, 6);
+    // Their relation -- the thing align established -- is untouched.
+    expect(placed.get('s')!.x - placed.get('t')!.x).toBeCloseTo(70 - 0, 6);
+  });
+
+  it('leaves a selection wider than the artboard where it lands on that axis', () => {
+    // No position fits it, so shifting would only trade one overhang for
+    // another -- and would move the items off the axis they were aligned on.
+    const wide: CanvasText = { ...text('w', -40, 300), text: 'X'.repeat(60) };
+    const placed = moveKeepingTogether([wide], new Map([['w', { dx: 5, dy: 0 }]]));
+
+    expect(placed.get('w')!.x).toBeCloseTo(-35, 6);
+  });
+
+  it('ignores items it was not given a move for', () => {
+    const placed = moveKeepingTogether([symbol('a'), symbol('b')], new Map([['a', { dx: 1, dy: 1 }]]));
+
+    expect([...placed.keys()]).toEqual(['a']);
   });
 });

@@ -95,7 +95,11 @@ everything is a reformatting change of its own.
 - Drag items on the canvas to move them; select one to rotate or resize it
   with its handles. Resizing keeps the opposite corner of the selection
   pinned, so the item grows along with the pointer. Select several to align or
-  distribute them.
+  distribute them; aligning centres works from what each item draws and meets
+  in the middle of the selection, so a label lines up with a mark by its
+  glyphs rather than by its click target. If aligning would push the selection
+  past an edge of the artboard, the whole selection shifts back together, so
+  the items stay aligned with each other.
 - Select several items and right-click them — on a layer in the `Layers`
   list, or on the canvas — and choose `Group` to lock them together. The menu
   offers only what applies: `Group` for loose items, `Ungroup` for a group,
