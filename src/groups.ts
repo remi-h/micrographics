@@ -199,6 +199,40 @@ export function rowItemIds(row: LayerRow): string[] {
   return row.kind === 'item' ? [row.id] : row.items.map((item) => item.id);
 }
 
+/**
+ * Moves one Layers row -- an item, or a whole group -- to a new place in the
+ * list, and returns the items in the paint order that list now describes.
+ *
+ * `gap` is where the row is dropped, counted in the list as it stands, topmost
+ * first: 0 is above the top row, `rows.length` is below the bottom one, and
+ * `i` is between rows `i - 1` and `i`. Counting gaps rather than destination
+ * indices is what a drop indicator shows, and it keeps "drop just above
+ * myself" and "drop just below myself" both meaning "stay put".
+ *
+ * The move is made on rows and flattened back to items, never on items
+ * directly, so a group travels whole and its members stay contiguous: there
+ * is no gap *inside* a group to drop into. Returns `items` itself when nothing
+ * moves, so the caller can skip an undo entry for a no-op.
+ */
+export function moveRow(items: CanvasItem[], rowId: string, gap: number): CanvasItem[] {
+  const rows = layerRows(items);
+  const from = rows.findIndex((row) => row.id === rowId);
+  if (from < 0) return items;
+
+  const target = Math.max(0, Math.min(rows.length, Math.round(gap)));
+  // Removing the row first shifts every gap below it up by one.
+  const to = target > from ? target - 1 : target;
+  if (to === from) return items;
+
+  const reordered = [...rows];
+  const [moving] = reordered.splice(from, 1);
+  reordered.splice(to, 0, moving);
+
+  // Rows run topmost first and items bottom first, so flatten in reverse; a
+  // group row already holds its members in painting order.
+  return reordered.reverse().flatMap((row) => (row.kind === 'item' ? [row.item] : row.items));
+}
+
 // `delete item.groupId` on a copy rather than `groupId: undefined`: the item is
 // about to be persisted as JSON, and an explicit undefined is dropped by
 // JSON.stringify anyway, so this keeps the saved shape and the in-memory shape

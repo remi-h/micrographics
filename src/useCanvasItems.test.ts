@@ -632,6 +632,43 @@ describe('useCanvasItems grouping', () => {
   });
 });
 
+describe('useCanvasItems layer order', () => {
+  // Layers lists topmost first: symbol-3, symbol-2, symbol-1.
+  const start = () =>
+    setUp({
+      canvasItems: [symbol('symbol-1'), symbol('symbol-2', 300), symbol('symbol-3', 500)],
+      selectedIds: ['symbol-2'],
+    });
+
+  it('moves a layer and takes one history entry for it', () => {
+    const { result, beginHistoryAction } = start();
+
+    act(() => result.current.reorderLayer('symbol-1', 0));
+
+    expect(result.current.canvasItems.map((item) => item.id)).toEqual(['symbol-2', 'symbol-3', 'symbol-1']);
+    expect(beginHistoryAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('takes no history entry for a drop that leaves the layer where it was', () => {
+    const { result, beginHistoryAction } = start();
+    const before = result.current.canvasItems;
+
+    act(() => result.current.reorderLayer('symbol-2', 1));
+    act(() => result.current.reorderLayer('symbol-2', 2));
+
+    expect(result.current.canvasItems).toBe(before);
+    expect(beginHistoryAction).not.toHaveBeenCalled();
+  });
+
+  it('leaves the selection alone', () => {
+    const { result } = start();
+
+    act(() => result.current.reorderLayer('symbol-3', 3));
+
+    expect(result.current.selectedIds).toEqual(['symbol-2']);
+  });
+});
+
 describe('useCanvasItems animation', () => {
   const slide = { delay: 0.2, duration: 0.6, kind: 'slide-left' as const };
 

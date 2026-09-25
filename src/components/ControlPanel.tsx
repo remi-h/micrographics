@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState } from 'react';
+import { useRef, useState, type DragEvent } from 'react';
 import { Dialog } from '@base-ui/react/dialog';
 import { Select } from '@base-ui/react/select';
 import { Toolbar } from '@base-ui/react/toolbar';
@@ -36,6 +36,7 @@ export function ControlPanel({
   onExportSvg,
   onRandomize,
   onRedo,
+  onReorderLayer,
   onRestartTemplate,
   onSelectItem,
   onSelectItems,
@@ -56,6 +57,7 @@ export function ControlPanel({
   onExportSvg: () => void;
   onRandomize: () => void;
   onRedo: () => void;
+  onReorderLayer: (rowId: string, gap: number) => void;
   onRestartTemplate: () => void;
   onSelectItem: (id: string, additive: boolean) => void;
   onSelectItems: (ids: string[], additive?: boolean) => void;
@@ -77,6 +79,20 @@ export function ControlPanel({
       else next.add(groupId);
       return next;
     });
+  // The layer being dragged in the list, and the gap it would land in if
+  // dropped now -- counted topmost first, as `moveRow` counts it. Null gap
+  // while the pointer is over no row.
+  const [drag, setDrag] = useState<{ rowId: string; gap: number | null } | null>(null);
+  const dragFrom = drag ? rows.findIndex((row) => row.id === drag.rowId) : -1;
+  // A drop just above or just below the dragged row leaves it where it is, so
+  // no line is drawn there: a line promises a move.
+  const dropGap = drag && drag.gap !== null && drag.gap !== dragFrom && drag.gap !== dragFrom + 1 ? drag.gap : null;
+  const dropInList = (event: DragEvent) => {
+    if (!drag) return;
+    event.preventDefault();
+    if (dropGap !== null) onReorderLayer(drag.rowId, dropGap);
+    setDrag(null);
+  };
   const [exportOpen, setExportOpen] = useState(false);
   // Whether anything on the canvas actually animates decides how the dialog
   // talks about the formats: with no entrances there is no animation to lose
@@ -252,95 +268,153 @@ export function ControlPanel({
             {rows.length === 0 ? (
               <div className="empty-layer">No symbols or text</div>
             ) : (
-              rows.map((row, index) => {
-                const ids = rowItemIds(row);
-                const label = row.kind === 'group' ? `Group of ${row.items.length}` : itemLabel(row.item, index);
-                const open = row.kind === 'group' && expanded.has(row.id);
-                const selectRow = (additive: boolean) => {
-                  // A group row stands for several items, so it goes through
-                  // the whole-set selector rather than the single-item one;
-                  // both honour the modifier, so a selection spanning two
-                  // groups can still be built here.
-                  if (row.kind === 'group') onSelectItems(ids, additive);
-                  else onSelectItem(row.id, additive);
-                };
-                return (
-                  <Fragment key={row.id}>
-                    {/* A row, not a button: it holds two of them. The
+              // The drop is taken here rather than on each row so that
+              // letting go in the space between two rows still lands in the
+              // gap the line is showing. The rows only work out which gap.
+              <div
+                className="layer-stack"
+                onDragOver={(event) => {
+                  if (!drag) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'move';
+                }}
+                onDrop={dropInList}
+              >
+                {rows.map((row, index) => {
+                  const ids = rowItemIds(row);
+                  const label = row.kind === 'group' ? `Group of ${row.items.length}` : itemLabel(row.item, index);
+                  const open = row.kind === 'group' && expanded.has(row.id);
+                  const selectRow = (additive: boolean) => {
+                    // A group row stands for several items, so it goes through
+                    // the whole-set selector rather than the single-item one;
+                    // both honour the modifier, so a selection spanning two
+                    // groups can still be built here.
+                    if (row.kind === 'group') onSelectItems(ids, additive);
+                    else onSelectItem(row.id, additive);
+                  };
+                  return (
+                    // One entry per row: its number, the row, and -- for an open
+                    // group -- the layers inside it. The number sits outside the
+                    // row because it numbers the place in the stack, not the
+                    // layer: drag a layer and the numbers stay put while the
+                    // layers move past them.
+                    <div
+                      className="layer-entry"
+                      data-drop={
+                        dropGap === index
+                          ? 'before'
+                          : dropGap === rows.length && index === rows.length - 1
+                            ? 'after'
+                            : undefined
+                      }
+                      key={row.id}
+                      onDragOver={(event) => {
+                        if (!drag) return;
+                        // Which half of the entry the pointer is in picks the gap
+                        // above or below it. The whole entry, so an open group
+                        // with its layers listed counts as one thing to drop
+                        // around: nothing can be dropped *into* a group.
+                        const box = event.currentTarget.getBoundingClientRect();
+                        const gap = event.clientY < box.top + box.height / 2 ? index : index + 1;
+                        if (gap !== drag.gap) setDrag({ ...drag, gap });
+                      }}
+                    >
+                      <span className="layer-index">{String(rows.length - index).padStart(2, '0')}</span>
+                      {/* A row, not a button: it holds two of them. The
                         animation control cannot be nested inside the row's own
                         button, and making the whole row open the dialog would
-                        cost the click that selects a layer. */}
-                    <div
-                      className="layer-row"
-                      data-active={ids.every((id) => selectedIdSet.has(id))}
-                      data-group={row.kind === 'group' || undefined}
-                      data-open={open || undefined}
-                    >
-                      {row.kind === 'group' && (
+                        cost the click that selects a layer.
+                        The whole row is the drag handle. A drag only starts
+                        once the pointer moves with the button held, so a
+                        plain click still selects. */}
+                      <div
+                        className="layer-row"
+                        data-active={ids.every((id) => selectedIdSet.has(id))}
+                        data-dragging={drag?.rowId === row.id || undefined}
+                        data-group={row.kind === 'group' || undefined}
+                        data-open={open || undefined}
+                        draggable
+                        onDragEnd={() => setDrag(null)}
+                        onDragStart={(event) => {
+                          event.dataTransfer.effectAllowed = 'move';
+                          // Firefox starts no drag without data. What the data
+                          // says is unused: the drop reads `drag`, not this.
+                          event.dataTransfer.setData('text/plain', label);
+                          setDrag({ rowId: row.id, gap: null });
+                        }}
+                      >
+                        {row.kind === 'group' && (
+                          <button
+                            aria-expanded={open}
+                            aria-label={open ? 'Hide the layers in this group' : 'Show the layers in this group'}
+                            className="layer-disclosure"
+                            onClick={() => toggleExpanded(row.id)}
+                            type="button"
+                          >
+                            {open ? (
+                              <ChevronDown size={14} aria-hidden="true" />
+                            ) : (
+                              <ChevronRight size={14} aria-hidden="true" />
+                            )}
+                          </button>
+                        )}
                         <button
-                          aria-expanded={open}
-                          aria-label={open ? 'Hide the layers in this group' : 'Show the layers in this group'}
-                          className="layer-disclosure"
-                          onClick={() => toggleExpanded(row.id)}
+                          className="layer-select"
+                          onClick={(event) => selectRow(event.shiftKey || event.metaKey || event.ctrlKey)}
+                          onContextMenu={() => {
+                            // Right-clicking a layer that is not selected makes
+                            // it the selection, as a left click would; one that
+                            // is already part of a larger selection keeps it,
+                            // so several layers can be selected and grouped.
+                            if (!ids.every((id) => selectedIdSet.has(id))) selectRow(false);
+                          }}
                           type="button"
                         >
-                          {open ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
+                          {row.kind === 'group' && <Group size={13} aria-hidden="true" />}
+                          <span className="layer-name">{label}</span>
                         </button>
-                      )}
-                      <button
-                        className="layer-select"
-                        onClick={(event) => selectRow(event.shiftKey || event.metaKey || event.ctrlKey)}
-                        onContextMenu={() => {
-                          // Right-clicking a layer that is not selected makes
-                          // it the selection, as a left click would; one that
-                          // is already part of a larger selection keeps it,
-                          // so several layers can be selected and grouped.
-                          if (!ids.every((id) => selectedIdSet.has(id))) selectRow(false);
-                        }}
-                        type="button"
-                      >
-                        <span>{String(rows.length - index).padStart(2, '0')}</span>
-                        {row.kind === 'group' && <Group size={13} aria-hidden="true" />}
-                        <span className="layer-name">{label}</span>
-                      </button>
-                      {/* A group is one thing everywhere else -- it moves,
+                        {/* A group is one thing everywhere else -- it moves,
                           scales and rotates as one -- so it gets one entrance
                           that every member plays, rather than a control per
                           member. The first write takes the history snapshot
                           and the rest ride along, so setting a group's
                           entrance is one undo step however many items are in
                           it. */}
-                      <AnimationControl
-                        animation={row.kind === 'group' ? sharedAnimation(row.items) : row.item.animation}
-                        label={label}
-                        onChange={(animation, record) =>
-                          ids.forEach((id, member) => onSetItemAnimation(id, animation, record && member === 0))
-                        }
-                      />
+                        <AnimationControl
+                          animation={row.kind === 'group' ? sharedAnimation(row.items) : row.item.animation}
+                          label={label}
+                          onChange={(animation, record) =>
+                            ids.forEach((id, member) => onSetItemAnimation(id, animation, record && member === 0))
+                          }
+                        />
+                      </div>
+                      {open && (
+                        <div className="layer-members">
+                          {/* The members, top of the z-order first like the list
+                          itself. Clicking one selects the whole group: a group
+                          is never half-selected, anywhere. The disclosure is
+                          for seeing what is inside, not for splitting it --
+                          that is Ungroup. */}
+                          {[...row.items].reverse().map((member) => (
+                            <button
+                              className="layer-member"
+                              data-active={selectedIdSet.has(member.id)}
+                              key={member.id}
+                              onClick={(event) => selectRow(event.shiftKey || event.metaKey || event.ctrlKey)}
+                              onContextMenu={() => {
+                                if (!ids.every((id) => selectedIdSet.has(id))) selectRow(false);
+                              }}
+                              type="button"
+                            >
+                              <span className="layer-name">{itemLabel(member, canvasItems.indexOf(member))}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    {open &&
-                      // The members, top of the z-order first like the list
-                      // itself. Clicking one selects the whole group: a group
-                      // is never half-selected, anywhere. The disclosure is
-                      // for seeing what is inside, not for splitting it --
-                      // that is Ungroup.
-                      [...row.items].reverse().map((member) => (
-                        <button
-                          className="layer-member"
-                          data-active={selectedIdSet.has(member.id)}
-                          key={member.id}
-                          onClick={(event) => selectRow(event.shiftKey || event.metaKey || event.ctrlKey)}
-                          onContextMenu={() => {
-                            if (!ids.every((id) => selectedIdSet.has(id))) selectRow(false);
-                          }}
-                          type="button"
-                        >
-                          <span className="layer-name">{itemLabel(member, canvasItems.indexOf(member))}</span>
-                        </button>
-                      ))}
-                  </Fragment>
-                );
-              })
+                  );
+                })}
+              </div>
             )}
           </GroupMenu>
         </Field>

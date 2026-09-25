@@ -112,7 +112,12 @@ everything is a reformatting change of its own.
   moving, resizing, rotating, copying or deleting the group treats it as one
   thing. Copying a group gives you a second, independent group rather than
   enlarging the first.
-- Reorder and select items through the `Layers` list in the left panel.
+- Select items through the `Layers` list in the left panel, and drag a layer
+  up or down the list to change what sits in front of what: the top of the
+  list is the front of the canvas. A line shows where the layer will land, and
+  a group is dragged as one. The numbers beside the rows count places in the
+  stack, so they stay put while the layers move past them. Undo puts a move
+  back.
 - Give a layer an entrance with the sparkle button on its row in `Layers`:
   dissolve, slide in from any side, or pop. Set how long it takes and how long
   it waits first — the wait is what puts a sequence in order, and two layers
