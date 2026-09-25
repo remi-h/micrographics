@@ -174,3 +174,90 @@ test('a group is dragged whole, and stays one group', async ({ page }) => {
   expect(await paintOrder(page)).toEqual(['BBB', 'CCC', 'AAA']);
   await expect(page.locator('.layer-row[data-group]')).toHaveCount(1);
 });
+
+// Inside an open group, members are dragged among themselves: that moves one
+// in front of or behind the others, and never out of the group.
+
+const members = (page: Page) => page.locator('.layer-member');
+const memberNames = (page: Page) => members(page).allInnerTexts();
+
+/** Four labels, the top three grouped and the group opened: DDD, CCC, BBB inside, AAA below. */
+async function openGroupOfThree(page: Page) {
+  await page.goto('/creator');
+  await page.getByRole('button', { name: 'Start from scratch' }).click();
+  for (const label of ['AAA', 'BBB', 'CCC', 'DDD']) {
+    await page.locator('.text-input').fill(label);
+    await page.locator('.add-button').click();
+  }
+  await layerRows(page).nth(0).click();
+  await layerRows(page).nth(2).click({ modifiers: ['Shift'] });
+  await layerRows(page).nth(1).click({ modifiers: ['Shift'] });
+  await page.locator('.layer-row[data-active="true"] .layer-select').first().click({ button: 'right' });
+  await page.locator('.context-menu-item', { hasText: /^Group/ }).click();
+  await page.locator('.layer-disclosure').click();
+  expect(await layerNames(page)).toEqual(['Group of 3', 'AAA']);
+  expect(await memberNames(page)).toEqual(['DDD', 'CCC', 'BBB']);
+}
+
+/** Drags a member into the top or bottom half of another member. */
+async function dragMember(page: Page, name: string, onto: number, half: 'top' | 'bottom') {
+  const target = members(page).nth(onto);
+  const box = (await target.boundingBox())!;
+  await members(page)
+    .filter({ hasText: new RegExp(`^${name}$`) })
+    .dragTo(target, { targetPosition: { x: box.width / 2, y: half === 'top' ? 3 : box.height - 3 } });
+}
+
+test('dragging a member to the top of its group brings it in front of the others', async ({ page }) => {
+  await openGroupOfThree(page);
+
+  await dragMember(page, 'BBB', 0, 'top');
+
+  expect(await memberNames(page)).toEqual(['BBB', 'DDD', 'CCC']);
+  expect(await paintOrder(page)).toEqual(['AAA', 'CCC', 'DDD', 'BBB']);
+  // Still one group of three, in the same place in the list.
+  expect(await layerNames(page)).toEqual(['Group of 3', 'AAA']);
+});
+
+test('dragging a member down its group sends it behind the others', async ({ page }) => {
+  await openGroupOfThree(page);
+
+  await dragMember(page, 'DDD', 2, 'bottom');
+
+  expect(await memberNames(page)).toEqual(['CCC', 'BBB', 'DDD']);
+  expect(await paintOrder(page)).toEqual(['AAA', 'DDD', 'BBB', 'CCC']);
+});
+
+test('a member shows where it will land among the others, and cannot be dropped out of its group', async ({ page }) => {
+  await openGroupOfThree(page);
+  const source = (await members(page).filter({ hasText: /^BBB$/ }).boundingBox())!;
+  const top = (await members(page).nth(0).boundingBox())!;
+  const outside = (await layerRows(page).filter({ hasText: /^AAA/ }).boundingBox())!;
+
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(top.x + top.width / 2, top.y + 3, { steps: 8 });
+  await page.mouse.move(top.x + top.width / 2, top.y + 4);
+  await expect(members(page).nth(0)).toHaveAttribute('data-drop', 'before');
+  // A member's line is drawn among the members, never between rows.
+  await expect(page.locator('.layer-entry[data-drop]')).toHaveCount(0);
+
+  // Over a row outside the group there is nowhere for it to go.
+  await page.mouse.move(outside.x + outside.width / 2, outside.y + outside.height / 2, { steps: 8 });
+  await page.mouse.move(outside.x + outside.width / 2, outside.y + outside.height / 2 + 1);
+  await expect(page.locator('[data-drop]')).toHaveCount(0);
+  await page.mouse.up();
+
+  expect(await memberNames(page)).toEqual(['DDD', 'CCC', 'BBB']);
+  expect(await layerNames(page)).toEqual(['Group of 3', 'AAA']);
+});
+
+test('reordering inside a group is one undo step', async ({ page }) => {
+  await openGroupOfThree(page);
+
+  await dragMember(page, 'BBB', 0, 'top');
+  expect(await memberNames(page)).toEqual(['BBB', 'DDD', 'CCC']);
+
+  await page.keyboard.press('ControlOrMeta+z');
+  expect(await memberNames(page)).toEqual(['DDD', 'CCC', 'BBB']);
+});

@@ -943,6 +943,36 @@ h1 {
   border-left-color: #f4f0e8;
 }
 
+/* A member being dragged among the others, and where it will land: the same
+   fade and line as a whole row, inside the group's list and centred in the
+   4px between two members. */
+.layer-member {
+  position: relative;
+}
+
+.layer-member[data-dragging] {
+  opacity: 0.4;
+}
+
+.layer-member[data-drop]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: #f4f0e8;
+  pointer-events: none;
+}
+
+.layer-member[data-drop="before"]::before {
+  top: -3px;
+}
+
+.layer-member[data-drop="after"]::before {
+  bottom: -3px;
+}
+
 /* The right-click menu for Group / Ungroup, on the layers and the canvas. */
 .context-menu {
   min-width: 190px;

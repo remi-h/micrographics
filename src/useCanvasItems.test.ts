@@ -667,6 +667,23 @@ describe('useCanvasItems layer order', () => {
 
     expect(result.current.selectedIds).toEqual(['symbol-2']);
   });
+
+  it('moves a member within its group as one history entry, and a no-op as none', () => {
+    const { result, beginHistoryAction } = setUp({
+      canvasItems: [
+        { ...symbol('symbol-1'), groupId: 'group-1' },
+        { ...symbol('symbol-2', 300), groupId: 'group-1' },
+        symbol('symbol-3', 500),
+      ],
+    });
+
+    act(() => result.current.reorderGroupMember('symbol-2', 1));
+    expect(beginHistoryAction).not.toHaveBeenCalled();
+
+    act(() => result.current.reorderGroupMember('symbol-1', 0));
+    expect(result.current.canvasItems.map((item) => item.id)).toEqual(['symbol-2', 'symbol-1', 'symbol-3']);
+    expect(beginHistoryAction).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('useCanvasItems animation', () => {

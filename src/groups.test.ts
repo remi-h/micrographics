@@ -4,6 +4,7 @@ import {
   groupItems,
   isOneWholeGroup,
   layerRows,
+  moveMember,
   moveRow,
   pruneGroups,
   regroupCopies,
@@ -344,5 +345,55 @@ describe('moveRow', () => {
   it('clamps a gap past either end of the list', () => {
     expect(rowOrder(moveRow(items, 'a', -4))).toEqual(['a', 'b', 'g2']);
     expect(rowOrder(moveRow(items, 'b', 99))).toEqual(['g2', 'a', 'b']);
+  });
+});
+
+describe('moveMember', () => {
+  // Paint order, bottom first: a, then the group [g1, g2, g3], then b. An
+  // open group lists its members top first: g3, g2, g1.
+  const items = [symbol('a'), symbol('g1', 'group-1'), symbol('g2', 'group-1'), symbol('g3', 'group-1'), symbol('b')];
+  const listed = (moved: CanvasItem[]) => {
+    const group = layerRows(moved).find((row) => row.kind === 'group');
+    return group?.kind === 'group' ? [...group.items].reverse().map((item) => item.id) : [];
+  };
+
+  it('moves a member to the top of its group, and so in front of the others', () => {
+    const moved = moveMember(items, 'g1', 0);
+
+    expect(listed(moved)).toEqual(['g1', 'g3', 'g2']);
+    expect(ids(moved)).toEqual(['a', 'g2', 'g3', 'g1', 'b']);
+  });
+
+  it('moves a member to the bottom of its group', () => {
+    expect(listed(moveMember(items, 'g3', 3))).toEqual(['g2', 'g1', 'g3']);
+  });
+
+  it('counts the gap among the members as they stand', () => {
+    // Gap 2 sits between g2 and g1: g3 lands directly above g1.
+    expect(listed(moveMember(items, 'g3', 2))).toEqual(['g2', 'g3', 'g1']);
+  });
+
+  it('leaves everything outside the group where it was', () => {
+    const moved = moveMember(items, 'g1', 0);
+
+    expect(moved[0].id).toBe('a');
+    expect(moved[4].id).toBe('b');
+    expect(moved.filter((item) => item.groupId === 'group-1')).toHaveLength(3);
+  });
+
+  it('returns the same array for a drop that leaves the member where it was', () => {
+    expect(moveMember(items, 'g2', 1)).toBe(items);
+    expect(moveMember(items, 'g2', 2)).toBe(items);
+  });
+
+  it('returns the same array for an ungrouped item, or one not on the canvas', () => {
+    expect(moveMember(items, 'a', 0)).toBe(items);
+    expect(moveMember(items, 'missing', 0)).toBe(items);
+  });
+
+  it('reorders a group whose members a hand-edited save left apart, in the places they hold', () => {
+    const scattered = [symbol('g1', 'group-1'), symbol('a'), symbol('g2', 'group-1')];
+
+    expect(ids(moveMember(scattered, 'g1', 0))).toEqual(['g2', 'a', 'g1']);
   });
 });

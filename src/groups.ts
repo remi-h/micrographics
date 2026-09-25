@@ -211,26 +211,70 @@ export function rowItemIds(row: LayerRow): string[] {
  *
  * The move is made on rows and flattened back to items, never on items
  * directly, so a group travels whole and its members stay contiguous: there
- * is no gap *inside* a group to drop into. Returns `items` itself when nothing
- * moves, so the caller can skip an undo entry for a no-op.
+ * is no gap *inside* a group to drop a row into (members are reordered among
+ * themselves by `moveMember`). Returns `items` itself when nothing moves, so
+ * the caller can skip an undo entry for a no-op.
  */
 export function moveRow(items: CanvasItem[], rowId: string, gap: number): CanvasItem[] {
   const rows = layerRows(items);
-  const from = rows.findIndex((row) => row.id === rowId);
-  if (from < 0) return items;
-
-  const target = Math.max(0, Math.min(rows.length, Math.round(gap)));
-  // Removing the row first shifts every gap below it up by one.
-  const to = target > from ? target - 1 : target;
-  if (to === from) return items;
-
-  const reordered = [...rows];
-  const [moving] = reordered.splice(from, 1);
-  reordered.splice(to, 0, moving);
+  const reordered = moveToGap(
+    rows,
+    rows.findIndex((row) => row.id === rowId),
+    gap,
+  );
+  if (!reordered) return items;
 
   // Rows run topmost first and items bottom first, so flatten in reverse; a
   // group row already holds its members in painting order.
   return reordered.reverse().flatMap((row) => (row.kind === 'item' ? [row.item] : row.items));
+}
+
+/**
+ * Moves one member of a group to a new place among the group's members, as an
+ * open group lists them: topmost first, with `gap` counted the way `moveRow`
+ * counts it. The group keeps the places in the paint order it had; only who
+ * is in which of them changes, so nothing outside the group moves, and a
+ * member cannot be dragged out of its group this way. Ungroup is for that.
+ *
+ * Returns `items` itself when nothing moves, or for an item in no group.
+ */
+export function moveMember(items: CanvasItem[], memberId: string, gap: number): CanvasItem[] {
+  const groupId = items.find((item) => item.id === memberId)?.groupId;
+  if (!groupId) return items;
+
+  // The places the group holds, bottom first, and its members listed top first.
+  const places = items.flatMap((item, index) => (item.groupId === groupId ? [index] : []));
+  const listed = places.map((index) => items[index]).reverse();
+  const reordered = moveToGap(
+    listed,
+    listed.findIndex((item) => item.id === memberId),
+    gap,
+  );
+  if (!reordered) return items;
+
+  const next = [...items];
+  reordered.reverse().forEach((item, member) => {
+    next[places[member]] = item;
+  });
+  return next;
+}
+
+/**
+ * `list` with the entry at `from` moved into `gap` -- counted in the list as
+ * it stands, 0 above the first entry and `list.length` below the last -- or
+ * null when that leaves it where it was, or `from` is not in the list.
+ */
+function moveToGap<T>(list: T[], from: number, gap: number): T[] | null {
+  if (from < 0) return null;
+  const target = Math.max(0, Math.min(list.length, Math.round(gap)));
+  // Removing the entry first shifts every gap below it up by one.
+  const to = target > from ? target - 1 : target;
+  if (to === from) return null;
+
+  const reordered = [...list];
+  const [moving] = reordered.splice(from, 1);
+  reordered.splice(to, 0, moving);
+  return reordered;
 }
 
 // `delete item.groupId` on a copy rather than `groupId: undefined`: the item is

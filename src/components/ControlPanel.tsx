@@ -36,6 +36,7 @@ export function ControlPanel({
   onExportSvg,
   onRandomize,
   onRedo,
+  onReorderGroupMember,
   onReorderLayer,
   onRestartTemplate,
   onSelectItem,
@@ -57,6 +58,7 @@ export function ControlPanel({
   onExportSvg: () => void;
   onRandomize: () => void;
   onRedo: () => void;
+  onReorderGroupMember: (memberId: string, gap: number) => void;
   onReorderLayer: (rowId: string, gap: number) => void;
   onRestartTemplate: () => void;
   onSelectItem: (id: string, additive: boolean) => void;
@@ -69,8 +71,11 @@ export function ControlPanel({
   const selectedIdSet = new Set(selectedIds);
   const rows = layerRows(canvasItems);
   const { canGroup, canUngroup } = groupActions(canvasItems, selectedIds);
-  // Which group rows are open to show their members. View state for this
-  // panel only: not part of the drawing, not persisted, and not undoable.
+  // Which group rows are open to show their members, by group id. View state
+  // for this panel only: not part of the drawing, not persisted, and not
+  // undoable. Not by row id: a group row takes its topmost member's id, which
+  // changes when a member is dragged to the top, and the group would snap
+  // shut under the drag that just reordered it.
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const toggleExpanded = (groupId: string) =>
     setExpanded((current) => {
@@ -79,18 +84,26 @@ export function ControlPanel({
       else next.add(groupId);
       return next;
     });
-  // The layer being dragged in the list, and the gap it would land in if
-  // dropped now -- counted topmost first, as `moveRow` counts it. Null gap
-  // while the pointer is outside the list.
-  const [drag, setDrag] = useState<{ rowId: string; gap: number | null } | null>(null);
-  const dragFrom = drag ? rows.findIndex((row) => row.id === drag.rowId) : -1;
-  // A drop just above or just below the dragged row leaves it where it is, so
-  // no line is drawn there: a line promises a move.
+  // What is being dragged in the list -- a whole row, or one member of an
+  // open group among the others -- and the gap it would land in if dropped
+  // now, counted topmost first as `moveRow` and `moveMember` count it. Null
+  // gap while the pointer is somewhere a drop would do nothing.
+  const [drag, setDrag] = useState<
+    { kind: 'row'; id: string; gap: number | null } | { kind: 'member'; id: string; groupId: string; gap: number | null } | null
+  >(null);
+  // A member drags among its group's members as the open group lists them.
+  const dragGroup = drag?.kind === 'member' ? rows.find((row) => row.kind === 'group' && row.groupId === drag.groupId) : undefined;
+  const dragList = drag?.kind === 'member' ? (dragGroup?.kind === 'group' ? [...dragGroup.items].reverse() : []) : rows;
+  const dragFrom = drag ? dragList.findIndex((entry) => entry.id === drag.id) : -1;
+  // A drop just above or just below the dragged layer leaves it where it is,
+  // so no line is drawn there: a line promises a move.
   const dropGap = drag && drag.gap !== null && drag.gap !== dragFrom && drag.gap !== dragFrom + 1 ? drag.gap : null;
+  const rowDropGap = drag?.kind === 'row' ? dropGap : null;
+  const memberDropGap = drag?.kind === 'member' ? dropGap : null;
   const dropInList = (event: DragEvent) => {
     if (!drag) return;
     event.preventDefault();
-    if (dropGap !== null) onReorderLayer(drag.rowId, dropGap);
+    if (dropGap !== null) (drag.kind === 'row' ? onReorderLayer : onReorderGroupMember)(drag.id, dropGap);
     setDrag(null);
   };
   const [exportOpen, setExportOpen] = useState(false);
@@ -290,7 +303,7 @@ export function ControlPanel({
                 {rows.map((row, index) => {
                   const ids = rowItemIds(row);
                   const label = row.kind === 'group' ? `Group of ${row.items.length}` : itemLabel(row.item, index);
-                  const open = row.kind === 'group' && expanded.has(row.id);
+                  const open = row.kind === 'group' && expanded.has(row.groupId);
                   const selectRow = (additive: boolean) => {
                     // A group row stands for several items, so it goes through
                     // the whole-set selector rather than the single-item one;
@@ -308,15 +321,22 @@ export function ControlPanel({
                     <div
                       className="layer-entry"
                       data-drop={
-                        dropGap === index
+                        rowDropGap === index
                           ? 'before'
-                          : dropGap === rows.length && index === rows.length - 1
+                          : rowDropGap === rows.length && index === rows.length - 1
                             ? 'after'
                             : undefined
                       }
                       key={row.id}
                       onDragOver={(event) => {
                         if (!drag) return;
+                        // A member dragged out of its group's list is over no
+                        // place it can go: it only moves among its own group.
+                        // (Over that list, the list takes the event first.)
+                        if (drag.kind === 'member') {
+                          if (drag.gap !== null) setDrag({ ...drag, gap: null });
+                          return;
+                        }
                         // Which half of the entry the pointer is in picks the gap
                         // above or below it. The whole entry, so an open group
                         // with its layers listed counts as one thing to drop
@@ -337,7 +357,7 @@ export function ControlPanel({
                       <div
                         className="layer-row"
                         data-active={ids.every((id) => selectedIdSet.has(id))}
-                        data-dragging={drag?.rowId === row.id || undefined}
+                        data-dragging={(drag?.kind === 'row' && drag.id === row.id) || undefined}
                         data-group={row.kind === 'group' || undefined}
                         data-open={open || undefined}
                         draggable
@@ -352,7 +372,7 @@ export function ControlPanel({
                           // Firefox starts no drag without data. What the data
                           // says is unused: the drop reads `drag`, not this.
                           event.dataTransfer.setData('text/plain', label);
-                          setDrag({ rowId: row.id, gap: null });
+                          setDrag({ kind: 'row', id: row.id, gap: null });
                         }}
                       >
                         {row.kind === 'group' && (
@@ -360,7 +380,7 @@ export function ControlPanel({
                             aria-expanded={open}
                             aria-label={open ? 'Hide the layers in this group' : 'Show the layers in this group'}
                             className="layer-disclosure"
-                            onClick={() => toggleExpanded(row.id)}
+                            onClick={() => toggleExpanded(row.groupId)}
                             type="button"
                           >
                             {open ? (
@@ -401,17 +421,52 @@ export function ControlPanel({
                         />
                       </div>
                       {open && (
-                        <div className="layer-members">
+                        <div
+                          className="layer-members"
+                          onDragOver={(event) => {
+                            // Only a member of this group lands here; anything
+                            // else carries on to the entry, which places rows.
+                            if (drag?.kind !== 'member' || drag.groupId !== row.groupId) return;
+                            event.preventDefault();
+                            event.stopPropagation();
+                            event.dataTransfer.dropEffect = 'move';
+                            // The gap is how many members' middles are above the
+                            // pointer, so the 4px between two members counts as
+                            // the gap it looks like, not as nowhere.
+                            const gap = [...event.currentTarget.querySelectorAll('.layer-member')].filter((node) => {
+                              const box = node.getBoundingClientRect();
+                              return box.top + box.height / 2 < event.clientY;
+                            }).length;
+                            if (gap !== drag.gap) setDrag({ ...drag, gap });
+                          }}
+                        >
                           {/* The members, top of the z-order first like the list
                           itself. Clicking one selects the whole group: a group
                           is never half-selected, anywhere. The disclosure is
                           for seeing what is inside, not for splitting it --
-                          that is Ungroup. */}
-                          {[...row.items].reverse().map((member) => (
+                          that is Ungroup. Dragging one moves it among the
+                          others, and so in front of or behind them. */}
+                          {[...row.items].reverse().map((member, place, members) => (
                             <button
                               className="layer-member"
                               data-active={selectedIdSet.has(member.id)}
+                              data-dragging={(drag?.kind === 'member' && drag.id === member.id) || undefined}
+                              data-drop={
+                                memberDropGap === place
+                                  ? 'before'
+                                  : memberDropGap === members.length && place === members.length - 1
+                                    ? 'after'
+                                    : undefined
+                              }
+                              draggable
                               key={member.id}
+                              onDragEnd={() => setDrag(null)}
+                              onDragStart={(event) => {
+                                event.dataTransfer.effectAllowed = 'move';
+                                // Firefox starts no drag without data; see the row.
+                                event.dataTransfer.setData('text/plain', itemLabel(member, canvasItems.indexOf(member)));
+                                setDrag({ kind: 'member', id: member.id, groupId: row.groupId, gap: null });
+                              }}
                               onClick={(event) => selectRow(event.shiftKey || event.metaKey || event.ctrlKey)}
                               onContextMenu={() => {
                                 if (!ids.every((id) => selectedIdSet.has(id))) selectRow(false);
