@@ -91,6 +91,63 @@ test('a line shows where the dragged layer will land, and none where it would no
   expect(await layerNames(page)).toEqual(['AAA', 'CCC', 'BBB']);
 });
 
+/**
+ * Whether the drop line -- a ::before on the marked entry -- is drawn inside
+ * the list's box. The list scrolls, so a line outside it is clipped away even
+ * while the entry carries the attribute that asks for it.
+ */
+async function lineInsideList(page: Page) {
+  return page.evaluate(() => {
+    const entry = document.querySelector('.layer-entry[data-drop]') as HTMLElement;
+    const list = document.querySelector('.layer-list') as HTMLElement;
+    const line = getComputedStyle(entry, '::before');
+    const top = entry.getBoundingClientRect().top + parseFloat(line.top);
+    const bottom = top + parseFloat(line.height);
+    const box = list.getBoundingClientRect();
+    return top >= box.top && bottom <= box.bottom;
+  });
+}
+
+/** Starts dragging a layer and holds it over one half of an entry. */
+async function holdOver(page: Page, name: string, onto: number, half: 'top' | 'bottom') {
+  const source = (await layerRows(page).filter({ hasText: new RegExp(`^${name}`) }).boundingBox())!;
+  const target = (await entries(page).nth(onto).boundingBox())!;
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, half === 'top' ? target.y + 4 : target.y + target.height - 4, {
+    steps: 8,
+  });
+}
+
+test('the line is drawn inside the list at both ends, for the front and the back', async ({ page }) => {
+  await threeLabels(page);
+
+  await holdOver(page, 'AAA', 0, 'top');
+  await expect(entries(page).nth(0)).toHaveAttribute('data-drop', 'before');
+  expect(await lineInsideList(page), 'the line above the top row').toBe(true);
+  await page.mouse.up();
+
+  await holdOver(page, 'AAA', 2, 'bottom');
+  await expect(entries(page).nth(2)).toHaveAttribute('data-drop', 'after');
+  expect(await lineInsideList(page), 'the line below the bottom row').toBe(true);
+  await page.mouse.up();
+  expect(await layerNames(page)).toEqual(['CCC', 'BBB', 'AAA']);
+});
+
+test('the line goes when the drag leaves the list, and letting go there moves nothing', async ({ page }) => {
+  await threeLabels(page);
+
+  await holdOver(page, 'AAA', 0, 'top');
+  await expect(page.locator('.layer-entry[data-drop]')).toHaveCount(1);
+
+  const stage = (await page.locator('.preview-stage').boundingBox())!;
+  await page.mouse.move(stage.x + stage.width / 2, stage.y + stage.height / 2, { steps: 8 });
+  await expect(page.locator('.layer-entry[data-drop]')).toHaveCount(0);
+
+  await page.mouse.up();
+  expect(await layerNames(page)).toEqual(['CCC', 'BBB', 'AAA']);
+});
+
 test('a reorder is one undo step', async ({ page }) => {
   await threeLabels(page);
 

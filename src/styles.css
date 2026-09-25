@@ -830,7 +830,16 @@ h1 {
 
 .layer-members {
   display: grid;
+  gap: 4px;
   padding-top: 4px;
+}
+
+/* Room at both ends of the stack for the drop line. The list scrolls, so a
+   line drawn in the gap above the first row or below the last would fall
+   outside its box and be clipped -- at exactly the two drops that mean "to
+   the front" and "to the back". */
+.layer-stack {
+  padding: 6px 0;
 }
 
 /* The layer being dragged stays in its place, faded, until it is dropped:

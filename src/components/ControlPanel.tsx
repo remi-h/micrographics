@@ -81,7 +81,7 @@ export function ControlPanel({
     });
   // The layer being dragged in the list, and the gap it would land in if
   // dropped now -- counted topmost first, as `moveRow` counts it. Null gap
-  // while the pointer is over no row.
+  // while the pointer is outside the list.
   const [drag, setDrag] = useState<{ rowId: string; gap: number | null } | null>(null);
   const dragFrom = drag ? rows.findIndex((row) => row.id === drag.rowId) : -1;
   // A drop just above or just below the dragged row leaves it where it is, so
@@ -278,6 +278,13 @@ export function ControlPanel({
                   event.preventDefault();
                   event.dataTransfer.dropEffect = 'move';
                 }}
+                onDragLeave={(event) => {
+                  // Left the list altogether, not just one row for the next:
+                  // a drop out there does nothing, so the line has to go
+                  // rather than keep promising a move.
+                  if (!drag || event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+                  setDrag({ ...drag, gap: null });
+                }}
                 onDrop={dropInList}
               >
                 {rows.map((row, index) => {
@@ -336,6 +343,11 @@ export function ControlPanel({
                         draggable
                         onDragEnd={() => setDrag(null)}
                         onDragStart={(event) => {
+                          // React bubbles events along the component tree, so
+                          // a drag begun in the animation dialog -- portalled
+                          // out of the row but still its child in React --
+                          // would arrive here too. Only the row itself drags.
+                          if (!event.currentTarget.contains(event.target as Node)) return;
                           event.dataTransfer.effectAllowed = 'move';
                           // Firefox starts no drag without data. What the data
                           // says is unused: the drop reads `drag`, not this.
