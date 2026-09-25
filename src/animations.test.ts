@@ -4,6 +4,7 @@ import {
   DEFAULT_ANIMATION,
   MAX_DELAY,
   MAX_DURATION,
+  MAX_STAGGER,
   MIN_DURATION,
   animationClassName,
   animationFrames,
@@ -11,8 +12,10 @@ import {
   animationRunTime,
   animationStateAt,
   animationStyleSheet,
-  sharedAnimation,
   animationTiming,
+  groupAnimation,
+  maxStagger,
+  staggeredAnimation,
   type AnimationKind,
   type ItemAnimation,
 } from './animations';
@@ -260,8 +263,9 @@ describe('animationStateAt', () => {
 });
 
 // A group is one thing everywhere else in the editor, so its layer row shows
-// one entrance rather than a control per member.
-describe('sharedAnimation', () => {
+// one entrance rather than a control per member -- plus how far apart its
+// members start, read back from their own delays.
+describe('groupAnimation', () => {
   const item = (animation?: ItemAnimation): CanvasSymbol => ({
     id: `symbol-${Math.random()}`,
     kind: 'symbol',
@@ -273,26 +277,103 @@ describe('sharedAnimation', () => {
     ...(animation ? { animation } : {}),
   });
   const pop: ItemAnimation = { delay: 0.4, duration: 1.2, kind: 'pop' };
+  const at = (delay: number) => item({ ...pop, delay });
 
-  it('reports the entrance when every member plays the same one', () => {
-    expect(sharedAnimation([item(pop), item({ ...pop })])).toEqual(pop);
+  it('reports the entrance, and no stagger, when every member plays the same one', () => {
+    expect(groupAnimation([item(pop), item({ ...pop })])).toEqual({ animation: pop, stagger: 0 });
   });
 
-  it('reports nothing when the members disagree', () => {
+  it('reads evenly spaced delays back as a stagger, from the first member', () => {
+    expect(groupAnimation([at(0.4), at(0.7), at(1)])).toEqual({ animation: pop, stagger: 0.3 });
+  });
+
+  it('reads delays that only add up to a stagger in floating point as that stagger', () => {
+    // 0.1 three times over is 0.30000000000000004; the slider set 0.3.
+    expect(groupAnimation([at(0), at(0.1), at(0.2), at(0.3)])?.stagger).toBe(0.1);
+  });
+
+  it('reports nothing when the delays are not evenly spaced', () => {
+    expect(groupAnimation([at(0.4), at(0.7), at(1.3)])).toBeUndefined();
+  });
+
+  it('reports nothing when the members start in the reverse order', () => {
+    // Stagger runs in the order given; a group counting down is not one.
+    expect(groupAnimation([at(1), at(0.7), at(0.4)])).toBeUndefined();
+  });
+
+  it('reports nothing when the members play different entrances', () => {
     // There is no single answer to show, so the control reads as unset until
     // one is chosen for all of them.
-    expect(sharedAnimation([item(pop), item({ ...pop, kind: 'fade' })])).toBeUndefined();
+    expect(groupAnimation([item(pop), item({ ...pop, kind: 'fade' })])).toBeUndefined();
+    expect(groupAnimation([item(pop), item({ ...pop, duration: 2 })])).toBeUndefined();
   });
 
   it('counts a member with no entrance as a disagreement', () => {
-    expect(sharedAnimation([item(pop), item()])).toBeUndefined();
+    expect(groupAnimation([item(pop), item()])).toBeUndefined();
+    expect(groupAnimation([item(), item(pop)])).toBeUndefined();
   });
 
   it('reports nothing when no member has an entrance', () => {
-    expect(sharedAnimation([item(), item()])).toBeUndefined();
+    expect(groupAnimation([item(), item()])).toBeUndefined();
   });
 
   it('answers for an empty set rather than throwing', () => {
-    expect(sharedAnimation([])).toBeUndefined();
+    expect(groupAnimation([])).toBeUndefined();
+  });
+});
+
+describe('staggeredAnimation', () => {
+  const pop: ItemAnimation = { delay: 0.5, duration: 1, kind: 'pop' };
+
+  it('starts each member one stagger after the one before, from the group delay', () => {
+    expect([0, 1, 2].map((index) => staggeredAnimation(pop, 0.2, index).delay)).toEqual([0.5, 0.7, 0.9]);
+  });
+
+  it('keeps everything but the delay', () => {
+    expect(staggeredAnimation(pop, 0.2, 3)).toEqual({ ...pop, delay: 1.1 });
+  });
+
+  it('round-trips through groupAnimation', () => {
+    const members = [0, 1, 2, 3].map((index) => ({
+      animation: staggeredAnimation(pop, 0.3, index),
+      id: `m${index}`,
+      kind: 'symbol' as const,
+      mark: 'ring',
+      rotate: 0,
+      size: 42,
+      x: 0,
+      y: 0,
+    }));
+    expect(groupAnimation(members)).toEqual({ animation: pop, stagger: 0.3 });
+  });
+});
+
+describe('maxStagger', () => {
+  it('allows up to MAX_STAGGER when there is room', () => {
+    expect(maxStagger(3, 0)).toBe(MAX_STAGGER);
+  });
+
+  it('keeps the last member within MAX_DELAY, where a reload would clamp it', () => {
+    // Five members from 6s: the last starts 4 staggers later, so 1s each.
+    expect(maxStagger(5, 6)).toBe(1);
+    expect(6 + 4 * maxStagger(5, 6)).toBeLessThanOrEqual(MAX_DELAY);
+  });
+
+  it('rounds down to the slider step, never up past the limit', () => {
+    // (10 - 0.5) / 6 = 1.583..., so 1.5.
+    expect(maxStagger(7, 0.5)).toBe(1.5);
+  });
+
+  it('does not lose a step to floating point', () => {
+    // (10 - 9.4) / 2 is 0.29999999999999982, which a plain floor made 0.2 --
+    // a step short of what the delay slider had just allowed.
+    expect(maxStagger(3, 9.4)).toBe(0.3);
+    expect(maxStagger(2, 9.9)).toBe(0.1);
+    expect(maxStagger(2, 8.3)).toBe(1.7);
+  });
+
+  it('allows none for a single item, or with no room left', () => {
+    expect(maxStagger(1, 0)).toBe(0);
+    expect(maxStagger(4, MAX_DELAY)).toBe(0);
   });
 });

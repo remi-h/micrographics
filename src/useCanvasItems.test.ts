@@ -716,6 +716,53 @@ describe('useCanvasItems animation', () => {
     const copy = result.current.canvasItems.find((item) => item.id !== 'symbol-1');
     expect(copy?.animation).toEqual(slide);
   });
+
+  it('sets several entrances as one history entry', () => {
+    const { result, beginHistoryAction } = setUp({ canvasItems: [symbol('symbol-1'), symbol('symbol-2')] });
+
+    act(() =>
+      result.current.setItemAnimations([
+        { id: 'symbol-1', animation: slide },
+        { id: 'symbol-2', animation: { ...slide, delay: 0.5 } },
+      ]),
+    );
+
+    expect(itemById(result.current.canvasItems, 'symbol-1').animation).toEqual(slide);
+    expect(itemById(result.current.canvasItems, 'symbol-2').animation).toEqual({ ...slide, delay: 0.5 });
+    expect(beginHistoryAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('records a change even when the first item in the batch is already set', () => {
+    // Changing a group's stagger leaves its first member exactly as it was.
+    // Hanging the undo snapshot on that member would lose the change from
+    // undo altogether.
+    const { result, beginHistoryAction } = setUp({ canvasItems: [symbol('symbol-1'), symbol('symbol-2')] });
+    act(() => result.current.setItemAnimation('symbol-1', slide));
+    beginHistoryAction.mockClear();
+
+    act(() =>
+      result.current.setItemAnimations([
+        { id: 'symbol-1', animation: slide },
+        { id: 'symbol-2', animation: { ...slide, delay: 0.9 } },
+      ]),
+    );
+
+    expect(beginHistoryAction).toHaveBeenCalledTimes(1);
+    expect(itemById(result.current.canvasItems, 'symbol-2').animation?.delay).toBe(0.9);
+  });
+
+  it('records nothing for a batch that changes nothing', () => {
+    const { result, beginHistoryAction } = setUp({ canvasItems: [symbol('symbol-1'), symbol('symbol-2')] });
+
+    act(() =>
+      result.current.setItemAnimations([
+        { id: 'symbol-1', animation: null },
+        { id: 'symbol-2', animation: null },
+      ]),
+    );
+
+    expect(beginHistoryAction).not.toHaveBeenCalled();
+  });
 });
 
 // Align and distribute used to clamp each item's own anchor into 52..1148
