@@ -136,6 +136,7 @@ export const aiToolMarks = [
   'apple',
   'app-store',
   'android',
+  'expo',
   'macos',
   'bluetooth',
   'airplay-audio',
