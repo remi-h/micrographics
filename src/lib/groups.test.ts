@@ -544,6 +544,12 @@ describe('selectionUnits', () => {
     expect(selectionUnits(items, ['a', 'b', 'c', 'd', 'e']).map(ids)).toEqual([['a', 'b'], ['c'], ['d', 'e']]);
   });
 
+  it('keeps a loose item apart from a group whose id looks like an item key', () => {
+    const items = [symbol('a', 'item:x'), symbol('b', 'item:x'), symbol('x')];
+
+    expect(selectionUnits(items, ['a', 'b', 'x']).map(ids)).toEqual([['a', 'b'], ['x']]);
+  });
+
   it('leaves out what is not selected', () => {
     expect(selectionUnits([symbol('a'), symbol('b')], ['b']).map(ids)).toEqual([['b']]);
   });

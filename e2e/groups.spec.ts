@@ -718,8 +718,10 @@ test('aligning moves a group as one thing, keeping its layout', async ({ page })
   expect(after.B.left - after.AAAAAAAA.left).toBeCloseTo(before.B.left - before.AAAAAAAA.left, 1);
   expect(after.B.top - after.AAAAAAAA.top).toBeCloseTo(before.B.top - before.AAAAAAAA.top, 1);
   // And the middle of all it draws lines up with C's.
+  // Within 2 units, as alignment.spec.ts allows: the width model and the
+  // glyphs Chromium paints differ by a fraction of a unit.
   const groupMiddle = (Math.min(after.AAAAAAAA.left, after.B.left) + Math.max(after.AAAAAAAA.right, after.B.right)) / 2;
-  expect(groupMiddle).toBeCloseTo((after.C.left + after.C.right) / 2, 0);
+  expect(Math.abs(groupMiddle - (after.C.left + after.C.right) / 2)).toBeLessThan(2);
 });
 
 test('one group on its own gets no align toolbar: there is nothing to line it up against', async ({ page }) => {

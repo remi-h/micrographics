@@ -134,10 +134,10 @@ export type CanvasItems = {
   ungroupSelected: () => void;
 };
 
-// The middle of what an item actually draws. Align, distribute and the scroll
-// that brings a selection into view all work from this, and all three are
-// judged by eye -- so it has to be the middle of the glyphs, not of the box
-// the pointer grabs.
+// The middle of what an item actually draws. The scroll that brings a
+// selection into view works from this, and align and distribute work from the
+// same ink (see `unitBounds`), and all of them are judged by eye -- so it has
+// to be the middle of the glyphs, not of the box the pointer grabs.
 //
 // It used to measure `hitBounds`, which is that grab box, and the two are not
 // the same thing for text:
@@ -155,9 +155,18 @@ export type CanvasItems = {
 //
 // Pure geometry, so it lives outside the hook: nothing here reads state, which
 // lets effects call it without listing it as a dependency.
+export function visualCenter(item: CanvasItem) {
+  const bounds = inkBounds(item);
+  return {
+    x: bounds.x + bounds.width / 2,
+    y: bounds.y + bounds.height / 2,
+  };
+}
+
 /**
  * What a set of items draws, as one box: the union of each one's ink. A
- * group's box for aligning and distributing it as one thing.
+ * group's box for aligning and distributing it as one thing; for a single
+ * item, its own ink, so a loose item aligns exactly as it always has.
  */
 export function unitBounds(items: CanvasItem[]): Box {
   const boxes = items.map(inkBounds);
@@ -166,14 +175,6 @@ export function unitBounds(items: CanvasItem[]): Box {
   const right = Math.max(...boxes.map((box) => box.x + box.width));
   const bottom = Math.max(...boxes.map((box) => box.y + box.height));
   return { x: left, y: top, width: right - left, height: bottom - top };
-}
-
-export function visualCenter(item: CanvasItem) {
-  const bounds = inkBounds(item);
-  return {
-    x: bounds.x + bounds.width / 2,
-    y: bounds.y + bounds.height / 2,
-  };
 }
 
 // The artboard the selection is kept on, in canvas units.

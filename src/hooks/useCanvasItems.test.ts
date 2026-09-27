@@ -196,6 +196,10 @@ describe('useCanvasItems align and distribute', () => {
 
       const items = result.current.canvasItems;
       expect([offsets(items, 'a', 'b'), offsets(items, 'a', 'c')]).toEqual(before);
+      // And it did line up: the whole outer group's middle with the loose mark's.
+      const outer = unitBounds([itemById(items, 'a'), itemById(items, 'b'), itemById(items, 'c')]);
+      const loose = inkBounds(itemById(items, 'loose'));
+      expect(outer.y + outer.height / 2).toBeCloseTo(loose.y + loose.height / 2, 6);
     });
 
     it('distributes groups and loose items as units, evenly by their middles', () => {
