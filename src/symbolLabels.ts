@@ -20,6 +20,7 @@ const symbolLabelOverrides: Record<string, string> = {
   'do-not-wash': 'Do Not Wash',
   dotnet: '.NET',
   'dry-clean': 'Dry Clean',
+  'expo': 'Expo',
   figma: 'Figma',
   flutter: 'Flutter',
   github: 'GitHub',
