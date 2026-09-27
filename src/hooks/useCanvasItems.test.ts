@@ -40,6 +40,9 @@ function setUp(initial: { canvasItems?: CanvasItem[]; selectedIds?: string[] } =
   return { ...view, beginHistoryAction };
 }
 
+/** The outermost group an item is in. */
+const outerOf = (item: CanvasItem) => item.groups?.[0]?.id;
+
 function itemById(items: CanvasItem[], id: string) {
   const found = items.find((item) => item.id === id);
   if (!found) throw new Error(`expected an item with id ${id}`);
@@ -445,10 +448,10 @@ describe('useCanvasItems grouping', () => {
   it('groups the selection and takes one history entry for it', () => {
     const { result, beginHistoryAction } = grouped();
 
-    const groupId = itemById(result.current.canvasItems, 'symbol-1').groupId;
+    const groupId = outerOf(itemById(result.current.canvasItems, 'symbol-1'));
     expect(groupId).toBeDefined();
-    expect(itemById(result.current.canvasItems, 'symbol-2').groupId).toBe(groupId);
-    expect(itemById(result.current.canvasItems, 'symbol-3').groupId).toBeUndefined();
+    expect(outerOf(itemById(result.current.canvasItems, 'symbol-2'))).toBe(groupId);
+    expect(outerOf(itemById(result.current.canvasItems, 'symbol-3'))).toBeUndefined();
     expect(beginHistoryAction).toHaveBeenCalledTimes(1);
   });
 
@@ -460,7 +463,7 @@ describe('useCanvasItems grouping', () => {
 
     act(() => result.current.groupSelected());
 
-    expect(itemById(result.current.canvasItems, 'symbol-1').groupId).toBeUndefined();
+    expect(outerOf(itemById(result.current.canvasItems, 'symbol-1'))).toBeUndefined();
     expect(beginHistoryAction).not.toHaveBeenCalled();
   });
 
@@ -504,7 +507,7 @@ describe('useCanvasItems grouping', () => {
 
     act(() => result.current.ungroupSelected());
 
-    expect(result.current.canvasItems.every((item) => item.groupId === undefined)).toBe(true);
+    expect(result.current.canvasItems.every((item) => item.groups === undefined)).toBe(true);
   });
 
   it('takes no history entry for ungrouping a selection that is not grouped', () => {
@@ -526,8 +529,8 @@ describe('useCanvasItems grouping', () => {
 
     const copies = result.current.canvasItems.filter((item) => !['symbol-1', 'symbol-2', 'symbol-3'].includes(item.id));
     expect(copies).toHaveLength(2);
-    expect(copies[0].groupId).toBe(copies[1].groupId);
-    expect(copies[0].groupId).not.toBe(itemById(result.current.canvasItems, 'symbol-1').groupId);
+    expect(outerOf(copies[0])).toBe(outerOf(copies[1]));
+    expect(outerOf(copies[0])).not.toBe(outerOf(itemById(result.current.canvasItems, 'symbol-1')));
   });
 
   it('pastes a group as its own group', () => {
@@ -538,8 +541,8 @@ describe('useCanvasItems grouping', () => {
 
     const pasted = result.current.canvasItems.filter((item) => !['symbol-1', 'symbol-2', 'symbol-3'].includes(item.id));
     expect(pasted).toHaveLength(2);
-    expect(pasted[0].groupId).toBe(pasted[1].groupId);
-    expect(pasted[0].groupId).not.toBe(itemById(result.current.canvasItems, 'symbol-1').groupId);
+    expect(outerOf(pasted[0])).toBe(outerOf(pasted[1]));
+    expect(outerOf(pasted[0])).not.toBe(outerOf(itemById(result.current.canvasItems, 'symbol-1')));
   });
 
   it('keeps the group selected while one of its text items is edited', () => {
@@ -577,13 +580,13 @@ describe('useCanvasItems grouping', () => {
     // It would only re-mint the group id: nothing changes on screen, but the
     // user's next undo would appear to do nothing.
     const view = grouped();
-    const groupId = itemById(view.result.current.canvasItems, 'symbol-1').groupId;
+    const groupId = outerOf(itemById(view.result.current.canvasItems, 'symbol-1'));
     view.beginHistoryAction.mockClear();
 
     act(() => view.result.current.groupSelected());
 
     expect(view.beginHistoryAction).not.toHaveBeenCalled();
-    expect(itemById(view.result.current.canvasItems, 'symbol-1').groupId).toBe(groupId);
+    expect(outerOf(itemById(view.result.current.canvasItems, 'symbol-1'))).toBe(groupId);
   });
 
   it('still groups a selection that spans a group and a loose item', () => {
@@ -592,10 +595,10 @@ describe('useCanvasItems grouping', () => {
 
     act(() => view.result.current.groupSelected());
 
-    const groupId = itemById(view.result.current.canvasItems, 'symbol-3').groupId;
+    const groupId = outerOf(itemById(view.result.current.canvasItems, 'symbol-3'));
     expect(groupId).toBeDefined();
-    expect(itemById(view.result.current.canvasItems, 'symbol-1').groupId).toBe(groupId);
-    expect(itemById(view.result.current.canvasItems, 'symbol-2').groupId).toBe(groupId);
+    expect(outerOf(itemById(view.result.current.canvasItems, 'symbol-1'))).toBe(groupId);
+    expect(outerOf(itemById(view.result.current.canvasItems, 'symbol-2'))).toBe(groupId);
   });
 
   it('adds a group to the selection from a layer row held with a modifier', () => {
@@ -628,7 +631,129 @@ describe('useCanvasItems grouping', () => {
     act(() => result.current.setSelectedIds(['symbol-1']));
     act(() => result.current.removeSelected());
 
-    expect(itemById(result.current.canvasItems, 'symbol-2').groupId).toBeUndefined();
+    expect(outerOf(itemById(result.current.canvasItems, 'symbol-2'))).toBeUndefined();
+  });
+});
+
+describe('useCanvasItems nested groups', () => {
+  const pop = (delay = 0) => ({ delay, duration: 0.6, kind: 'pop' as const });
+  const slide = (delay = 0) => ({ delay, duration: 0.6, kind: 'slide-left' as const });
+  const pathOf = (items: CanvasItem[], id: string) => itemById(items, id).groups?.map((level) => level.id) ?? [];
+
+  // symbol-1 and symbol-2 grouped as group-1, symbol-3 loose.
+  const withGroup = (selectedIds: string[] = []) =>
+    setUp({
+      canvasItems: [
+        { ...symbol('symbol-1'), groups: [{ id: 'group-1' }] },
+        { ...symbol('symbol-2', 300), groups: [{ id: 'group-1' }] },
+        symbol('symbol-3', 500),
+      ],
+      selectedIds,
+    });
+
+  it('grouping a group with another layer puts the group inside a new one', () => {
+    const { result } = withGroup(['symbol-1', 'symbol-2', 'symbol-3']);
+
+    act(() => result.current.groupSelected());
+
+    const outer = outerOf(itemById(result.current.canvasItems, 'symbol-3'));
+    expect(outer).toBeDefined();
+    expect(pathOf(result.current.canvasItems, 'symbol-1')).toEqual([outer, 'group-1']);
+    expect(pathOf(result.current.canvasItems, 'symbol-2')).toEqual([outer, 'group-1']);
+  });
+
+  it('ungrouping a group of groups takes one level off', () => {
+    const { result } = withGroup(['symbol-1', 'symbol-2', 'symbol-3']);
+    act(() => result.current.groupSelected());
+
+    act(() => result.current.ungroupSelected());
+
+    expect(pathOf(result.current.canvasItems, 'symbol-1')).toEqual(['group-1']);
+    expect(pathOf(result.current.canvasItems, 'symbol-3')).toEqual([]);
+  });
+
+  it('ungrouping keeps an inner group playing what it played, and its row showing it', () => {
+    const outer = { id: 'O', animation: slide(2), stagger: 1 };
+    const inner = { id: 'I' };
+    const { result } = setUp({
+      canvasItems: [
+        { ...symbol('symbol-1'), groups: [outer, inner], animation: slide(3) },
+        { ...symbol('symbol-2', 300), groups: [outer, inner], animation: slide(3) },
+        { ...symbol('symbol-3', 500), groups: [outer], animation: slide(2) },
+      ],
+      selectedIds: ['symbol-1', 'symbol-2', 'symbol-3'],
+    });
+
+    act(() => result.current.ungroupSelected());
+
+    expect(itemById(result.current.canvasItems, 'symbol-1').groups).toEqual([{ id: 'I', animation: slide(3) }]);
+    expect(itemById(result.current.canvasItems, 'symbol-1').animation).toEqual(slide(3));
+    expect(itemById(result.current.canvasItems, 'symbol-3').animation).toEqual(slide(2));
+  });
+
+  it('selects the whole outermost group when one member deep inside is clicked', () => {
+    const { result } = withGroup(['symbol-1', 'symbol-2', 'symbol-3']);
+    act(() => result.current.groupSelected());
+    act(() => result.current.selectItem(null));
+
+    act(() => result.current.selectItem('symbol-1'));
+
+    expect(result.current.selectedIds).toEqual(['symbol-1', 'symbol-2', 'symbol-3']);
+  });
+
+  it('sets a group\'s entrance as one history entry and resolves it into the members', () => {
+    const { result, beginHistoryAction } = withGroup();
+
+    act(() => result.current.setGroupAnimation('group-1', pop(), 0.5));
+
+    // Listed top first: symbol-2 then symbol-1.
+    expect(itemById(result.current.canvasItems, 'symbol-2').animation).toEqual(pop(0));
+    expect(itemById(result.current.canvasItems, 'symbol-1').animation).toEqual(pop(0.5));
+    expect(beginHistoryAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives an inner group its own entrance, independent of the one around it', () => {
+    const { result } = withGroup(['symbol-1', 'symbol-2', 'symbol-3']);
+    act(() => result.current.groupSelected());
+    const outer = outerOf(itemById(result.current.canvasItems, 'symbol-3'))!;
+
+    act(() => result.current.setGroupAnimation(outer, pop(), 1));
+    act(() => result.current.setGroupAnimation('group-1', slide(), 0));
+
+    // Outer lists symbol-3 first (it paints on top), then group-1: group-1
+    // takes the second turn, one second in, and plays its own movement.
+    expect(itemById(result.current.canvasItems, 'symbol-3').animation).toEqual(pop(0));
+    expect(itemById(result.current.canvasItems, 'symbol-1').animation).toEqual(slide(1));
+    expect(itemById(result.current.canvasItems, 'symbol-2').animation).toEqual(slide(1));
+  });
+
+  it('records no history entry for setting what is already set', () => {
+    const { result, beginHistoryAction } = withGroup();
+    act(() => result.current.setGroupAnimation('group-1', pop(), 0.5));
+    beginHistoryAction.mockClear();
+
+    act(() => result.current.setGroupAnimation('group-1', pop(), 0.5));
+
+    expect(beginHistoryAction).not.toHaveBeenCalled();
+  });
+
+  it('moves the later children up a turn when one is deleted', () => {
+    const group = { id: 'group-1', animation: pop(), stagger: 0.5 };
+    const { result } = setUp({
+      canvasItems: [
+        { ...symbol('symbol-1'), groups: [group], animation: pop(1) },
+        { ...symbol('symbol-2', 300), groups: [group], animation: pop(0.5) },
+        { ...symbol('symbol-3', 500), groups: [group], animation: pop(0) },
+      ],
+      // The first to start, on its own. The editor would select the whole
+      // group; a selection set directly is how a single member goes.
+      selectedIds: ['symbol-3'],
+    });
+
+    act(() => result.current.removeSelected());
+
+    expect(itemById(result.current.canvasItems, 'symbol-2').animation).toEqual(pop(0));
+    expect(itemById(result.current.canvasItems, 'symbol-1').animation).toEqual(pop(0.5));
   });
 });
 
@@ -671,16 +796,17 @@ describe('useCanvasItems layer order', () => {
   it('keeps a staggered group staggered in its new order when a member is moved', () => {
     // Listed top first: symbol-3 at 0s, symbol-2 at 0.5s, symbol-1 at 1s.
     const at = (delay: number) => ({ delay, duration: 0.6, kind: 'pop' as const });
+    const group = { id: 'group-1', animation: at(0), stagger: 0.5 };
     const { result } = setUp({
       canvasItems: [
-        { ...symbol('symbol-1'), groupId: 'group-1', animation: at(1) },
-        { ...symbol('symbol-2', 300), groupId: 'group-1', animation: at(0.5) },
-        { ...symbol('symbol-3', 500), groupId: 'group-1', animation: at(0) },
+        { ...symbol('symbol-1'), groups: [group], animation: at(1) },
+        { ...symbol('symbol-2', 300), groups: [group], animation: at(0.5) },
+        { ...symbol('symbol-3', 500), groups: [group], animation: at(0) },
       ],
     });
 
     // symbol-1, which started last, goes to the top: now it starts first.
-    act(() => result.current.reorderGroupMember('symbol-1', 0));
+    act(() => result.current.reorderGroupChild('group-1', 'symbol-1', 0));
 
     expect(itemById(result.current.canvasItems, 'symbol-1').animation?.delay).toBe(0);
     expect(itemById(result.current.canvasItems, 'symbol-3').animation?.delay).toBe(0.5);
@@ -691,12 +817,12 @@ describe('useCanvasItems layer order', () => {
     const pop = { delay: 0.2, duration: 0.6, kind: 'pop' as const };
     const { result } = setUp({
       canvasItems: [
-        { ...symbol('symbol-1'), groupId: 'group-1', animation: pop },
-        { ...symbol('symbol-2', 300), groupId: 'group-1', animation: pop },
+        { ...symbol('symbol-1'), groups: [{ id: 'group-1' }], animation: pop },
+        { ...symbol('symbol-2', 300), groups: [{ id: 'group-1' }], animation: pop },
       ],
     });
 
-    act(() => result.current.reorderGroupMember('symbol-1', 0));
+    act(() => result.current.reorderGroupChild('group-1', 'symbol-1', 0));
 
     expect(result.current.canvasItems.map((item) => item.animation)).toEqual([pop, pop]);
   });
@@ -704,16 +830,16 @@ describe('useCanvasItems layer order', () => {
   it('moves a member within its group as one history entry, and a no-op as none', () => {
     const { result, beginHistoryAction } = setUp({
       canvasItems: [
-        { ...symbol('symbol-1'), groupId: 'group-1' },
-        { ...symbol('symbol-2', 300), groupId: 'group-1' },
+        { ...symbol('symbol-1'), groups: [{ id: 'group-1' }] },
+        { ...symbol('symbol-2', 300), groups: [{ id: 'group-1' }] },
         symbol('symbol-3', 500),
       ],
     });
 
-    act(() => result.current.reorderGroupMember('symbol-2', 1));
+    act(() => result.current.reorderGroupChild('group-1', 'symbol-2', 1));
     expect(beginHistoryAction).not.toHaveBeenCalled();
 
-    act(() => result.current.reorderGroupMember('symbol-1', 0));
+    act(() => result.current.reorderGroupChild('group-1', 'symbol-1', 0));
     expect(result.current.canvasItems.map((item) => item.id)).toEqual(['symbol-2', 'symbol-1', 'symbol-3']);
     expect(beginHistoryAction).toHaveBeenCalledTimes(1);
   });

@@ -285,7 +285,7 @@ test('editing a grouped text item leaves the group whole afterwards', async ({ p
   expect(moved, 'nudging after an edit should still move the whole group').toHaveLength(2);
 });
 
-test('two groups can be merged from the Layers list', async ({ page }) => {
+test('two groups grouped from the Layers list nest inside a new one', async ({ page }) => {
   await page.goto('/creator');
 
   // Two groups, made from the top four layers two at a time.
@@ -303,8 +303,12 @@ test('two groups can be merged from the Layers list', async ({ page }) => {
 
   await fromLayerMenu(page, 'Group');
 
+  // One row, a group of the two groups -- each still whole inside it.
   await expect(groupRows(page)).toHaveCount(1);
-  await expect(groupRows(page).first()).toContainText('Group of 4');
+  await expect(groupRows(page).first()).toContainText('Group of 2');
+  await groupRows(page).first().locator('.layer-disclosure').click();
+  await expect(page.locator('.layer-subgroup')).toHaveCount(2);
+  await expect(page.locator('.layer-subgroup').first()).toContainText('Group of 2');
 });
 
 // Grouping and entrances landed in separate PRs and meet in the Layers list.
@@ -394,4 +398,288 @@ test('a group can stagger its entrance, each member starting after the one liste
   expect(restaggered).toEqual({ AAA: 0, BBB: 1000, CCC: 500 });
   await groupRow.locator('.layer-animate').click();
   await expect(page.locator('.dialog-popup')).toContainText('+0.5s');
+});
+
+// Groups nest (issue #20): a group can hold groups, each with its own
+// entrance. The arithmetic -- whose turn comes when -- is unit-tested in
+// src/lib/groupTiming.test.ts; these prove the Layers list and Play.
+
+/** A blank canvas with labels added bottom to top, so the last is on top. */
+async function labels(page: Page, names: string[]) {
+  await page.goto('/creator');
+  await page.getByRole('button', { name: 'Start from scratch' }).click();
+  for (const name of names) {
+    await page.locator('.text-input').fill(name);
+    await page.locator('.add-button').click();
+  }
+}
+
+/** Selects the layers named (top-level rows) and groups them. */
+async function groupNamed(page: Page, names: string[]) {
+  for (const [index, name] of names.entries()) {
+    await layerRows(page)
+      .filter({ has: page.locator('.layer-name', { hasText: new RegExp(`^${name}$`) }) })
+      .click({ modifiers: index === 0 ? [] : ['Shift'] });
+  }
+  await fromLayerMenu(page, 'Group');
+}
+
+/** Each animated item's delay in ms and a digest of its movement, by label. */
+async function playedEntrances(page: Page) {
+  await page.locator('.stage-play').click();
+  return page.evaluate(() =>
+    Object.fromEntries(
+      [...document.querySelectorAll('g[class^="mg-anim-"]')].map((node) => {
+        const effect = (node as SVGGElement).getAnimations()[0]?.effect as KeyframeEffect | undefined;
+        return [
+          node.querySelector('text')?.textContent,
+          { delay: effect?.getTiming().delay, movement: JSON.stringify(effect?.getKeyframes()[0]?.transform ?? null) },
+        ];
+      }),
+    ),
+  );
+}
+
+/** Opens a group's entrance dialog, picks a movement and a stagger, closes it. */
+async function animateGroup(page: Page, row: ReturnType<Page['locator']>, movement: string, stagger: string) {
+  await row.locator('.layer-animate').first().click();
+  await page.locator('.animation-kinds button', { hasText: movement }).first().click();
+  await page.getByRole('slider', { name: /Each next layer/ }).fill(stagger);
+  await page.getByRole('button', { name: 'Done' }).click();
+  await expect(page.locator('.dialog-popup')).toHaveCount(0);
+}
+
+test('a group inside a group opens on its own, and a click anywhere in it selects the outermost group', async ({ page }) => {
+  await labels(page, ['A', 'B', 'C']);
+  await groupNamed(page, ['A', 'B']);
+  await groupNamed(page, ['Group of 2', 'C']);
+  await expect(groupRows(page)).toHaveCount(1);
+
+  await groupRows(page).first().locator('.layer-disclosure').click();
+  const inner = page.locator('.layer-subgroup');
+  await expect(inner).toHaveCount(1);
+  // Only the outer group's own children show until the inner one is opened.
+  await expect(page.locator('.layer-member')).toHaveText(['C']);
+
+  await inner.locator('.layer-disclosure').click();
+  await expect(page.locator('.layer-member')).toHaveText(['C', 'B', 'A']);
+
+  await page.locator('.layer-member', { hasText: /^A$/ }).click();
+  await expect(selectedOutlines(page)).toHaveCount(3);
+});
+
+test('ungrouping a group of groups takes off one level at a time', async ({ page }) => {
+  await labels(page, ['A', 'B', 'C']);
+  await groupNamed(page, ['A', 'B']);
+  await groupNamed(page, ['Group of 2', 'C']);
+
+  await fromLayerMenu(page, 'Ungroup');
+  // The inner group is back at the top, still whole; C is loose.
+  await expect(groupRows(page)).toHaveCount(1);
+  await expect(groupRows(page).first()).toContainText('Group of 2');
+  await expect(layerRows(page)).toHaveCount(2);
+
+  await groupRows(page).first().locator('.layer-select').click();
+  await fromLayerMenu(page, 'Ungroup');
+  await expect(groupRows(page)).toHaveCount(0);
+  await expect(layerRows(page)).toHaveCount(3);
+});
+
+test('each group has its own entrance, and timing nests', async ({ page }) => {
+  // The shape from the issue: outer holds an inner group (A, B) and C.
+  await labels(page, ['A', 'B', 'C']);
+  await groupNamed(page, ['A', 'B']);
+  await groupNamed(page, ['Group of 2', 'C']);
+  const outer = groupRows(page).first();
+
+  // Outer: pop, children 0.5s apart. Listed top first: C, then the inner group.
+  await animateGroup(page, outer, 'Pop in', '0.5');
+  await outer.locator('.layer-disclosure').click();
+  // Inner: its own movement, members 0.2s apart, starting at its turn.
+  await animateGroup(page, page.locator('.layer-subgroup'), 'Slide in from left', '0.2');
+
+  const entrances = await playedEntrances(page);
+  expect(entrances.C.delay).toBe(0);
+  expect(entrances.B.delay).toBe(500);
+  expect(entrances.A.delay).toBe(700);
+  // The inner group plays its own movement, not the outer one's.
+  expect(entrances.A.movement).toBe(entrances.B.movement);
+  expect(entrances.A.movement).not.toBe(entrances.C.movement);
+
+  // Both rows read their own settings back.
+  await page.locator('.layer-subgroup .layer-animate').click();
+  await expect(page.locator('.dialog-popup')).toContainText('+0.2s');
+  await page.getByRole('button', { name: 'Done' }).click();
+  await outer.locator('.layer-animate').click();
+  await expect(page.locator('.dialog-popup')).toContainText('+0.5s');
+});
+
+test('dragging a group inside a group changes when it takes its turn', async ({ page }) => {
+  await labels(page, ['A', 'B', 'C']);
+  await groupNamed(page, ['A', 'B']);
+  await groupNamed(page, ['Group of 2', 'C']);
+  const outer = groupRows(page).first();
+  await animateGroup(page, outer, 'Pop in', '0.5');
+  await outer.locator('.layer-disclosure').click();
+
+  // Listed: C, then the inner group. Drag the inner group above C.
+  const children = page.locator('.layer-members > .layer-child');
+  const top = (await children.nth(0).boundingBox())!;
+  await page.locator('.layer-subgroup').dragTo(children.nth(0), { targetPosition: { x: top.width / 2, y: 3 } });
+  await expect(page.locator('.layer-members > .layer-child').nth(0).locator('.layer-subgroup')).toHaveCount(1);
+
+  const entrances = await playedEntrances(page);
+  expect(entrances.A.delay).toBe(0);
+  expect(entrances.B.delay).toBe(0);
+  expect(entrances.C.delay).toBe(500);
+});
+
+test('nested groups and their entrances survive a reload', async ({ page }) => {
+  await labels(page, ['A', 'B', 'C']);
+  await groupNamed(page, ['A', 'B']);
+  await groupNamed(page, ['Group of 2', 'C']);
+  await animateGroup(page, groupRows(page).first(), 'Pop in', '0.5');
+  await page.waitForTimeout(800);
+  await page.reload();
+
+  await expect(groupRows(page)).toHaveCount(1);
+  await groupRows(page).first().locator('.layer-disclosure').click();
+  await expect(page.locator('.layer-subgroup')).toHaveCount(1);
+  const entrances = await playedEntrances(page);
+  expect(entrances.C.delay).toBe(0);
+  expect(entrances.B.delay).toBe(500);
+});
+
+test('a group\'s stagger is off until there is an entrance for it to space out', async ({ page }) => {
+  await labels(page, ['A', 'B']);
+  await groupNamed(page, ['A', 'B']);
+
+  await groupRows(page).first().locator('.layer-animate').click();
+  const stagger = page.getByRole('slider', { name: /Each next layer/ });
+  await expect(stagger).toBeDisabled();
+  await expect(page.locator('.dialog-popup')).toContainText('Pick an entrance to stagger the layers.');
+
+  await page.locator('.animation-kinds button', { hasText: 'Pop in' }).first().click();
+  await expect(stagger).toBeEnabled();
+});
+
+test('ungrouping keeps a group inside playing at its turn', async ({ page }) => {
+  await labels(page, ['A', 'B', 'C']);
+  await groupNamed(page, ['A', 'B']);
+  await groupNamed(page, ['Group of 2', 'C']);
+  const outer = groupRows(page).first();
+  await animateGroup(page, outer, 'Pop in', '0.5');
+  await outer.locator('.layer-disclosure').click();
+  // The inner group slides, starting at its turn: second, so 0.5s in.
+  await animateGroup(page, page.locator('.layer-subgroup'), 'Slide in from left', '0');
+  const before = await playedEntrances(page);
+  expect(before.A.delay).toBe(500);
+
+  await outer.locator('.layer-select').click();
+  await fromLayerMenu(page, 'Ungroup');
+  await expect(groupRows(page)).toHaveCount(1);
+
+  const after = await playedEntrances(page);
+  expect(after).toEqual(before);
+});
+
+test('an inner group adjusted without an entrance of its own keeps the movement it plays', async ({ page }) => {
+  await labels(page, ['A', 'B', 'C']);
+  await groupNamed(page, ['A', 'B']);
+  await groupNamed(page, ['Group of 2', 'C']);
+  const outer = groupRows(page).first();
+  await animateGroup(page, outer, 'Pop in', '0');
+  await outer.locator('.layer-disclosure').click();
+  const popped = (await playedEntrances(page)).A.movement;
+
+  // Nudge the inner group's duration: it gains an entrance of its own, but
+  // the same movement, not the default.
+  await page.locator('.layer-subgroup .layer-animate').click();
+  const duration = page.getByRole('slider', { name: /Duration/ });
+  await duration.focus();
+  await page.keyboard.press('ArrowRight');
+  await page.getByRole('button', { name: 'Done' }).click();
+
+  expect((await playedEntrances(page)).A.movement).toBe(popped);
+});
+
+test('a group with only a stagger can have it removed', async ({ page }) => {
+  await labels(page, ['A', 'B', 'C']);
+  await groupNamed(page, ['A', 'B']);
+  await groupNamed(page, ['Group of 2', 'C']);
+  const outer = groupRows(page).first();
+  await animateGroup(page, outer, 'Pop in', '0');
+  await outer.locator('.layer-disclosure').click();
+
+  const inner = page.locator('.layer-subgroup');
+  await inner.locator('.layer-animate').click();
+  await page.getByRole('slider', { name: /Each next layer/ }).fill('0.4');
+  const remove = page.getByRole('button', { name: 'Remove' });
+  await expect(remove).toBeEnabled();
+  await remove.click();
+
+  await inner.locator('.layer-animate').click();
+  await expect(page.locator('.dialog-popup')).toContainText('+0.0s');
+});
+
+test('a group inside another shows it plays that group\'s entrance', async ({ page }) => {
+  await labels(page, ['A', 'B', 'C']);
+  await groupNamed(page, ['A', 'B']);
+  await groupNamed(page, ['Group of 2', 'C']);
+  const outer = groupRows(page).first();
+  await animateGroup(page, outer, 'Pop in', '0');
+  await outer.locator('.layer-disclosure').click();
+
+  const innerButton = page.locator('.layer-subgroup .layer-animate');
+  await expect(innerButton).toHaveAttribute('data-inherited', 'true');
+  await expect(innerButton).not.toHaveAttribute('data-on');
+  await expect(innerButton).toHaveAttribute('title', /from the group around it/);
+});
+
+test('a stagger can space out groups inside with their own entrances, with none on the group itself', async ({ page }) => {
+  await labels(page, ['A', 'B', 'C', 'D']);
+  await groupNamed(page, ['A', 'B']);
+  await groupNamed(page, ['C', 'D']);
+  await page.locator('.layer-row[data-group] .layer-select').first().click();
+  await page.locator('.layer-row[data-group] .layer-select').nth(1).click({ modifiers: ['Shift'] });
+  await fromLayerMenu(page, 'Group');
+  const outer = groupRows(page).first();
+  await outer.locator('.layer-disclosure').click();
+  // Each inner group its own movement.
+  await animateGroup(page, page.locator('.layer-subgroup').nth(0), 'Pop in', '0');
+  await animateGroup(page, page.locator('.layer-subgroup').nth(1), 'Slide in from left', '0');
+
+  // The outer group has no entrance, but its stagger spaces the two out.
+  await outer.locator('.layer-animate').click();
+  const stagger = page.getByRole('slider', { name: /Each next layer/ });
+  await expect(stagger).toBeEnabled();
+  await stagger.fill('1');
+  await page.getByRole('button', { name: 'Done' }).click();
+
+  const entrances = await playedEntrances(page);
+  // Listed top first: C and D's group, then A and B's.
+  expect(entrances.C.delay).toBe(0);
+  expect(entrances.A.delay).toBe(1000);
+  expect(entrances.A.movement).not.toBe(entrances.C.movement);
+});
+
+test('a stored stagger past the slider\'s range stays reachable while it is dragged down', async ({ page }) => {
+  // Two layers popping 5s apart, grouped: the group takes over that spacing,
+  // wider than the slider's usual 2s.
+  await labels(page, ['A', 'B']);
+  for (const [name, delay] of [['A', '5'], ['B', '0']]) {
+    await layerRows(page).filter({ has: page.locator('.layer-name', { hasText: new RegExp(`^${name}$`) }) }).locator('.layer-animate').click();
+    await page.locator('.animation-kinds button', { hasText: 'Pop in' }).first().click();
+    await page.getByRole('slider', { name: /Starts after/ }).fill(delay);
+    await page.getByRole('button', { name: 'Done' }).click();
+  }
+  await groupNamed(page, ['A', 'B']);
+
+  await groupRows(page).first().locator('.layer-animate').click();
+  const stagger = page.getByRole('slider', { name: /Each next layer/ });
+  await expect(stagger).toHaveValue('5');
+  await expect(stagger).toHaveAttribute('max', '5');
+
+  await stagger.fill('4');
+  await expect(stagger).toHaveAttribute('max', '5');
 });

@@ -1,7 +1,8 @@
-import { ANIMATION_KINDS, MAX_DELAY, MAX_DURATION, MIN_DELAY, MIN_DURATION, type ItemAnimation } from './animations';
+import { ANIMATION_KINDS, MAX_DURATION, MIN_DELAY, MIN_DURATION, type ItemAnimation } from './animations';
 import { palettes } from '../data';
-import { pruneGroups } from './groups';
-import type { CanvasItem, Settings, Template } from '../types';
+import { normalizeGroups } from './groups';
+import { inheritedTiming, resolveGroupTiming } from './groupTiming';
+import type { CanvasItem, GroupLevel, Settings, Template } from '../types';
 
 export const STORAGE_KEY = 'micrographics.editor';
 
@@ -84,6 +85,15 @@ function parseSettings(value: unknown): Settings | null {
 // duration of 400 seconds is a bad save, not a reason to lose the artwork.
 const ANIMATION_KIND_SET = new Set<string>(ANIMATION_KINDS);
 
+// How late a saved delay or how wide a saved stagger may be. Deliberately not
+// the sliders' limits: nested groups add their turns together, and loose items
+// grouped with their own timing carry whatever spacing they had, so a real
+// canvas can hold a delay past MAX_DELAY or a stagger past MAX_STAGGER, and
+// clamping those to the sliders would re-time the work on every reload. This
+// only catches a save that is simply broken: an hour is longer than any
+// sequence anyone will watch, and a delay that long is not a timing choice.
+const MAX_SAVED_SECONDS = 3600;
+
 function parseAnimation(value: unknown): ItemAnimation | null {
   if (!isRecord(value)) return null;
 
@@ -92,10 +102,48 @@ function parseAnimation(value: unknown): ItemAnimation | null {
   if (!isFiniteNumber(duration) || !isFiniteNumber(delay)) return null;
 
   return {
-    delay: Math.min(Math.max(delay, MIN_DELAY), MAX_DELAY),
+    delay: Math.min(Math.max(delay, MIN_DELAY), MAX_SAVED_SECONDS),
     duration: Math.min(Math.max(duration, MIN_DURATION), MAX_DURATION),
     kind: kind as ItemAnimation['kind'],
   };
+}
+
+// A group level: an id, and the group's own entrance and stagger if it set
+// them. A save from before groups nested has a single `groupId` instead,
+// which is one level with no settings of its own; `adoptLegacyTiming` below
+// gives it back the entrance its members played.
+function parseGroups(value: unknown, legacyGroupId: unknown): GroupLevel[] {
+  if (!Array.isArray(value)) {
+    return typeof legacyGroupId === 'string' && legacyGroupId.length > 0 ? [{ id: legacyGroupId }] : [];
+  }
+  const levels: GroupLevel[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry) || typeof entry.id !== 'string' || entry.id.length === 0) break;
+    const animation = parseAnimation(entry.animation);
+    const stagger = isFiniteNumber(entry.stagger) ? Math.min(Math.max(entry.stagger, 0), MAX_SAVED_SECONDS) : 0;
+    levels.push({ id: entry.id, ...(animation ? { animation } : {}), ...(stagger ? { stagger } : {}) });
+  }
+  return levels;
+}
+
+// Before groups stored an entrance of their own, a group's entrance was the
+// one its members all played, staggered down the list. A group read back from
+// such a save takes that over as its own, so its row shows it and it keeps
+// playing the same way.
+function adoptLegacyTiming(items: CanvasItem[], legacy: Set<string>): CanvasItem[] {
+  if (legacy.size === 0) return items;
+
+  const timing = new Map(
+    [...legacy].map((id) => {
+      const listed = items.filter((item) => item.groups?.[0]?.id === id).reverse();
+      return [id, inheritedTiming(listed.map((item) => ({ ...item, groups: undefined })))];
+    }),
+  );
+  return items.map((item) =>
+    item.groups?.[0] && legacy.has(item.groups[0].id)
+      ? { ...item, groups: [{ id: item.groups[0].id, ...timing.get(item.groups[0].id) }] }
+      : item,
+  );
 }
 
 function parseCanvasItem(value: unknown): CanvasItem | null {
@@ -107,10 +155,11 @@ function parseCanvasItem(value: unknown): CanvasItem | null {
   if (!isFiniteNumber(x) || !isFiniteNumber(y)) return null;
 
   // Grouping is newer than the saved shape, so a save from before it exists
-  // simply has no groupId and restores ungrouped. An unusable value is dropped
+  // simply has no groups and restores ungrouped. An unusable value is dropped
   // rather than failing the item: a lost grouping costs the user a re-group,
   // where a rejected item costs them the whole canvas.
-  const groupId = typeof value.groupId === 'string' && value.groupId.length > 0 ? { groupId: value.groupId } : null;
+  const parsedGroups = parseGroups(value.groups, value.groupId);
+  const groups = parsedGroups.length > 0 ? { groups: parsedGroups } : null;
 
   // Animations are newer than the saved shape too, and are dropped on the same
   // terms and for the same reason: a lost entrance costs the user one dialog.
@@ -119,12 +168,12 @@ function parseCanvasItem(value: unknown): CanvasItem | null {
 
   if (kind === 'symbol') {
     if (typeof value.mark !== 'string' || value.mark.length === 0) return null;
-    return { ...groupId, ...animation, id, kind, mark: value.mark, rotate, size, x, y };
+    return { ...groups, ...animation, id, kind, mark: value.mark, rotate, size, x, y };
   }
 
   if (kind === 'text') {
     if (typeof value.text !== 'string') return null;
-    return { ...groupId, ...animation, id, kind, rotate, size, text: value.text, x, y };
+    return { ...groups, ...animation, id, kind, rotate, size, text: value.text, x, y };
   }
 
   return null;
@@ -134,17 +183,23 @@ function parseCanvasItems(value: unknown): CanvasItem[] | null {
   if (!Array.isArray(value)) return null;
 
   const items: CanvasItem[] = [];
+  // Groups saved as a bare `groupId`, from before groups nested.
+  const legacy = new Set<string>();
   for (const entry of value) {
     const item = parseCanvasItem(entry);
     if (!item) return null;
     items.push(item);
+    if (isRecord(entry) && !Array.isArray(entry.groups) && item.groups) legacy.add(item.groups[0].id);
   }
 
   // Groups come back from storage, which is the one place items arrive without
-  // having gone through the operations that keep a group at two members or
-  // more. A save naming a group only one surviving item belongs to would
-  // otherwise draw a "Group of 1" row nothing can be done with.
-  return pruneGroups(items);
+  // having gone through the operations that keep groups whole: two children
+  // or more, members together, and every member agreeing where the group sits.
+  // A save naming a group only one surviving item belongs to would otherwise
+  // draw a "Group of 1" row nothing can be done with. Timing is then worked
+  // out again from the groups, since each item's stored entrance is only a
+  // copy of what its groups give it.
+  return resolveGroupTiming(normalizeGroups(adoptLegacyTiming(items, legacy)));
 }
 
 function parseZoom(value: unknown): number {

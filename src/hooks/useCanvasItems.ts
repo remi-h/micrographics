@@ -1,7 +1,8 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { groupAnimation, sameAnimation, staggeredAnimation, type ItemAnimation } from '../lib/animations';
+import { sameAnimation, type ItemAnimation } from '../lib/animations';
 import { hitBounds, inkBounds, type Box } from '../lib/canvasGeometry';
-import { expandToGroups, groupItems, moveMember, moveRow, pruneGroups, regroupCopies, ungroupItems } from '../lib/groups';
+import { expandToGroups, groupItems, moveChild, moveRow, outermostGroupId, regroupCopies, ungroupItems } from '../lib/groups';
+import { inheritedTiming, keepInheritedEntrances, pruneKeepingTiming, resolveGroupTiming, setGroupTiming } from '../lib/groupTiming';
 import { createItemId } from '../lib/itemIds';
 import type { CanvasItem, CanvasSymbol, CanvasText } from '../types';
 import { clamp } from '../lib/utils';
@@ -66,7 +67,11 @@ export type CanvasItems = {
   editingTextDraft: string;
   editingTextId: string | null;
   findOpenPosition: (width: number, height: number) => Box;
-  /** Puts the selection into one group. Needs two items; does nothing with fewer. */
+  /**
+   * Puts the selection into one group. Needs two things -- loose items or
+   * whole groups -- and does nothing with fewer. Groups in the selection end
+   * up inside the new one.
+   */
   groupSelected: () => void;
   moveItem: (id: string, x: number, y: number) => void;
   nudgeSelected: (dx: number, dy: number) => void;
@@ -79,11 +84,12 @@ export type CanvasItems = {
    */
   reorderLayer: (rowId: string, gap: number) => void;
   /**
-   * Moves one member of a group to the gap `gap` among the group's members,
-   * as an open group lists them. It stays in its group. One undo step; none
-   * for a drop that leaves it where it was.
+   * Moves one child of group `groupId` -- an item or a group directly in it --
+   * to the gap `gap` among the group's children, as the open group lists
+   * them. It stays in the group, and the group's timing follows the new order.
+   * One undo step; none for a drop that leaves it where it was.
    */
-  reorderGroupMember: (memberId: string, gap: number) => void;
+  reorderGroupChild: (groupId: string, childId: string, gap: number) => void;
   rotateItems: (updates: Array<{ id: string; rotate: number }>) => void;
   scaleItems: (updates: Array<{ id: string; size: number; x: number; y: number }>) => void;
   selectItem: (id: string | null, additive?: boolean) => void;
@@ -105,17 +111,26 @@ export type CanvasItems = {
    */
   setItemAnimation: (id: string, animation: ItemAnimation | null, record?: boolean) => void;
   /**
+   * Sets group `groupId`'s own entrance -- `null` takes it away -- and how far
+   * apart its children start, and works out what that makes each member play
+   * (see groupTiming.ts). `record` as for `setItemAnimation`.
+   */
+  setGroupAnimation: (groupId: string, animation: ItemAnimation | null, stagger: number, record?: boolean) => void;
+  /**
    * Sets several items' entrances as one change: one history entry for all of
-   * them, or none when none of them changes. A group's entrance goes through
-   * here, since a staggered group gives each member a different one; setting
-   * them one at a time would hang the undo snapshot on whichever went first,
-   * and changing only the stagger leaves the first member exactly as it was.
+   * them, or none when none of them changes. For loose layers: a grouped
+   * item's entrance is worked out from its groups (`setGroupAnimation`), and
+   * anything written here for one is replaced the next time that happens.
    */
   setItemAnimations: (updates: Array<{ id: string; animation: ItemAnimation | null }>, record?: boolean) => void;
   setEditingTextDraft: Dispatch<SetStateAction<string>>;
   setTextDraft: Dispatch<SetStateAction<string>>;
   textDraft: string;
-  /** Dissolves every group in the selection, leaving the items themselves alone. */
+  /**
+   * Takes one level -- the outermost group -- off every group in the
+   * selection, so the groups inside come out whole. Everything goes on
+   * playing exactly what it played (see `keepInheritedEntrances`).
+   */
   ungroupSelected: () => void;
 };
 
@@ -198,35 +213,6 @@ export function moveKeepingTogether(
   return new Map(
     moved.map(({ dx, dy, item }) => [item.id, { x: item.x + dx + shiftX, y: item.y + dy + shiftY }]),
   );
-}
-
-// The members of `member`'s group as an open group lists them: top first.
-function listedMembers(items: CanvasItem[], member: string) {
-  const groupId = items.find((item) => item.id === member)?.groupId;
-  return groupId ? items.filter((item) => item.groupId === groupId).reverse() : [];
-}
-
-/**
- * A staggered group starts its members in the order it lists them, and each
- * member carries its own delay. Moving a member within the group keeps those
- * delays with the items, so without this the member dragged to the top would
- * still start last -- and the group's delays would no longer be evenly spaced
- * in its new order, so its entrance would read as unset. Dragging a member is
- * how the order it starts in is chosen, so the stagger is laid out again in
- * the new order. A group with no stagger, or no shared entrance, is left as
- * it is.
- */
-function restagger(before: CanvasItem[], after: CanvasItem[], member: string): CanvasItem[] {
-  const shared = groupAnimation(listedMembers(before, member));
-  if (!shared || shared.stagger === 0) return after;
-
-  const delays = new Map(
-    listedMembers(after, member).map((item, index) => [
-      item.id,
-      staggeredAnimation(shared.animation, shared.stagger, index),
-    ]),
-  );
-  return after.map((item) => (delays.has(item.id) ? { ...item, animation: delays.get(item.id) } : item));
 }
 
 // A copy of each item, nudged clear of the original so the user can see that
@@ -422,7 +408,13 @@ export function useCanvasItems({
     beginHistoryAction();
     // Pruned afterwards because a delete can strip a group down to one member,
     // and a group of one is a layer row the user cannot do anything with.
-    setCanvasItems((current) => pruneGroups(current.filter((item) => !selectedIds.includes(item.id))));
+    // Timing is worked out again because a delete moves the children after it
+    // up a turn in their group. Selection always covers whole outermost
+    // groups, so a delete from the editor removes groups whole; a group left
+    // with one child -- from a selection set any other way -- hands its timing
+    // on as ungrouping does, except to an item directly inside it when a group
+    // further out has an entrance, which that item then plays.
+    setCanvasItems((current) => pruneKeepingTiming(current.filter((item) => !selectedIds.includes(item.id))));
     setSelectedIds([]);
   };
 
@@ -458,7 +450,11 @@ export function useCanvasItems({
   };
 
   const groupSelected = () => {
-    const grouped = groupItems(canvasItems, selectedIds);
+    // Loose items that already play one staggered entrance hand it to their
+    // new group, so the group's row shows it rather than reading as unset.
+    const members = new Set(expandToGroups(selectedIds, canvasItems));
+    const listed = canvasItems.filter((item) => members.has(item.id)).reverse();
+    const grouped = groupItems(canvasItems, selectedIds, inheritedTiming(listed));
     if (grouped === canvasItems) return;
     beginHistoryAction();
     setCanvasItems(grouped);
@@ -472,18 +468,31 @@ export function useCanvasItems({
     setCanvasItems(reordered);
   };
 
-  const reorderGroupMember = (memberId: string, gap: number) => {
-    const reordered = moveMember(canvasItems, memberId, gap);
+  const reorderGroupChild = (groupId: string, childId: string, gap: number) => {
+    const reordered = moveChild(canvasItems, groupId, childId, gap);
     if (reordered === canvasItems) return;
     beginHistoryAction();
-    setCanvasItems(restagger(canvasItems, reordered, memberId));
+    // Children take their turns in list order, so a new order is new timing.
+    setCanvasItems(resolveGroupTiming(reordered));
+  };
+
+  const setGroupAnimation = (groupId: string, animation: ItemAnimation | null, stagger: number, record = true) => {
+    const next = setGroupTiming(canvasItems, groupId, animation, stagger);
+    if (next === canvasItems) return;
+    if (record) beginHistoryAction();
+    setCanvasItems(next);
   };
 
   const ungroupSelected = () => {
-    const ungrouped = ungroupItems(canvasItems, selectedIds);
+    const outermost = new Set(
+      canvasItems.filter((item) => selectedIds.includes(item.id)).flatMap((item) => outermostGroupId(item) ?? []),
+    );
+    // The groups that were inside keep playing what they played: one with no
+    // entrance of its own is given the one it had from the group that is going.
+    const ungrouped = ungroupItems(keepInheritedEntrances(canvasItems, outermost), selectedIds);
     if (ungrouped === canvasItems) return;
     beginHistoryAction();
-    setCanvasItems(ungrouped);
+    setCanvasItems(resolveGroupTiming(ungrouped));
   };
 
   const setItemAnimations = (updates: Array<{ id: string; animation: ItemAnimation | null }>, record = true) => {
@@ -629,13 +638,14 @@ export function useCanvasItems({
     nudgeSelected,
     pasteClipboard,
     removeSelected,
-    reorderGroupMember,
+    reorderGroupChild,
     reorderLayer,
     rotateItems,
     scaleItems,
     selectItem,
     selectItems,
     setEditingTextDraft,
+    setGroupAnimation,
     setItemAnimation,
     setItemAnimations,
     setTextDraft,

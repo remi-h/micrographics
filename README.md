@@ -116,11 +116,17 @@ everything is a reformatting change of its own.
   moving, resizing, rotating, copying or deleting the group treats it as one
   thing. Copying a group gives you a second, independent group rather than
   enlarging the first.
+- Groups nest: group a group with other layers, or two groups together, and
+  they sit inside a new group, each still whole. An open group lists the
+  groups inside it as rows of their own, each with its own `>`. A click
+  anywhere inside still selects the outermost group, and `Ungroup` takes off
+  one level at a time.
 - Select items through the `Layers` list in the left panel, and drag a layer
   up or down the list to change what sits in front of what: the top of the
   list is the front of the canvas. A line shows where the layer will land, and
-  a group is dragged as one. Inside an open group, drag its layers among
-  themselves to change which is in front; they stay in the group. The
+  a group is dragged as one. Inside an open group, drag its layers and the
+  groups inside it among themselves to change which is in front; they stay in
+  the group. The
   numbers beside the rows count places in the stack, so they stay put while
   the layers move past them. Undo puts a move back.
 - Give a layer an entrance with the sparkle button on its row in `Layers`:
@@ -128,10 +134,16 @@ everything is a reformatting change of its own.
   it waits first — the wait is what puts a sequence in order, and two layers
   can share a moment by sharing a delay. `Play`, above the canvas, previews the
   whole sequence; it only appears once something has an entrance.
-- A group's row gives the whole group one entrance, plus `Each next layer`:
-  a stagger, so each member starts that long after the one listed above it
-  in the open group. At 0 they all arrive together. Drag the layers inside
-  the group to change who starts first; the stagger follows the new order.
+- Every group, at any depth, has an entrance of its own on its row, plus
+  `Each next layer`: a stagger, so each thing listed in the open group starts
+  that long after the one above it. At 0 they all arrive together. A group
+  inside another takes one turn in it, then staggers its own layers from
+  there, and can play a different movement from the group around it; with
+  none of its own, it plays the outer group's, and its sparkle shows that.
+  With no entrance here, around it or in groups inside it, the stagger is
+  off. Drag the layers inside a group to change who
+  starts first; the timing follows the new order. Ungrouping keeps what
+  everything plays.
 - Choose a palette from the swatches above the canvas, and zoom with the
   controls next to them.
 - Toggle `Grid` and `Include background` in the right panel, or upload your

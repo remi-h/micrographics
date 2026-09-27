@@ -87,13 +87,14 @@ function App() {
     nudgeSelected,
     pasteClipboard,
     removeSelected,
-    reorderGroupMember,
+    reorderGroupChild,
     reorderLayer,
     rotateItems,
     scaleItems,
     selectItem,
     selectItems,
     setEditingTextDraft,
+    setGroupAnimation,
     setItemAnimations,
     setTextDraft,
     textDraft,
@@ -282,12 +283,13 @@ function App() {
           onExportSvg={exportSvg}
           onRandomize={randomize}
           onRedo={redo}
-          onReorderGroupMember={reorderGroupMember}
+          onReorderGroupChild={reorderGroupChild}
           onReorderLayer={reorderLayer}
           onGroupSelected={groupSelected}
           onRestartTemplate={restartTemplate}
           onSelectItem={selectItem}
           onSelectItems={selectItems}
+          onSetGroupAnimation={setGroupAnimation}
           onSetItemAnimations={setItemAnimations}
           onUndo={undo}
           onUngroupSelected={ungroupSelected}
