@@ -9,11 +9,13 @@ import type { CanvasItem, GroupLevel } from '../types';
 // nest because a path can be longer than one: grouping two groups gives both
 // of them's members a new outermost level.
 //
-// Everything the editor already does to a set of items -- move, scale, rotate,
-// align, delete, export -- therefore keeps working untouched, because a group
-// only ever changes *which* ids end up selected, never what happens to them
-// afterwards. Selection works on outermost groups: an item is never selected
-// without the rest of the outermost group it is in.
+// Most of what the editor does to a set of items -- move, scale, rotate,
+// delete, export -- therefore keeps working untouched, because a group only
+// changes *which* ids end up selected, never what happens to them afterwards.
+// Selection works on outermost groups: an item is never selected without the
+// rest of the outermost group it is in. Align and distribute are the
+// exception: they line things up, and a group is one thing, so they work on
+// `selectionUnits` rather than on items.
 //
 // That is why the rest of this file is pure functions over an item array.
 // Nothing here reads or writes React state; the hook that does calls in.
@@ -75,6 +77,26 @@ export function expandToGroups(ids: string[], items: CanvasItem[]): string[] {
   // Item order, not click order: a selection is a set, and returning it in the
   // order it is painted keeps the layer list and the canvas agreeing.
   return items.filter((item) => expanded.has(item.id)).map((item) => item.id);
+}
+
+/**
+ * The selection as the things it is made of: each outermost group in it as
+ * one unit, and each loose item as one of its own, in paint order. Align and
+ * distribute move these rather than items, so a group keeps its own layout
+ * and lines up with the rest as the one thing it is everywhere else.
+ */
+export function selectionUnits(items: CanvasItem[], ids: string[]): CanvasItem[][] {
+  const units = new Map<string, CanvasItem[]>();
+  for (const item of items) {
+    if (!ids.includes(item.id)) continue;
+    // Prefixed both ways, so no group id -- a save can carry any -- can pass
+    // for an item's key and pull a loose item into a group.
+    const outer = outermostGroupId(item);
+    const key = outer ? `group:${outer}` : `item:${item.id}`;
+    if (!units.has(key)) units.set(key, []);
+    units.get(key)!.push(item);
+  }
+  return [...units.values()];
 }
 
 /**

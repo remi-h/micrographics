@@ -10,6 +10,7 @@ import {
   pruneGroups,
   regroupCopies,
   rowItemIds,
+  selectionUnits,
   ungroupItems,
 } from './groups';
 import type { CanvasItem, CanvasSymbol } from '../types';
@@ -533,5 +534,23 @@ describe('normalizeGroups', () => {
 
   it('dissolves a group left with one child', () => {
     expect(pathOf(normalizeGroups([symbol('a', 'g1'), symbol('b')]), 'a')).toEqual([]);
+  });
+});
+
+describe('selectionUnits', () => {
+  it('makes each outermost group one unit and each loose item one of its own, in paint order', () => {
+    const items = [symbol('a', 'outer', 'inner'), symbol('b', 'outer'), symbol('c'), symbol('d', 'g2'), symbol('e', 'g2')];
+
+    expect(selectionUnits(items, ['a', 'b', 'c', 'd', 'e']).map(ids)).toEqual([['a', 'b'], ['c'], ['d', 'e']]);
+  });
+
+  it('keeps a loose item apart from a group whose id looks like an item key', () => {
+    const items = [symbol('a', 'item:x'), symbol('b', 'item:x'), symbol('x')];
+
+    expect(selectionUnits(items, ['a', 'b', 'x']).map(ids)).toEqual([['a', 'b'], ['x']]);
+  });
+
+  it('leaves out what is not selected', () => {
+    expect(selectionUnits([symbol('a'), symbol('b')], ['b']).map(ids)).toEqual([['b']]);
   });
 });
