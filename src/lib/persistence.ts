@@ -1,4 +1,4 @@
-import { ANIMATION_KINDS, MAX_DELAY, MAX_DURATION, MAX_STAGGER, MIN_DELAY, MIN_DURATION, type ItemAnimation } from './animations';
+import { ANIMATION_KINDS, MAX_DURATION, MIN_DELAY, MIN_DURATION, type ItemAnimation } from './animations';
 import { palettes } from '../data';
 import { normalizeGroups } from './groups';
 import { inheritedTiming, resolveGroupTiming } from './groupTiming';
@@ -85,6 +85,14 @@ function parseSettings(value: unknown): Settings | null {
 // duration of 400 seconds is a bad save, not a reason to lose the artwork.
 const ANIMATION_KIND_SET = new Set<string>(ANIMATION_KINDS);
 
+// How late a saved delay or how wide a saved stagger may be. Deliberately not
+// the sliders' limits: nested groups add their turns together, and loose items
+// grouped with their own timing carry whatever spacing they had, so a real
+// canvas can hold a delay past MAX_DELAY or a stagger past MAX_STAGGER, and
+// clamping those to the sliders would re-time the work on every reload. This
+// only catches a save that is simply broken.
+const MAX_SAVED_SECONDS = 60;
+
 function parseAnimation(value: unknown): ItemAnimation | null {
   if (!isRecord(value)) return null;
 
@@ -93,7 +101,7 @@ function parseAnimation(value: unknown): ItemAnimation | null {
   if (!isFiniteNumber(duration) || !isFiniteNumber(delay)) return null;
 
   return {
-    delay: Math.min(Math.max(delay, MIN_DELAY), MAX_DELAY),
+    delay: Math.min(Math.max(delay, MIN_DELAY), MAX_SAVED_SECONDS),
     duration: Math.min(Math.max(duration, MIN_DURATION), MAX_DURATION),
     kind: kind as ItemAnimation['kind'],
   };
@@ -111,7 +119,7 @@ function parseGroups(value: unknown, legacyGroupId: unknown): GroupLevel[] {
   for (const entry of value) {
     if (!isRecord(entry) || typeof entry.id !== 'string' || entry.id.length === 0) break;
     const animation = parseAnimation(entry.animation);
-    const stagger = isFiniteNumber(entry.stagger) ? Math.min(Math.max(entry.stagger, 0), MAX_STAGGER) : 0;
+    const stagger = isFiniteNumber(entry.stagger) ? Math.min(Math.max(entry.stagger, 0), MAX_SAVED_SECONDS) : 0;
     levels.push({ id: entry.id, ...(animation ? { animation } : {}), ...(stagger ? { stagger } : {}) });
   }
   return levels;

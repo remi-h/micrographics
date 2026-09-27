@@ -1,5 +1,6 @@
 import type { ItemAnimation } from './animations';
-import { inheritedTiming, resolveGroupTiming, setGroupTiming } from './groupTiming';
+import { inheritedTiming, keepInheritedEntrances, pruneKeepingTiming, resolveGroupTiming, setGroupTiming } from './groupTiming';
+import { ungroupItems } from './groups';
 import type { CanvasItem, CanvasSymbol, GroupLevel } from '../types';
 
 // Group timing is the one place a group's own settings become what each item
@@ -153,5 +154,57 @@ describe('inheritedTiming', () => {
 
   it('takes nothing when a group is among them: it has an entrance of its own to keep', () => {
     expect(inheritedTiming([symbol('a', [{ id: 'g' }], pop()), symbol('b', [], pop())])).toEqual({});
+  });
+});
+
+describe('keepInheritedEntrances', () => {
+  // Outer slides in 2s late, children 1s apart. Listed top first: x, then the
+  // inner group I, which has no entrance of its own.
+  const outer: GroupLevel = { id: 'O', animation: slide(2), stagger: 1 };
+  const inner: GroupLevel = { id: 'I', stagger: 0.5 };
+  const items = resolveGroupTiming([symbol('a', [outer, inner]), symbol('b', [outer, inner]), symbol('x', [outer])]);
+
+  it('hands the dissolving group\'s entrance to a group inside it that has none, at that child\'s turn', () => {
+    const kept = keepInheritedEntrances(items, new Set(['O']));
+
+    expect(kept[0].groups?.[1]).toEqual({ id: 'I', stagger: 0.5, animation: slide(3) });
+    expect(kept[1].groups?.[1]).toEqual(kept[0].groups?.[1]);
+  });
+
+  it('keeps an ungrouped inner group playing exactly what it played, with its row saying so', () => {
+    const before = played(items);
+    const after = resolveGroupTiming(ungroupItems(keepInheritedEntrances(items, new Set(['O'])), ['x']));
+
+    expect(played(after)).toEqual(before);
+    expect(after[0].groups).toEqual([{ id: 'I', stagger: 0.5, animation: slide(3) }]);
+  });
+
+  it('leaves a group inside that has an entrance of its own alone', () => {
+    const ownInner: GroupLevel = { id: 'I', animation: pop(0.4) };
+    const own = [symbol('a', [outer, ownInner]), symbol('b', [outer, ownInner]), symbol('x', [outer])];
+
+    expect(keepInheritedEntrances(own, new Set(['O']))).toBe(own);
+  });
+
+  it('does nothing for a dissolving group with no entrance of its own', () => {
+    const plain = [symbol('a', [{ id: 'O' }, inner]), symbol('b', [{ id: 'O' }, inner]), symbol('x', [{ id: 'O' }])];
+
+    expect(keepInheritedEntrances(plain, new Set(['O']))).toBe(plain);
+  });
+});
+
+describe('pruneKeepingTiming', () => {
+  it('keeps the timing of a group inside one a delete dissolves', () => {
+    // Deleting x leaves O holding only I: O dissolves, and I takes its place.
+    const outer: GroupLevel = { id: 'O', animation: slide(2), stagger: 1 };
+    const inner: GroupLevel = { id: 'I', stagger: 0.5 };
+    const items = resolveGroupTiming([symbol('a', [outer, inner]), symbol('b', [outer, inner]), symbol('x', [outer])]);
+    const remaining = items.filter((item) => item.id !== 'x');
+
+    const pruned = pruneKeepingTiming(remaining);
+
+    expect(pruned.map((item) => item.groups?.map((level) => level.id))).toEqual([['I'], ['I']]);
+    // I was the first child, so its turn began where O's did: 2s in.
+    expect(played(pruned)).toEqual({ a: slide(2.5), b: slide(2) });
   });
 });

@@ -119,7 +119,13 @@ export function ControlPanel({
    * for splitting it -- that is Ungroup. Dragging a child moves it among its
    * siblings, in front of or behind them, and never out of its group.
    */
-  const renderChildren = (group: Extract<LayerRow, { kind: 'group' }>, selectRow: (additive: boolean) => void, ids: string[]) => {
+  const renderChildren = (
+    group: Extract<LayerRow, { kind: 'group' }>,
+    selectRow: (additive: boolean) => void,
+    ids: string[],
+    // Whether this group plays an entrance, its own or one from around it.
+    styled: boolean,
+  ) => {
     const childDropGap = drag?.kind === 'child' && drag.groupId === group.groupId ? dropGap : null;
     const dropAt = (place: number) =>
       childDropGap === place
@@ -212,9 +218,15 @@ export function ControlPanel({
                   <Group size={13} aria-hidden="true" />
                   <span className="layer-name">{label}</span>
                 </button>
-                <GroupAnimationControl groupId={child.groupId} label={label} level={child.level} onSetGroupAnimation={onSetGroupAnimation} />
+                <GroupAnimationControl
+                  groupId={child.groupId}
+                  inherits={styled}
+                  label={label}
+                  level={child.level}
+                  onSetGroupAnimation={onSetGroupAnimation}
+                />
               </div>
-              {open && renderChildren(child, selectRow, ids)}
+              {open && renderChildren(child, selectRow, ids, styled || Boolean(child.level.animation))}
             </div>
           );
         })}
@@ -529,6 +541,7 @@ export function ControlPanel({
                         {row.kind === 'group' ? (
                           <GroupAnimationControl
                             groupId={row.groupId}
+                            inherits={false}
                             label={label}
                             level={row.level}
                             onSetGroupAnimation={onSetGroupAnimation}
@@ -541,7 +554,7 @@ export function ControlPanel({
                           />
                         )}
                       </div>
-                      {open && row.kind === 'group' && renderChildren(row, selectRow, ids)}
+                      {open && row.kind === 'group' && renderChildren(row, selectRow, ids, Boolean(row.level.animation))}
                     </div>
                   );
                 })}
@@ -561,11 +574,14 @@ export function ControlPanel({
  */
 function GroupAnimationControl({
   groupId,
+  inherits,
   label,
   level,
   onSetGroupAnimation,
 }: {
   groupId: string;
+  /** Whether a group around this one gives it an entrance to play. */
+  inherits: boolean;
   label: string;
   level: GroupLevel;
   onSetGroupAnimation: (groupId: string, animation: ItemAnimation | null, stagger: number, record?: boolean) => void;
@@ -582,6 +598,9 @@ function GroupAnimationControl({
         onSetGroupAnimation(groupId, animation, nextStagger ?? (animation ? stagger : 0), record)
       }
       stagger={stagger}
+      // A stagger spaces out an entrance; with none here or around, there is
+      // nothing for it to space out, and the slider would move to no effect.
+      staggerNeedsEntrance={!level.animation && !inherits}
     />
   );
 }
@@ -600,6 +619,7 @@ function AnimationControl({
   label,
   onChange,
   stagger,
+  staggerNeedsEntrance = false,
 }: {
   animation: ItemAnimation | undefined;
   label: string;
@@ -610,6 +630,8 @@ function AnimationControl({
    * single layer, which has no stagger.
    */
   stagger?: number;
+  /** For a group with no entrance to stagger: the stagger slider is shown disabled, with why. */
+  staggerNeedsEntrance?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const current = animation ?? DEFAULT_ANIMATION;
@@ -697,7 +719,9 @@ function AnimationControl({
               Starts after <strong>{current.delay.toFixed(1)}s</strong>
             </span>
             <input
-              max={MAX_DELAY}
+              // Nested groups add their turns together, so a layer can carry a
+              // delay past the slider's range; the max reaches what is stored.
+              max={Math.max(MAX_DELAY, current.delay)}
               min={MIN_DELAY}
               onBlur={endGesture}
               onChange={(event) => slide({ ...current, delay: Number(event.target.value) })}
@@ -715,7 +739,9 @@ function AnimationControl({
               <span>
                 Each next layer <strong>+{seconds.toFixed(1)}s</strong>
               </span>
+              {staggerNeedsEntrance && <span className="animation-hint">Pick an entrance to stagger the layers.</span>}
               <input
+                disabled={staggerNeedsEntrance}
                 // A save from before groups nested can carry a wider stagger
                 // than the slider offers; a slider cannot show a value past
                 // its max, so the max reaches what is stored.

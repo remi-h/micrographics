@@ -1154,6 +1154,18 @@ div.layer-child {
   accent-color: #f4f0e8;
 }
 
+/* A stagger with nothing to stagger: a group with no entrance, inside no
+   group that has one. Shown, so the control is where it always is, but off. */
+.animation-field input[type="range"]:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.animation-hint {
+  color: #9a978f;
+  font-size: 11px;
+}
+
 .dialog-footer {
   display: flex;
   gap: 8px;

@@ -23,7 +23,7 @@ export type Settings = {
  * One group an item belongs to. A group is not a container: it is the items
  * that carry a level with its id, and every member carries a copy of the
  * level. The copies are kept identical by the operations that change them
- * (see groups.ts and groupAnimation.ts).
+ * (see groups.ts and groupTiming.ts).
  */
 export type GroupLevel = {
   id: string;

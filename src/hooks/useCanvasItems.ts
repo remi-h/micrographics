@@ -1,8 +1,8 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { sameAnimation, type ItemAnimation } from '../lib/animations';
 import { hitBounds, inkBounds, type Box } from '../lib/canvasGeometry';
-import { expandToGroups, groupItems, moveChild, moveRow, pruneGroups, regroupCopies, ungroupItems } from '../lib/groups';
-import { inheritedTiming, resolveGroupTiming, setGroupTiming } from '../lib/groupTiming';
+import { expandToGroups, groupItems, moveChild, moveRow, outermostGroupId, regroupCopies, ungroupItems } from '../lib/groups';
+import { inheritedTiming, keepInheritedEntrances, pruneKeepingTiming, resolveGroupTiming, setGroupTiming } from '../lib/groupTiming';
 import { createItemId } from '../lib/itemIds';
 import type { CanvasItem, CanvasSymbol, CanvasText } from '../types';
 import { clamp } from '../lib/utils';
@@ -406,8 +406,9 @@ export function useCanvasItems({
     // Pruned afterwards because a delete can strip a group down to one member,
     // and a group of one is a layer row the user cannot do anything with.
     // Timing is worked out again because a delete moves the children after it
-    // up a turn in their group.
-    setCanvasItems((current) => resolveGroupTiming(pruneGroups(current.filter((item) => !selectedIds.includes(item.id)))));
+    // up a turn in their group, and a group it dissolves hands its entrance to
+    // the group it held.
+    setCanvasItems((current) => pruneKeepingTiming(current.filter((item) => !selectedIds.includes(item.id))));
     setSelectedIds([]);
   };
 
@@ -477,11 +478,14 @@ export function useCanvasItems({
   };
 
   const ungroupSelected = () => {
-    const ungrouped = ungroupItems(canvasItems, selectedIds);
+    const outermost = new Set(
+      canvasItems.filter((item) => selectedIds.includes(item.id)).flatMap((item) => outermostGroupId(item) ?? []),
+    );
+    // The groups that were inside keep playing what they played: one with no
+    // entrance of its own is given the one it had from the group that is going.
+    const ungrouped = ungroupItems(keepInheritedEntrances(canvasItems, outermost), selectedIds);
     if (ungrouped === canvasItems) return;
     beginHistoryAction();
-    // The groups that were inside now start from zero rather than from their
-    // turn in the group that is gone.
     setCanvasItems(resolveGroupTiming(ungrouped));
   };
 

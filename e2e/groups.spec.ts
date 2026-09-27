@@ -549,3 +549,16 @@ test('nested groups and their entrances survive a reload', async ({ page }) => {
   expect(entrances.C.delay).toBe(0);
   expect(entrances.B.delay).toBe(500);
 });
+
+test('a group\'s stagger is off until there is an entrance for it to space out', async ({ page }) => {
+  await labels(page, ['A', 'B']);
+  await groupNamed(page, ['A', 'B']);
+
+  await groupRows(page).first().locator('.layer-animate').click();
+  const stagger = page.getByRole('slider', { name: /Each next layer/ });
+  await expect(stagger).toBeDisabled();
+  await expect(page.locator('.dialog-popup')).toContainText('Pick an entrance to stagger the layers.');
+
+  await page.locator('.animation-kinds button', { hasText: 'Pop in' }).first().click();
+  await expect(stagger).toBeEnabled();
+});

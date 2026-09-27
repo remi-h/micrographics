@@ -672,6 +672,25 @@ describe('useCanvasItems nested groups', () => {
     expect(pathOf(result.current.canvasItems, 'symbol-3')).toEqual([]);
   });
 
+  it('ungrouping keeps an inner group playing what it played, and its row showing it', () => {
+    const outer = { id: 'O', animation: slide(2), stagger: 1 };
+    const inner = { id: 'I' };
+    const { result } = setUp({
+      canvasItems: [
+        { ...symbol('symbol-1'), groups: [outer, inner], animation: slide(3) },
+        { ...symbol('symbol-2', 300), groups: [outer, inner], animation: slide(3) },
+        { ...symbol('symbol-3', 500), groups: [outer], animation: slide(2) },
+      ],
+      selectedIds: ['symbol-1', 'symbol-2', 'symbol-3'],
+    });
+
+    act(() => result.current.ungroupSelected());
+
+    expect(itemById(result.current.canvasItems, 'symbol-1').groups).toEqual([{ id: 'I', animation: slide(3) }]);
+    expect(itemById(result.current.canvasItems, 'symbol-1').animation).toEqual(slide(3));
+    expect(itemById(result.current.canvasItems, 'symbol-3').animation).toEqual(slide(2));
+  });
+
   it('selects the whole outermost group when one member deep inside is clicked', () => {
     const { result } = withGroup(['symbol-1', 'symbol-2', 'symbol-3']);
     act(() => result.current.groupSelected());

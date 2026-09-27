@@ -1,5 +1,5 @@
 import { groupAnimation, sameAnimation, staggeredAnimation, type ItemAnimation } from './animations';
-import { groupLevel, groupMembers, layerRows, type LayerRow } from './groups';
+import { groupLevel, groupMembers, layerRows, pruneGroups, type LayerRow } from './groups';
 import type { CanvasItem, GroupLevel } from '../types';
 
 // When a group's entrance plays, for groups inside groups.
@@ -98,4 +98,55 @@ export function inheritedTiming(listed: CanvasItem[]): Omit<GroupLevel, 'id'> {
   if (listed.some((item) => item.groups?.length)) return {};
   const shared = groupAnimation(listed);
   return shared ? { animation: shared.animation, ...(shared.stagger ? { stagger: shared.stagger } : {}) } : {};
+}
+
+/**
+ * Before the groups `groupIds` are taken apart, gives each group directly
+ * inside them that has no entrance of its own the one it was playing: the
+ * dissolving group's movement, starting at that child's turn. Without this,
+ * its members would go on playing that entrance -- it is written into them --
+ * while its own row said it had none, and its stagger and order would stop
+ * doing anything. Items directly inside keep what they play as their own
+ * anyway, so they need nothing.
+ *
+ * The child takes the dissolving group's place, so its turn is counted from
+ * where the dissolving group's own turn began.
+ */
+export function keepInheritedEntrances(items: CanvasItem[], groupIds: Set<string>): CanvasItem[] {
+  const handed = new Map<string, ItemAnimation>();
+  const visit = (row: LayerRow) => {
+    if (row.kind !== 'group') return;
+    const own = row.level.animation;
+    if (own && groupIds.has(row.groupId)) {
+      const stagger = row.level.stagger ?? 0;
+      row.children.forEach((child, turn) => {
+        if (child.kind === 'group' && !child.level.animation) {
+          handed.set(child.groupId, staggeredAnimation(own, stagger, turn));
+        }
+      });
+    }
+    row.children.forEach(visit);
+  };
+  layerRows(items).forEach(visit);
+  if (handed.size === 0) return items;
+
+  return items.map((item) =>
+    item.groups?.some((level) => handed.has(level.id))
+      ? {
+          ...item,
+          groups: item.groups.map((level) => (handed.has(level.id) ? { ...level, animation: handed.get(level.id) } : level)),
+        }
+      : item,
+  );
+}
+
+/**
+ * `pruneGroups`, keeping the timing of whatever the dissolved groups held
+ * (see `keepInheritedEntrances`), and resolved afterwards. For after a delete.
+ */
+export function pruneKeepingTiming(items: CanvasItem[]): CanvasItem[] {
+  const levels = (list: CanvasItem[]) => new Set(list.flatMap((item) => item.groups?.map((level) => level.id) ?? []));
+  const survivors = levels(pruneGroups(items));
+  const dissolved = new Set([...levels(items)].filter((id) => !survivors.has(id)));
+  return resolveGroupTiming(pruneGroups(keepInheritedEntrances(items, dissolved)));
 }

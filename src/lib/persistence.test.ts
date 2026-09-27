@@ -346,4 +346,51 @@ describe('saveEditorState / loadEditorState', () => {
 
     expect(loadEditorState()?.canvasItems[0].animation).toEqual({ delay: 0, duration: 5, kind: 'fade' });
   });
+
+  // The sliders' limits are not the save's: grouping loose items keeps their
+  // spacing, and nested turns add up, so real work can sit past them. A
+  // reload must not re-time it.
+  it('keeps a stagger wider than the slider offers', () => {
+    const fade = { delay: 0, duration: 0.6, kind: 'fade' as const };
+    const group = { id: 'g', animation: fade, stagger: 3 };
+    const wide: PersistedEditorState = {
+      ...state,
+      canvasItems: [
+        { animation: { ...fade, delay: 3 }, groups: [group], id: 'a', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 },
+        { animation: fade, groups: [group], id: 'b', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 },
+      ],
+    };
+
+    expect(saveEditorState(wide)).toBe(true);
+    expect(loadEditorState()).toEqual(wide);
+  });
+
+  it('keeps a delay later than the slider offers, as an ungrouped staggered layer can carry', () => {
+    const late: PersistedEditorState = {
+      ...state,
+      canvasItems: [{ animation: { delay: 12, duration: 0.6, kind: 'pop' }, id: 'symbol-1', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 }],
+    };
+
+    expect(saveEditorState(late)).toBe(true);
+    expect(loadEditorState()).toEqual(late);
+  });
+
+  it('still bounds a delay or a stagger that is simply broken', () => {
+    writeRaw(
+      JSON.stringify({
+        version: STORAGE_VERSION,
+        settings: state.settings,
+        canvasItems: [
+          { animation: { kind: 'pop', duration: 1, delay: 9999 }, id: 'a', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 },
+          { groups: [{ id: 'g', stagger: 9999 }], id: 'b', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 },
+          { groups: [{ id: 'g', stagger: 9999 }], id: 'c', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 },
+        ],
+        canvasZoom: 1,
+      }),
+    );
+
+    const restored = loadEditorState()?.canvasItems;
+    expect(restored?.[0].animation?.delay).toBe(60);
+    expect(restored?.[1].groups?.[0].stagger).toBe(60);
+  });
 });
