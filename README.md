@@ -139,8 +139,9 @@ everything is a reformatting change of its own.
   that long after the one above it. At 0 they all arrive together. A group
   inside another takes one turn in it, then staggers its own layers from
   there, and can play a different movement from the group around it; with
-  none of its own, it plays the outer group's; with no entrance here or
-  around it, the stagger is off. Drag the layers inside a group to change who
+  none of its own, it plays the outer group's, and its sparkle shows that.
+  With no entrance here, around it or in groups inside it, the stagger is
+  off. Drag the layers inside a group to change who
   starts first; the timing follows the new order. Ungrouping keeps what
   everything plays.
 - Choose a palette from the swatches above the canvas, and zoom with the

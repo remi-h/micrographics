@@ -220,6 +220,7 @@ export function ControlPanel({
                 </button>
                 <GroupAnimationControl
                   groupId={child.groupId}
+                  hasInnerGroups={child.children.some((grandchild) => grandchild.kind === 'group')}
                   inherited={styled}
                   label={label}
                   level={child.level}
@@ -541,6 +542,7 @@ export function ControlPanel({
                         {row.kind === 'group' ? (
                           <GroupAnimationControl
                             groupId={row.groupId}
+                            hasInnerGroups={row.children.some((child) => child.kind === 'group')}
                             inherited={undefined}
                             label={label}
                             level={row.level}
@@ -574,12 +576,15 @@ export function ControlPanel({
  */
 function GroupAnimationControl({
   groupId,
+  hasInnerGroups,
   inherited,
   label,
   level,
   onSetGroupAnimation,
 }: {
   groupId: string;
+  /** Whether groups sit inside this one, which a stagger spaces out too. */
+  hasInnerGroups: boolean;
   /** The entrance a group around this one gives it, if any. */
   inherited: ItemAnimation | undefined;
   label: string;
@@ -602,9 +607,10 @@ function GroupAnimationControl({
       // movement the group was playing rather than switching to the default.
       fallback={inherited}
       stagger={stagger}
-      // A stagger spaces out an entrance; with none here or around, there is
-      // nothing for it to space out, and the slider would move to no effect.
-      staggerNeedsEntrance={!level.animation && !inherited}
+      // A stagger spaces out entrances: this group's, one from around it, or
+      // those of groups inside it. With none of those, there is nothing for
+      // it to space out, and the slider would move to no effect.
+      staggerNeedsEntrance={!level.animation && !inherited && !hasInnerGroups}
     />
   );
 }
@@ -675,8 +681,23 @@ function AnimationControl({
       <Dialog.Trigger
         className="layer-animate"
         data-on={animation ? true : undefined}
-        aria-label={animation ? `Edit animation for ${label}` : `Add animation to ${label}`}
-        title={animation ? animationLabel(animation.kind) : 'Add animation'}
+        // A group inside another plays that group's entrance: it animates,
+        // so the button says so, set apart from an entrance of its own.
+        data-inherited={!animation && fallback ? true : undefined}
+        aria-label={
+          animation
+            ? `Edit animation for ${label}`
+            : fallback
+              ? `Edit animation for ${label}, which plays the group's around it`
+              : `Add animation to ${label}`
+        }
+        title={
+          animation
+            ? animationLabel(animation.kind)
+            : fallback
+              ? `${animationLabel(fallback.kind)}, from the group around it`
+              : 'Add animation'
+        }
       >
         <Sparkles size={14} aria-hidden="true" />
       </Dialog.Trigger>

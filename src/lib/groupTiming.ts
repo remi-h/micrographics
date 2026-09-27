@@ -125,6 +125,17 @@ export function inheritedTiming(listed: CanvasItem[]): Omit<GroupLevel, 'id'> {
 export function keepInheritedEntrances(items: CanvasItem[], groupIds: Set<string>): CanvasItem[] {
   const restated = new Map<string, GroupLevel>();
   const levelOf = (row: Extract<LayerRow, { kind: 'group' }>) => restated.get(row.groupId) ?? row.level;
+  const shiftNearestEntrances = (row: Extract<LayerRow, { kind: 'group' }>, offset: number) => {
+    for (const child of row.children) {
+      if (child.kind !== 'group') continue;
+      const childLevel = levelOf(child);
+      if (childLevel.animation) {
+        restated.set(child.groupId, { ...childLevel, animation: staggeredAnimation(childLevel.animation, offset, 1) });
+      } else {
+        shiftNearestEntrances(child, offset);
+      }
+    }
+  };
   const visit = (row: LayerRow) => {
     if (row.kind !== 'group') return;
     const level = levelOf(row);
@@ -140,6 +151,12 @@ export function keepInheritedEntrances(items: CanvasItem[], groupIds: Set<string
           restated.set(child.groupId, { ...childLevel, animation: staggeredAnimation(childLevel.animation, offset, 1) });
         } else if (own) {
           restated.set(child.groupId, { ...childLevel, animation: staggeredAnimation(own, stagger, turn) });
+        } else if (offset !== 0) {
+          // Neither the dissolving group nor this child has an entrance, so
+          // the offset has no delay of theirs to live in. It was still
+          // counted into the start of every group further in that has one;
+          // those take it on instead.
+          shiftNearestEntrances(child, offset);
         }
       });
     }

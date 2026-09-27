@@ -206,6 +206,28 @@ describe('keepInheritedEntrances', () => {
     expect(played(after).a).toEqual(played(nested).a);
   });
 
+  it('keeps the turn of a group further in when neither the dissolving group nor its child has an entrance', () => {
+    // G has only a stagger: x, then C. C has no entrance: b, then D. D
+    // slides. D started at C's turn in G, 0.5s in; ungrouped, it still must.
+    const g: GroupLevel = { id: 'G', stagger: 0.5 };
+    const c: GroupLevel = { id: 'C' };
+    const d: GroupLevel = { id: 'D', animation: slide() };
+    const nested = resolveGroupTiming([
+      symbol('d1', [g, c, d]),
+      symbol('d2', [g, c, d]),
+      symbol('b', [g, c]),
+      symbol('x', [g]),
+    ]);
+    const before = played(nested);
+    expect(before.d1).toEqual(slide(0.5));
+
+    const after = resolveGroupTiming(ungroupItems(keepInheritedEntrances(nested, new Set(['G'])), ['x']));
+
+    expect(played(after)).toEqual(before);
+    expect(after[0].groups?.map((level) => level.id)).toEqual(['C', 'D']);
+    expect(after[0].groups?.[1].animation).toEqual(slide(0.5));
+  });
+
   it('carries a handed-on entrance through two dissolving levels', () => {
     // P fades, 0.5s apart: y, then D1. D1 slides 1s in: z, then D2. D2 has
     // none: w, then C (0.2s apart). Deleting z and w dissolves D1 and D2.
@@ -248,5 +270,57 @@ describe('pruneKeepingTiming', () => {
     expect(pruned.map((item) => item.groups?.map((level) => level.id))).toEqual([['I'], ['I']]);
     // I was the first child, so its turn began where O's did: 2s in.
     expect(played(pruned)).toEqual({ a: slide(2.5), b: slide(2) });
+  });
+});
+
+// Ungrouping keeps what everything plays, whatever the tree. Examples above
+// pin the arithmetic; this walks many random trees to catch shapes they miss:
+// groups with and without entrances or staggers, loose items with their own.
+describe('ungrouping, on random trees', () => {
+  // A small seeded generator (mulberry32), so a failure reproduces.
+  const random = (seed: number) => () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+
+  function tree(next: () => number) {
+    let serial = 0;
+    const kinds = ['pop', 'fade', 'slide-left'] as const;
+    const entrance = (): ItemAnimation => ({
+      delay: Math.round(next() * 10) / 10,
+      duration: 0.6,
+      kind: kinds[Math.floor(next() * kinds.length)],
+    });
+    const build = (path: GroupLevel[], depth: number): CanvasItem[] => {
+      const count = 2 + Math.floor(next() * 2);
+      return Array.from({ length: count }).flatMap(() => {
+        if (depth < 3 && next() < 0.45) {
+          const level: GroupLevel = {
+            id: `g${serial++}`,
+            ...(next() < 0.5 ? { animation: entrance() } : {}),
+            ...(next() < 0.5 ? { stagger: Math.round(next() * 10) / 10 } : {}),
+          };
+          return build([...path, level], depth + 1);
+        }
+        return [symbol(`i${serial++}`, path, next() < 0.5 ? entrance() : undefined)];
+      });
+    };
+    return resolveGroupTiming(build([], 0).map((item) => (item.groups?.length ? item : { ...item, groups: [{ id: 'top' }] })));
+  }
+
+  it('keeps every item playing exactly what it played, level by level, down to nothing grouped', () => {
+    for (let seed = 1; seed <= 500; seed += 1) {
+      let items = tree(random(seed));
+      const expected = played(items);
+      for (let step = 0; step < 10; step += 1) {
+        const grouped = items.find((item) => item.groups?.length);
+        if (!grouped) break;
+        const outermost = new Set([grouped.groups![0].id]);
+        items = resolveGroupTiming(ungroupItems(keepInheritedEntrances(items, outermost), [grouped.id]));
+        expect({ seed, step, played: played(items) }).toEqual({ seed, step, played: expected });
+      }
+    }
   });
 });

@@ -1130,6 +1130,12 @@ div.layer-child {
   color: #f4f0e8;
 }
 
+/* Plays the entrance of the group around it: animated, but not by a setting
+   of its own, so lit less than a group that has one. */
+.layer-animate[data-inherited] {
+  color: rgba(244, 240, 232, 0.72);
+}
+
 .animation-kinds {
   display: grid;
   gap: 6px;

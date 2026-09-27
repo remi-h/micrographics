@@ -621,3 +621,44 @@ test('a group with only a stagger can have it removed', async ({ page }) => {
   await inner.locator('.layer-animate').click();
   await expect(page.locator('.dialog-popup')).toContainText('+0.0s');
 });
+
+test('a group inside another shows it plays that group\'s entrance', async ({ page }) => {
+  await labels(page, ['A', 'B', 'C']);
+  await groupNamed(page, ['A', 'B']);
+  await groupNamed(page, ['Group of 2', 'C']);
+  const outer = groupRows(page).first();
+  await animateGroup(page, outer, 'Pop in', '0');
+  await outer.locator('.layer-disclosure').click();
+
+  const innerButton = page.locator('.layer-subgroup .layer-animate');
+  await expect(innerButton).toHaveAttribute('data-inherited', 'true');
+  await expect(innerButton).not.toHaveAttribute('data-on');
+  await expect(innerButton).toHaveAttribute('title', /from the group around it/);
+});
+
+test('a stagger can space out groups inside with their own entrances, with none on the group itself', async ({ page }) => {
+  await labels(page, ['A', 'B', 'C', 'D']);
+  await groupNamed(page, ['A', 'B']);
+  await groupNamed(page, ['C', 'D']);
+  await page.locator('.layer-row[data-group] .layer-select').first().click();
+  await page.locator('.layer-row[data-group] .layer-select').nth(1).click({ modifiers: ['Shift'] });
+  await fromLayerMenu(page, 'Group');
+  const outer = groupRows(page).first();
+  await outer.locator('.layer-disclosure').click();
+  // Each inner group its own movement.
+  await animateGroup(page, page.locator('.layer-subgroup').nth(0), 'Pop in', '0');
+  await animateGroup(page, page.locator('.layer-subgroup').nth(1), 'Slide in from left', '0');
+
+  // The outer group has no entrance, but its stagger spaces the two out.
+  await outer.locator('.layer-animate').click();
+  const stagger = page.getByRole('slider', { name: /Each next layer/ });
+  await expect(stagger).toBeEnabled();
+  await stagger.fill('1');
+  await page.getByRole('button', { name: 'Done' }).click();
+
+  const entrances = await playedEntrances(page);
+  // Listed top first: C and D's group, then A and B's.
+  expect(entrances.C.delay).toBe(0);
+  expect(entrances.A.delay).toBe(1000);
+  expect(entrances.A.movement).not.toBe(entrances.C.movement);
+});

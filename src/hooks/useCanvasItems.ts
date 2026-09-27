@@ -406,8 +406,10 @@ export function useCanvasItems({
     // Pruned afterwards because a delete can strip a group down to one member,
     // and a group of one is a layer row the user cannot do anything with.
     // Timing is worked out again because a delete moves the children after it
-    // up a turn in their group, and a group it dissolves hands its entrance to
-    // the group it held.
+    // up a turn in their group. Selection always covers whole outermost
+    // groups, so a delete from the editor removes groups whole; a group left
+    // with one child -- from a selection set any other way -- hands its timing
+    // on as ungrouping does.
     setCanvasItems((current) => pruneKeepingTiming(current.filter((item) => !selectedIds.includes(item.id))));
     setSelectedIds([]);
   };
