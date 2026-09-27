@@ -372,4 +372,26 @@ test('a group can stagger its entrance, each member starting after the one liste
   // Reopening reads the stagger back from the members.
   await groupRow.locator('.layer-animate').click();
   await expect(page.locator('.dialog-popup')).toContainText('+0.5s');
+  await page.getByRole('button', { name: 'Done' }).click();
+
+  // Dragging a member to the top of the open group makes it start first,
+  // and the group keeps its stagger in the new order.
+  await groupRow.locator('.layer-disclosure').click();
+  const members = page.locator('.layer-member');
+  const top = (await members.nth(0).boundingBox())!;
+  await members.filter({ hasText: /^AAA$/ }).dragTo(members.nth(0), { targetPosition: { x: top.width / 2, y: 3 } });
+  await expect(members).toHaveText(['AAA', 'CCC', 'BBB']);
+
+  await page.locator('.stage-play').click();
+  const restaggered = await page.evaluate(() =>
+    Object.fromEntries(
+      [...document.querySelectorAll('g[class^="mg-anim-"]')].map((node) => [
+        node.querySelector('text')?.textContent,
+        (node as SVGGElement).getAnimations()[0]?.effect?.getTiming().delay,
+      ]),
+    ),
+  );
+  expect(restaggered).toEqual({ AAA: 0, BBB: 1000, CCC: 500 });
+  await groupRow.locator('.layer-animate').click();
+  await expect(page.locator('.dialog-popup')).toContainText('+0.5s');
 });

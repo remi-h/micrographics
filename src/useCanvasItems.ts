@@ -1,7 +1,7 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { sameAnimation, type ItemAnimation } from './animations';
+import { groupAnimation, sameAnimation, staggeredAnimation, type ItemAnimation } from './animations';
 import { hitBounds, inkBounds, type Box } from './canvasGeometry';
-import { expandToGroups, groupItems, pruneGroups, regroupCopies, ungroupItems } from './groups';
+import { expandToGroups, groupItems, moveMember, moveRow, pruneGroups, regroupCopies, ungroupItems } from './groups';
 import { createItemId } from './itemIds';
 import type { CanvasItem, CanvasSymbol, CanvasText } from './types';
 import { clamp } from './utils';
@@ -72,6 +72,18 @@ export type CanvasItems = {
   nudgeSelected: (dx: number, dy: number) => void;
   pasteClipboard: () => void;
   removeSelected: () => void;
+  /**
+   * Moves a Layers row -- an item, or a whole group -- to the gap `gap` in
+   * the list, topmost first, and so to that place in the paint order. One
+   * undo step; none for a drop that leaves the row where it was.
+   */
+  reorderLayer: (rowId: string, gap: number) => void;
+  /**
+   * Moves one member of a group to the gap `gap` among the group's members,
+   * as an open group lists them. It stays in its group. One undo step; none
+   * for a drop that leaves it where it was.
+   */
+  reorderGroupMember: (memberId: string, gap: number) => void;
   rotateItems: (updates: Array<{ id: string; rotate: number }>) => void;
   scaleItems: (updates: Array<{ id: string; size: number; x: number; y: number }>) => void;
   selectItem: (id: string | null, additive?: boolean) => void;
@@ -186,6 +198,35 @@ export function moveKeepingTogether(
   return new Map(
     moved.map(({ dx, dy, item }) => [item.id, { x: item.x + dx + shiftX, y: item.y + dy + shiftY }]),
   );
+}
+
+// The members of `member`'s group as an open group lists them: top first.
+function listedMembers(items: CanvasItem[], member: string) {
+  const groupId = items.find((item) => item.id === member)?.groupId;
+  return groupId ? items.filter((item) => item.groupId === groupId).reverse() : [];
+}
+
+/**
+ * A staggered group starts its members in the order it lists them, and each
+ * member carries its own delay. Moving a member within the group keeps those
+ * delays with the items, so without this the member dragged to the top would
+ * still start last -- and the group's delays would no longer be evenly spaced
+ * in its new order, so its entrance would read as unset. Dragging a member is
+ * how the order it starts in is chosen, so the stagger is laid out again in
+ * the new order. A group with no stagger, or no shared entrance, is left as
+ * it is.
+ */
+function restagger(before: CanvasItem[], after: CanvasItem[], member: string): CanvasItem[] {
+  const shared = groupAnimation(listedMembers(before, member));
+  if (!shared || shared.stagger === 0) return after;
+
+  const delays = new Map(
+    listedMembers(after, member).map((item, index) => [
+      item.id,
+      staggeredAnimation(shared.animation, shared.stagger, index),
+    ]),
+  );
+  return after.map((item) => (delays.has(item.id) ? { ...item, animation: delays.get(item.id) } : item));
 }
 
 // A copy of each item, nudged clear of the original so the user can see that
@@ -424,6 +465,20 @@ export function useCanvasItems({
     setSelectedIds(expandToGroups(selectedIds, grouped));
   };
 
+  const reorderLayer = (rowId: string, gap: number) => {
+    const reordered = moveRow(canvasItems, rowId, gap);
+    if (reordered === canvasItems) return;
+    beginHistoryAction();
+    setCanvasItems(reordered);
+  };
+
+  const reorderGroupMember = (memberId: string, gap: number) => {
+    const reordered = moveMember(canvasItems, memberId, gap);
+    if (reordered === canvasItems) return;
+    beginHistoryAction();
+    setCanvasItems(restagger(canvasItems, reordered, memberId));
+  };
+
   const ungroupSelected = () => {
     const ungrouped = ungroupItems(canvasItems, selectedIds);
     if (ungrouped === canvasItems) return;
@@ -574,6 +629,8 @@ export function useCanvasItems({
     nudgeSelected,
     pasteClipboard,
     removeSelected,
+    reorderGroupMember,
+    reorderLayer,
     rotateItems,
     scaleItems,
     selectItem,
