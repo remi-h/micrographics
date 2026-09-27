@@ -87,6 +87,8 @@ function App() {
     nudgeSelected,
     pasteClipboard,
     removeSelected,
+    reorderGroupMember,
+    reorderLayer,
     rotateItems,
     scaleItems,
     selectItem,
@@ -280,6 +282,8 @@ function App() {
           onExportSvg={exportSvg}
           onRandomize={randomize}
           onRedo={redo}
+          onReorderGroupMember={reorderGroupMember}
+          onReorderLayer={reorderLayer}
           onGroupSelected={groupSelected}
           onRestartTemplate={restartTemplate}
           onSelectItem={selectItem}
