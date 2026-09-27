@@ -2,6 +2,10 @@
 
 A React + Base UI micrographic generator for building dense, print-inspired layouts with rules, glyphs, labels, modules, and exportable SVG, PNG, and animated GIF output.
 
+Example Output (GIF Export):  
+<img width="600" height="400" alt="micrographic" src="https://github.com/user-attachments/assets/8902b8f4-bf21-425d-93d9-c18dbde6e766" />
+
+
 ## Setup
 
 Install dependencies:
