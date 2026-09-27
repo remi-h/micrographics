@@ -118,16 +118,19 @@ export type CanvasItems = {
   setGroupAnimation: (groupId: string, animation: ItemAnimation | null, stagger: number, record?: boolean) => void;
   /**
    * Sets several items' entrances as one change: one history entry for all of
-   * them, or none when none of them changes. A group's entrance goes through
-   * here, since a staggered group gives each member a different one; setting
-   * them one at a time would hang the undo snapshot on whichever went first,
-   * and changing only the stagger leaves the first member exactly as it was.
+   * them, or none when none of them changes. For loose layers: a grouped
+   * item's entrance is worked out from its groups (`setGroupAnimation`), and
+   * anything written here for one is replaced the next time that happens.
    */
   setItemAnimations: (updates: Array<{ id: string; animation: ItemAnimation | null }>, record?: boolean) => void;
   setEditingTextDraft: Dispatch<SetStateAction<string>>;
   setTextDraft: Dispatch<SetStateAction<string>>;
   textDraft: string;
-  /** Dissolves every group in the selection, leaving the items themselves alone. */
+  /**
+   * Takes one level -- the outermost group -- off every group in the
+   * selection, so the groups inside come out whole. Everything goes on
+   * playing exactly what it played (see `keepInheritedEntrances`).
+   */
   ungroupSelected: () => void;
 };
 
@@ -409,7 +412,8 @@ export function useCanvasItems({
     // up a turn in their group. Selection always covers whole outermost
     // groups, so a delete from the editor removes groups whole; a group left
     // with one child -- from a selection set any other way -- hands its timing
-    // on as ungrouping does.
+    // on as ungrouping does, except to an item directly inside it when a group
+    // further out has an entrance, which that item then plays.
     setCanvasItems((current) => pruneKeepingTiming(current.filter((item) => !selectedIds.includes(item.id))));
     setSelectedIds([]);
   };

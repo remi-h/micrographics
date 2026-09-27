@@ -662,3 +662,24 @@ test('a stagger can space out groups inside with their own entrances, with none 
   expect(entrances.A.delay).toBe(1000);
   expect(entrances.A.movement).not.toBe(entrances.C.movement);
 });
+
+test('a stored stagger past the slider\'s range stays reachable while it is dragged down', async ({ page }) => {
+  // Two layers popping 5s apart, grouped: the group takes over that spacing,
+  // wider than the slider's usual 2s.
+  await labels(page, ['A', 'B']);
+  for (const [name, delay] of [['A', '5'], ['B', '0']]) {
+    await layerRows(page).filter({ has: page.locator('.layer-name', { hasText: new RegExp(`^${name}$`) }) }).locator('.layer-animate').click();
+    await page.locator('.animation-kinds button', { hasText: 'Pop in' }).first().click();
+    await page.getByRole('slider', { name: /Starts after/ }).fill(delay);
+    await page.getByRole('button', { name: 'Done' }).click();
+  }
+  await groupNamed(page, ['A', 'B']);
+
+  await groupRows(page).first().locator('.layer-animate').click();
+  const stagger = page.getByRole('slider', { name: /Each next layer/ });
+  await expect(stagger).toHaveValue('5');
+  await expect(stagger).toHaveAttribute('max', '5');
+
+  await stagger.fill('4');
+  await expect(stagger).toHaveAttribute('max', '5');
+});

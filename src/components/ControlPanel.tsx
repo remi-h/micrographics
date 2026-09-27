@@ -649,6 +649,7 @@ function AnimationControl({
   const [open, setOpen] = useState(false);
   const current = animation ?? (fallback ? { ...fallback, delay: 0 } : DEFAULT_ANIMATION);
   const seconds = stagger ?? 0;
+  const [ceiling, setCeiling] = useState({ delay: MAX_DELAY, stagger: MAX_STAGGER });
 
   // A range input fires a change per step of a drag, and each one that took a
   // history entry would be a separate undo step -- a single drag across the
@@ -677,7 +678,17 @@ function AnimationControl({
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={setOpen}>
+    <Dialog.Root
+      open={open}
+      onOpenChange={(next) => {
+        // The sliders' ranges are fixed when the dialog opens. A delay or a
+        // stagger stored past a slider's usual max stretches it to fit, and a
+        // max that followed the value would shrink under the pointer as it is
+        // dragged down, leaving the stored value out of reach.
+        if (next) setCeiling({ delay: Math.max(MAX_DELAY, current.delay), stagger: Math.max(MAX_STAGGER, seconds) });
+        setOpen(next);
+      }}
+    >
       <Dialog.Trigger
         className="layer-animate"
         data-on={animation ? true : undefined}
@@ -749,7 +760,7 @@ function AnimationControl({
             <input
               // Nested groups add their turns together, so a layer can carry a
               // delay past the slider's range; the max reaches what is stored.
-              max={Math.max(MAX_DELAY, current.delay)}
+              max={ceiling.delay}
               min={MIN_DELAY}
               onBlur={endGesture}
               onChange={(event) => slide({ ...current, delay: Number(event.target.value) })}
@@ -773,7 +784,7 @@ function AnimationControl({
                 // A save from before groups nested can carry a wider stagger
                 // than the slider offers; a slider cannot show a value past
                 // its max, so the max reaches what is stored.
-                max={Math.max(MAX_STAGGER, seconds)}
+                max={ceiling.stagger}
                 min={0}
                 onBlur={endGesture}
                 onChange={(event) => slideStagger(Number(event.target.value))}
