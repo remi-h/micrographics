@@ -683,3 +683,50 @@ test('a stored stagger past the slider\'s range stays reachable while it is drag
   await stagger.fill('4');
   await expect(stagger).toHaveAttribute('max', '5');
 });
+
+// Aligning treats a group as the one thing it is everywhere else: it moves
+// whole, by the middle of all it draws, and its layout is kept.
+
+/** Each label's painted box in artboard units, by its text. */
+async function paintedBoxes(page: Page) {
+  return page.evaluate(() => {
+    const svg = document.querySelector('svg[viewBox="0 0 1200 800"]') as SVGSVGElement;
+    const toArtboard = svg.getScreenCTM()!.inverse();
+    return Object.fromEntries(
+      [...document.querySelectorAll('.canvas-item > text')].map((node) => {
+        const box = (node as SVGGraphicsElement).getBBox();
+        const matrix = (node as SVGGraphicsElement).getScreenCTM()!;
+        const a = new DOMPoint(box.x, box.y).matrixTransform(matrix).matrixTransform(toArtboard);
+        const b = new DOMPoint(box.x + box.width, box.y + box.height).matrixTransform(matrix).matrixTransform(toArtboard);
+        return [node.textContent, { left: Math.min(a.x, b.x), right: Math.max(a.x, b.x), top: Math.min(a.y, b.y), bottom: Math.max(a.y, b.y) }];
+      }),
+    );
+  });
+}
+
+test('aligning moves a group as one thing, keeping its layout', async ({ page }) => {
+  await labels(page, ['AAAAAAAA', 'B', 'C']);
+  await groupNamed(page, ['AAAAAAAA', 'B']);
+  const before = await paintedBoxes(page);
+
+  await groupRows(page).first().locator('.layer-select').click();
+  await layerRows(page).filter({ has: page.locator('.layer-name', { hasText: /^C$/ }) }).click({ modifiers: ['Shift'] });
+  await page.getByTitle('Align vertical centers').click();
+
+  const after = await paintedBoxes(page);
+  // The group's members moved together: the same distance between them.
+  expect(after.B.left - after.AAAAAAAA.left).toBeCloseTo(before.B.left - before.AAAAAAAA.left, 1);
+  expect(after.B.top - after.AAAAAAAA.top).toBeCloseTo(before.B.top - before.AAAAAAAA.top, 1);
+  // And the middle of all it draws lines up with C's.
+  const groupMiddle = (Math.min(after.AAAAAAAA.left, after.B.left) + Math.max(after.AAAAAAAA.right, after.B.right)) / 2;
+  expect(groupMiddle).toBeCloseTo((after.C.left + after.C.right) / 2, 0);
+});
+
+test('one group on its own gets no align toolbar: there is nothing to line it up against', async ({ page }) => {
+  await labels(page, ['A', 'B']);
+  await groupNamed(page, ['A', 'B']);
+
+  await groupRows(page).first().locator('.layer-select').click();
+  await expect(selectedOutlines(page)).toHaveCount(2);
+  await expect(page.locator('.canvas-selection-actions')).toHaveCount(0);
+});

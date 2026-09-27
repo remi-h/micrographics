@@ -1,7 +1,7 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { sameAnimation, type ItemAnimation } from '../lib/animations';
 import { hitBounds, inkBounds, type Box } from '../lib/canvasGeometry';
-import { expandToGroups, groupItems, moveChild, moveRow, outermostGroupId, regroupCopies, ungroupItems } from '../lib/groups';
+import { expandToGroups, groupItems, moveChild, moveRow, outermostGroupId, regroupCopies, selectionUnits, ungroupItems } from '../lib/groups';
 import { inheritedTiming, keepInheritedEntrances, pruneKeepingTiming, resolveGroupTiming, setGroupTiming } from '../lib/groupTiming';
 import { createItemId } from '../lib/itemIds';
 import type { CanvasItem, CanvasSymbol, CanvasText } from '../types';
@@ -155,6 +155,19 @@ export type CanvasItems = {
 //
 // Pure geometry, so it lives outside the hook: nothing here reads state, which
 // lets effects call it without listing it as a dependency.
+/**
+ * What a set of items draws, as one box: the union of each one's ink. A
+ * group's box for aligning and distributing it as one thing.
+ */
+export function unitBounds(items: CanvasItem[]): Box {
+  const boxes = items.map(inkBounds);
+  const left = Math.min(...boxes.map((box) => box.x));
+  const top = Math.min(...boxes.map((box) => box.y));
+  const right = Math.max(...boxes.map((box) => box.x + box.width));
+  const bottom = Math.max(...boxes.map((box) => box.y + box.height));
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
 export function visualCenter(item: CanvasItem) {
   const bounds = inkBounds(item);
   return {
@@ -555,58 +568,59 @@ export function useCanvasItems({
     removeSelected();
   };
 
-  const alignSelected = (axis: 'x' | 'y') => {
-    const selected = canvasItems.filter((item) => selectedIds.includes(item.id));
-    if (selected.length < 2) return;
-
-    beginHistoryAction();
-    // The middle of the selection, not the average of its items' middles.
-    // Those are the same number for two items and drift apart for three or
-    // more: the average is pulled towards wherever the items are densest, so
-    // aligning two clustered marks and one far one used to leave all three
-    // sitting near the cluster rather than between the outer edges. The
-    // bounding box is what "align centres" means in every drawing tool, and
-    // it is the one a user can check by eye against the outer two items.
-    const spans = selected.map((item) => {
-      const box = inkBounds(item);
-      return axis === 'x' ? { low: box.x, high: box.x + box.width } : { low: box.y, high: box.y + box.height };
+  // Align and distribute work on units: each group in the selection moves as
+  // one thing, by what all of it draws, so its own layout is kept -- aligning
+  // a group's centre with a label must not stack the group's members on top
+  // of each other. A loose item is a unit of one.
+  const selectedUnits = () =>
+    selectionUnits(canvasItems, selectedIds).map((members) => {
+      const box = unitBounds(members);
+      return { members, center: { x: box.x + box.width / 2, y: box.y + box.height / 2 }, box };
     });
-    const target = (Math.min(...spans.map((span) => span.low)) + Math.max(...spans.map((span) => span.high))) / 2;
+
+  const moveUnits = (units: ReturnType<typeof selectedUnits>, target: (unit: ReturnType<typeof selectedUnits>[number]) => number, axis: 'x' | 'y') => {
     const moves = new Map(
-      selected.map((item) => {
-        const center = visualCenter(item);
-        return [item.id, { dx: axis === 'x' ? target - center.x : 0, dy: axis === 'y' ? target - center.y : 0 }];
-      }),
-    );
-    const placed = moveKeepingTogether(selected, moves);
-    setCanvasItems((current) => current.map((item) => ({ ...item, ...placed.get(item.id) })));
-  };
-
-  const distributeSelected = (axis: 'x' | 'y') => {
-    const selected = canvasItems
-      .filter((item) => selectedIds.includes(item.id))
-      .map((item) => ({ item, center: visualCenter(item) }))
-      .sort((a, b) => a.center[axis] - b.center[axis]);
-
-    if (selected.length < 3) return;
-
-    beginHistoryAction();
-    const first = selected[0].center[axis];
-    const last = selected[selected.length - 1].center[axis];
-    const step = (last - first) / (selected.length - 1);
-    const updates = new Map(selected.map((entry, index) => [entry.item.id, first + step * index]));
-
-    const moves = new Map(
-      selected.map(({ center, item }) => {
-        const target = updates.get(item.id)!;
-        return [item.id, { dx: axis === 'x' ? target - center.x : 0, dy: axis === 'y' ? target - center.y : 0 }];
+      units.flatMap((unit) => {
+        const delta = target(unit) - unit.center[axis];
+        return unit.members.map((item) => [item.id, { dx: axis === 'x' ? delta : 0, dy: axis === 'y' ? delta : 0 }] as const);
       }),
     );
     const placed = moveKeepingTogether(
-      selected.map(({ item }) => item),
+      units.flatMap((unit) => unit.members),
       moves,
     );
     setCanvasItems((current) => current.map((item) => ({ ...item, ...placed.get(item.id) })));
+  };
+
+  const alignSelected = (axis: 'x' | 'y') => {
+    const units = selectedUnits();
+    if (units.length < 2) return;
+
+    beginHistoryAction();
+    // The middle of the selection, not the average of its units' middles.
+    // Those are the same number for two and drift apart for three or more:
+    // the average is pulled towards wherever the units are densest, so
+    // aligning two clustered marks and one far one used to leave all three
+    // sitting near the cluster rather than between the outer edges. The
+    // bounding box is what "align centres" means in every drawing tool, and
+    // it is the one a user can check by eye against the outer two.
+    const spans = units.map(({ box }) =>
+      axis === 'x' ? { low: box.x, high: box.x + box.width } : { low: box.y, high: box.y + box.height },
+    );
+    const target = (Math.min(...spans.map((span) => span.low)) + Math.max(...spans.map((span) => span.high))) / 2;
+    moveUnits(units, () => target, axis);
+  };
+
+  const distributeSelected = (axis: 'x' | 'y') => {
+    const units = selectedUnits().sort((a, b) => a.center[axis] - b.center[axis]);
+    if (units.length < 3) return;
+
+    beginHistoryAction();
+    const first = units[0].center[axis];
+    const last = units[units.length - 1].center[axis];
+    const step = (last - first) / (units.length - 1);
+    const targets = new Map(units.map((unit, index) => [unit, first + step * index]));
+    moveUnits(units, (unit) => targets.get(unit)!, axis);
   };
 
   const nudgeSelected = (dx: number, dy: number) => {

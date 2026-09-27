@@ -3,7 +3,7 @@ import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalSpaceBetween
 import type { MouseEvent, PointerEvent, ReactNode } from 'react';
 import { ANIMATION_ORIGIN_STYLE, animationClassName, animationFrames, animationTiming } from '../lib/animations';
 import { hitBounds, intersects, LETTER_SPACING, textBox as modelTextBox } from '../lib/canvasGeometry';
-import { expandToGroups } from '../lib/groups';
+import { expandToGroups, selectionUnits } from '../lib/groups';
 import type { ItemAnimation } from '../lib/animations';
 import type { CanvasItem, CanvasSymbol, CanvasText, Palette, Settings } from '../types';
 import { MicroMark } from './MicroMark';
@@ -350,7 +350,9 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
 
   const selectedBounds = () => {
     const selectedItems = items.filter((item) => selectedIds.includes(item.id));
-    if (selectedItems.length < 2) return null;
+    // The toolbar only aligns and distributes, which move whole groups as one
+    // thing: with one group selected there is nothing to line it up against.
+    if (selectionUnits(items, selectedIds).length < 2) return null;
 
     const bounds = selectedItems.map(hitBounds);
     const left = Math.min(...bounds.map((item) => item.x));

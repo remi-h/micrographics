@@ -78,6 +78,23 @@ export function expandToGroups(ids: string[], items: CanvasItem[]): string[] {
 }
 
 /**
+ * The selection as the things it is made of: each outermost group in it as
+ * one unit, and each loose item as one of its own, in paint order. Align and
+ * distribute move these rather than items, so a group keeps its own layout
+ * and lines up with the rest as the one thing it is everywhere else.
+ */
+export function selectionUnits(items: CanvasItem[], ids: string[]): CanvasItem[][] {
+  const units = new Map<string, CanvasItem[]>();
+  for (const item of items) {
+    if (!ids.includes(item.id)) continue;
+    const key = outermostGroupId(item) ?? `item:${item.id}`;
+    if (!units.has(key)) units.set(key, []);
+    units.get(key)!.push(item);
+  }
+  return [...units.values()];
+}
+
+/**
  * Whether `ids` is exactly one whole outermost group and nothing else -- the
  * state in which grouping has nothing left to do and ungrouping is the useful
  * action. Two groups, or a group plus a loose item, is not this.

@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { useState } from 'react';
 import { hitBounds, inkBounds, intersects, type Box } from '../lib/canvasGeometry';
 import type { CanvasItem, CanvasSymbol, CanvasText } from '../types';
-import { MAX_ITEM_SIZE, MIN_ITEM_SIZE, moveKeepingTogether, useCanvasItems } from './useCanvasItems';
+import { MAX_ITEM_SIZE, MIN_ITEM_SIZE, moveKeepingTogether, unitBounds, useCanvasItems } from './useCanvasItems';
 
 // Like useHistory, the hook is a layer over state App owns, so the tests stand
 // up the smallest possible owner: the two pieces of state and their setters,
@@ -135,6 +135,92 @@ describe('useCanvasItems scaling and rotating', () => {
 });
 
 describe('useCanvasItems align and distribute', () => {
+  // A group is one thing everywhere else, so aligning and distributing move it
+  // whole: its members keep their places relative to each other.
+  describe('with groups', () => {
+    const inGroup = (item: CanvasItem, ...ids: string[]): CanvasItem => ({ ...item, groups: ids.map((id) => ({ id })) });
+    const offsets = (items: CanvasItem[], a: string, b: string) => {
+      const first = itemById(items, a);
+      const second = itemById(items, b);
+      return { dx: second.x - first.x, dy: second.y - first.y };
+    };
+
+    it('aligns a group as one thing, by the middle of all it draws, keeping its layout', () => {
+      // The group spans x 200..400 (centres at 200 and 400); the loose mark sits at 700.
+      const { result } = setUp({
+        canvasItems: [
+          inGroup(symbol('g-1', 200, 200), 'g'),
+          inGroup(symbol('g-2', 400, 300), 'g'),
+          symbol('loose', 700, 500),
+        ],
+        selectedIds: ['g-1', 'g-2', 'loose'],
+      });
+      const before = offsets(result.current.canvasItems, 'g-1', 'g-2');
+
+      act(() => result.current.alignSelected('x'));
+
+      const items = result.current.canvasItems;
+      expect(offsets(items, 'g-1', 'g-2')).toEqual(before);
+      const group = unitBounds([itemById(items, 'g-1'), itemById(items, 'g-2')]);
+      const loose = inkBounds(itemById(items, 'loose'));
+      expect(group.x + group.width / 2).toBeCloseTo(loose.x + loose.width / 2, 6);
+    });
+
+    it('does nothing for one group on its own: there is nothing to line it up against', () => {
+      const { result, beginHistoryAction } = setUp({
+        canvasItems: [inGroup(symbol('g-1', 200, 200), 'g'), inGroup(symbol('g-2', 400, 300), 'g')],
+        selectedIds: ['g-1', 'g-2'],
+      });
+      const before = result.current.canvasItems;
+
+      act(() => result.current.alignSelected('x'));
+      act(() => result.current.distributeSelected('x'));
+
+      expect(result.current.canvasItems).toBe(before);
+      expect(beginHistoryAction).not.toHaveBeenCalled();
+    });
+
+    it('treats a group of groups as one thing, down to the deepest member', () => {
+      const { result } = setUp({
+        canvasItems: [
+          inGroup(symbol('a', 200, 200), 'outer', 'inner'),
+          inGroup(symbol('b', 300, 260), 'outer', 'inner'),
+          inGroup(symbol('c', 420, 320), 'outer'),
+          symbol('loose', 800, 600),
+        ],
+        selectedIds: ['a', 'b', 'c', 'loose'],
+      });
+      const before = [offsets(result.current.canvasItems, 'a', 'b'), offsets(result.current.canvasItems, 'a', 'c')];
+
+      act(() => result.current.alignSelected('y'));
+
+      const items = result.current.canvasItems;
+      expect([offsets(items, 'a', 'b'), offsets(items, 'a', 'c')]).toEqual(before);
+    });
+
+    it('distributes groups and loose items as units, evenly by their middles', () => {
+      const { result } = setUp({
+        canvasItems: [
+          symbol('left', 150, 400),
+          inGroup(symbol('g-1', 300, 300), 'g'),
+          inGroup(symbol('g-2', 400, 500), 'g'),
+          symbol('right', 1000, 400),
+        ],
+        selectedIds: ['left', 'g-1', 'g-2', 'right'],
+      });
+      const before = offsets(result.current.canvasItems, 'g-1', 'g-2');
+
+      act(() => result.current.distributeSelected('x'));
+
+      const items = result.current.canvasItems;
+      expect(offsets(items, 'g-1', 'g-2')).toEqual(before);
+      const middle = (box: Box) => box.x + box.width / 2;
+      const group = middle(unitBounds([itemById(items, 'g-1'), itemById(items, 'g-2')]));
+      // Three units: the group lands halfway between the outer two.
+      expect(group).toBeCloseTo((middle(inkBounds(itemById(items, 'left'))) + middle(inkBounds(itemById(items, 'right')))) / 2, 6);
+    });
+  });
+
   it('centres a selection on its average centre', () => {
     const { result, beginHistoryAction } = setUp({
       canvasItems: [symbol('symbol-1', 100, 200), symbol('symbol-2', 100, 400)],

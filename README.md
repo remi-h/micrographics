@@ -103,7 +103,10 @@ everything is a reformatting change of its own.
   in the middle of the selection, so a label lines up with a mark by its
   glyphs rather than by its click target. If aligning would push the selection
   past an edge of the artboard, the whole selection shifts back together, so
-  the items stay aligned with each other.
+  the items stay aligned with each other. A group aligns and distributes as
+  one thing, by the middle of everything it draws, and keeps its own layout;
+  one group on its own has nothing to line up against, so it gets no align
+  toolbar.
 - Select several items and right-click them — on a layer in the `Layers`
   list, or on the canvas — and choose `Group` to lock them together. The menu
   offers only what applies: `Group` for loose items, `Ungroup` for a group,
