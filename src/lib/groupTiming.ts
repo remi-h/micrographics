@@ -101,41 +101,56 @@ export function inheritedTiming(listed: CanvasItem[]): Omit<GroupLevel, 'id'> {
 }
 
 /**
- * Before the groups `groupIds` are taken apart, gives each group directly
- * inside them that has no entrance of its own the one it was playing: the
- * dissolving group's movement, starting at that child's turn. Without this,
- * its members would go on playing that entrance -- it is written into them --
- * while its own row said it had none, and its stagger and order would stop
- * doing anything. Items directly inside keep what they play as their own
- * anyway, so they need nothing.
+ * Before the groups `groupIds` are taken apart, re-states the timing of each
+ * group directly inside them so that it plays exactly as it did once the
+ * group around it is gone. Ungrouping keeps what everything plays.
  *
- * The child takes the dissolving group's place, so its turn is counted from
- * where the dissolving group's own turn began.
+ * A child group took its turn in the dissolving group: that group's own delay
+ * plus one stagger per child listed above it. With the group gone, the child
+ * takes the dissolving group's place, so that offset is added to the child's
+ * own delay -- or, for a child with no entrance of its own that was playing
+ * the dissolving group's, the child is given that entrance, starting at its
+ * offset. Otherwise its members would go on playing what was written into
+ * them while its row said otherwise, and a child with an entrance of its own
+ * would jump to the start of the sequence.
+ *
+ * Nested dissolving groups are handled top down, so what one hands its child
+ * is what that child, dissolving in turn, hands on.
+ *
+ * Items directly inside a dissolving group keep what they play as their own
+ * -- unless a group further out gives them an entrance, which then wins, as
+ * it does for any item in it: an item inside a group has no movement of its
+ * own to keep.
  */
 export function keepInheritedEntrances(items: CanvasItem[], groupIds: Set<string>): CanvasItem[] {
-  const handed = new Map<string, ItemAnimation>();
+  const restated = new Map<string, GroupLevel>();
+  const levelOf = (row: Extract<LayerRow, { kind: 'group' }>) => restated.get(row.groupId) ?? row.level;
   const visit = (row: LayerRow) => {
     if (row.kind !== 'group') return;
-    const own = row.level.animation;
-    if (own && groupIds.has(row.groupId)) {
-      const stagger = row.level.stagger ?? 0;
+    const level = levelOf(row);
+    if (groupIds.has(row.groupId)) {
+      const own = level.animation;
+      const stagger = level.stagger ?? 0;
       row.children.forEach((child, turn) => {
-        if (child.kind === 'group' && !child.level.animation) {
-          handed.set(child.groupId, staggeredAnimation(own, stagger, turn));
+        if (child.kind !== 'group') return;
+        const offset = (own?.delay ?? 0) + stagger * turn;
+        const childLevel = levelOf(child);
+        if (childLevel.animation) {
+          if (offset === 0) return;
+          restated.set(child.groupId, { ...childLevel, animation: staggeredAnimation(childLevel.animation, offset, 1) });
+        } else if (own) {
+          restated.set(child.groupId, { ...childLevel, animation: staggeredAnimation(own, stagger, turn) });
         }
       });
     }
     row.children.forEach(visit);
   };
   layerRows(items).forEach(visit);
-  if (handed.size === 0) return items;
+  if (restated.size === 0) return items;
 
   return items.map((item) =>
-    item.groups?.some((level) => handed.has(level.id))
-      ? {
-          ...item,
-          groups: item.groups.map((level) => (handed.has(level.id) ? { ...level, animation: handed.get(level.id) } : level)),
-        }
+    item.groups?.some((level) => restated.has(level.id))
+      ? { ...item, groups: item.groups.map((level) => restated.get(level.id) ?? level) }
       : item,
   );
 }

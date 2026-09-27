@@ -179,11 +179,53 @@ describe('keepInheritedEntrances', () => {
     expect(after[0].groups).toEqual([{ id: 'I', stagger: 0.5, animation: slide(3) }]);
   });
 
-  it('leaves a group inside that has an entrance of its own alone', () => {
-    const ownInner: GroupLevel = { id: 'I', animation: pop(0.4) };
-    const own = [symbol('a', [outer, ownInner]), symbol('b', [outer, ownInner]), symbol('x', [outer])];
+  it('keeps a group inside with its own entrance at its turn, rather than jumping to the start', () => {
+    // G pops 1s in, children 0.5s apart: x first, then C, which slides 0.3s
+    // after its turn. a and b play at 1.8s; ungrouped, they still must.
+    const g: GroupLevel = { id: 'G', animation: pop(1), stagger: 0.5 };
+    const c: GroupLevel = { id: 'C', animation: slide(0.3) };
+    const nested = resolveGroupTiming([symbol('a', [g, c]), symbol('b', [g, c]), symbol('x', [g])]);
+    const before = played(nested);
 
-    expect(keepInheritedEntrances(own, new Set(['O']))).toBe(own);
+    const after = resolveGroupTiming(ungroupItems(keepInheritedEntrances(nested, new Set(['G'])), ['x']));
+
+    expect(played(after)).toEqual(before);
+    expect(before.a).toEqual(slide(1.8));
+    expect(after[0].groups).toEqual([{ id: 'C', animation: slide(1.8) }]);
+  });
+
+  it('keeps a group inside at its turn when the dissolving group has only a stagger', () => {
+    // No entrance on G, so a and b play C's slide; C is second, 0.5s in.
+    const g: GroupLevel = { id: 'G', stagger: 0.5 };
+    const c: GroupLevel = { id: 'C', animation: slide(0.2) };
+    const nested = resolveGroupTiming([symbol('a', [g, c]), symbol('b', [g, c]), symbol('x', [g])]);
+
+    const after = resolveGroupTiming(ungroupItems(keepInheritedEntrances(nested, new Set(['G'])), ['x']));
+
+    expect(after[0].animation).toEqual(slide(0.7));
+    expect(played(after).a).toEqual(played(nested).a);
+  });
+
+  it('carries a handed-on entrance through two dissolving levels', () => {
+    // P fades, 0.5s apart: y, then D1. D1 slides 1s in: z, then D2. D2 has
+    // none: w, then C (0.2s apart). Deleting z and w dissolves D1 and D2.
+    const p: GroupLevel = { id: 'P', animation: { delay: 0, duration: 0.6, kind: 'fade' }, stagger: 0.5 };
+    const d1: GroupLevel = { id: 'D1', animation: slide(1) };
+    const d2: GroupLevel = { id: 'D2' };
+    const c: GroupLevel = { id: 'C', stagger: 0.2 };
+    const nested = resolveGroupTiming([
+      symbol('a', [p, d1, d2, c]),
+      symbol('b', [p, d1, d2, c]),
+      symbol('w', [p, d1, d2]),
+      symbol('z', [p, d1]),
+      symbol('y', [p]),
+    ]);
+    const before = played(nested);
+
+    const after = pruneKeepingTiming(nested.filter((item) => item.id !== 'z' && item.id !== 'w'));
+
+    expect(played(after).a).toEqual(before.a);
+    expect(played(after).b).toEqual(before.b);
   });
 
   it('does nothing for a dissolving group with no entrance of its own', () => {

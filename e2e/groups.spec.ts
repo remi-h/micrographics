@@ -562,3 +562,62 @@ test('a group\'s stagger is off until there is an entrance for it to space out',
   await page.locator('.animation-kinds button', { hasText: 'Pop in' }).first().click();
   await expect(stagger).toBeEnabled();
 });
+
+test('ungrouping keeps a group inside playing at its turn', async ({ page }) => {
+  await labels(page, ['A', 'B', 'C']);
+  await groupNamed(page, ['A', 'B']);
+  await groupNamed(page, ['Group of 2', 'C']);
+  const outer = groupRows(page).first();
+  await animateGroup(page, outer, 'Pop in', '0.5');
+  await outer.locator('.layer-disclosure').click();
+  // The inner group slides, starting at its turn: second, so 0.5s in.
+  await animateGroup(page, page.locator('.layer-subgroup'), 'Slide in from left', '0');
+  const before = await playedEntrances(page);
+  expect(before.A.delay).toBe(500);
+
+  await outer.locator('.layer-select').click();
+  await fromLayerMenu(page, 'Ungroup');
+  await expect(groupRows(page)).toHaveCount(1);
+
+  const after = await playedEntrances(page);
+  expect(after).toEqual(before);
+});
+
+test('an inner group adjusted without an entrance of its own keeps the movement it plays', async ({ page }) => {
+  await labels(page, ['A', 'B', 'C']);
+  await groupNamed(page, ['A', 'B']);
+  await groupNamed(page, ['Group of 2', 'C']);
+  const outer = groupRows(page).first();
+  await animateGroup(page, outer, 'Pop in', '0');
+  await outer.locator('.layer-disclosure').click();
+  const popped = (await playedEntrances(page)).A.movement;
+
+  // Nudge the inner group's duration: it gains an entrance of its own, but
+  // the same movement, not the default.
+  await page.locator('.layer-subgroup .layer-animate').click();
+  const duration = page.getByRole('slider', { name: /Duration/ });
+  await duration.focus();
+  await page.keyboard.press('ArrowRight');
+  await page.getByRole('button', { name: 'Done' }).click();
+
+  expect((await playedEntrances(page)).A.movement).toBe(popped);
+});
+
+test('a group with only a stagger can have it removed', async ({ page }) => {
+  await labels(page, ['A', 'B', 'C']);
+  await groupNamed(page, ['A', 'B']);
+  await groupNamed(page, ['Group of 2', 'C']);
+  const outer = groupRows(page).first();
+  await animateGroup(page, outer, 'Pop in', '0');
+  await outer.locator('.layer-disclosure').click();
+
+  const inner = page.locator('.layer-subgroup');
+  await inner.locator('.layer-animate').click();
+  await page.getByRole('slider', { name: /Each next layer/ }).fill('0.4');
+  const remove = page.getByRole('button', { name: 'Remove' });
+  await expect(remove).toBeEnabled();
+  await remove.click();
+
+  await inner.locator('.layer-animate').click();
+  await expect(page.locator('.dialog-popup')).toContainText('+0.0s');
+});

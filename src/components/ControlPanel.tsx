@@ -123,8 +123,8 @@ export function ControlPanel({
     group: Extract<LayerRow, { kind: 'group' }>,
     selectRow: (additive: boolean) => void,
     ids: string[],
-    // Whether this group plays an entrance, its own or one from around it.
-    styled: boolean,
+    // The entrance this group plays, its own or the nearest from around it.
+    styled: ItemAnimation | undefined,
   ) => {
     const childDropGap = drag?.kind === 'child' && drag.groupId === group.groupId ? dropGap : null;
     const dropAt = (place: number) =>
@@ -220,13 +220,13 @@ export function ControlPanel({
                 </button>
                 <GroupAnimationControl
                   groupId={child.groupId}
-                  inherits={styled}
+                  inherited={styled}
                   label={label}
                   level={child.level}
                   onSetGroupAnimation={onSetGroupAnimation}
                 />
               </div>
-              {open && renderChildren(child, selectRow, ids, styled || Boolean(child.level.animation))}
+              {open && renderChildren(child, selectRow, ids, child.level.animation ?? styled)}
             </div>
           );
         })}
@@ -541,7 +541,7 @@ export function ControlPanel({
                         {row.kind === 'group' ? (
                           <GroupAnimationControl
                             groupId={row.groupId}
-                            inherits={false}
+                            inherited={undefined}
                             label={label}
                             level={row.level}
                             onSetGroupAnimation={onSetGroupAnimation}
@@ -554,7 +554,7 @@ export function ControlPanel({
                           />
                         )}
                       </div>
-                      {open && row.kind === 'group' && renderChildren(row, selectRow, ids, Boolean(row.level.animation))}
+                      {open && row.kind === 'group' && renderChildren(row, selectRow, ids, row.level.animation)}
                     </div>
                   );
                 })}
@@ -574,14 +574,14 @@ export function ControlPanel({
  */
 function GroupAnimationControl({
   groupId,
-  inherits,
+  inherited,
   label,
   level,
   onSetGroupAnimation,
 }: {
   groupId: string;
-  /** Whether a group around this one gives it an entrance to play. */
-  inherits: boolean;
+  /** The entrance a group around this one gives it, if any. */
+  inherited: ItemAnimation | undefined;
   label: string;
   level: GroupLevel;
   onSetGroupAnimation: (groupId: string, animation: ItemAnimation | null, stagger: number, record?: boolean) => void;
@@ -597,10 +597,14 @@ function GroupAnimationControl({
         // inside another plays the outer group's entrance, staggered its way.
         onSetGroupAnimation(groupId, animation, nextStagger ?? (animation ? stagger : 0), record)
       }
+      // With none of its own, the group plays the one from around it, so that
+      // is what the sliders start from: nudging the duration then keeps the
+      // movement the group was playing rather than switching to the default.
+      fallback={inherited}
       stagger={stagger}
       // A stagger spaces out an entrance; with none here or around, there is
       // nothing for it to space out, and the slider would move to no effect.
-      staggerNeedsEntrance={!level.animation && !inherits}
+      staggerNeedsEntrance={!level.animation && !inherited}
     />
   );
 }
@@ -620,6 +624,7 @@ function AnimationControl({
   onChange,
   stagger,
   staggerNeedsEntrance = false,
+  fallback,
 }: {
   animation: ItemAnimation | undefined;
   label: string;
@@ -632,9 +637,11 @@ function AnimationControl({
   stagger?: number;
   /** For a group with no entrance to stagger: the stagger slider is shown disabled, with why. */
   staggerNeedsEntrance?: boolean;
+  /** What the sliders start from when there is no entrance yet; the default otherwise. */
+  fallback?: ItemAnimation;
 }) {
   const [open, setOpen] = useState(false);
-  const current = animation ?? DEFAULT_ANIMATION;
+  const current = animation ?? (fallback ? { ...fallback, delay: 0 } : DEFAULT_ANIMATION);
   const seconds = stagger ?? 0;
 
   // A range input fires a change per step of a drag, and each one that took a
@@ -762,7 +769,9 @@ function AnimationControl({
           <div className="dialog-footer">
             <button
               className="dialog-close"
-              disabled={!animation}
+              // A group can carry a stagger with no entrance of its own; Remove
+              // clears that too.
+              disabled={!animation && !seconds}
               onClick={() => {
                 onChange(null);
                 setOpen(false);

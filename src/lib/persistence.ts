@@ -90,8 +90,9 @@ const ANIMATION_KIND_SET = new Set<string>(ANIMATION_KINDS);
 // grouped with their own timing carry whatever spacing they had, so a real
 // canvas can hold a delay past MAX_DELAY or a stagger past MAX_STAGGER, and
 // clamping those to the sliders would re-time the work on every reload. This
-// only catches a save that is simply broken.
-const MAX_SAVED_SECONDS = 60;
+// only catches a save that is simply broken: an hour is longer than any
+// sequence anyone will watch, and a delay that long is not a timing choice.
+const MAX_SAVED_SECONDS = 3600;
 
 function parseAnimation(value: unknown): ItemAnimation | null {
   if (!isRecord(value)) return null;

@@ -381,16 +381,16 @@ describe('saveEditorState / loadEditorState', () => {
         version: STORAGE_VERSION,
         settings: state.settings,
         canvasItems: [
-          { animation: { kind: 'pop', duration: 1, delay: 9999 }, id: 'a', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 },
-          { groups: [{ id: 'g', stagger: 9999 }], id: 'b', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 },
-          { groups: [{ id: 'g', stagger: 9999 }], id: 'c', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 },
+          { animation: { kind: 'pop', duration: 1, delay: 99999 }, id: 'a', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 },
+          { groups: [{ id: 'g', stagger: 99999 }], id: 'b', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 },
+          { groups: [{ id: 'g', stagger: 99999 }], id: 'c', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 },
         ],
         canvasZoom: 1,
       }),
     );
 
     const restored = loadEditorState()?.canvasItems;
-    expect(restored?.[0].animation?.delay).toBe(60);
-    expect(restored?.[1].groups?.[0].stagger).toBe(60);
+    expect(restored?.[0].animation?.delay).toBe(3600);
+    expect(restored?.[1].groups?.[0].stagger).toBe(3600);
   });
 });
