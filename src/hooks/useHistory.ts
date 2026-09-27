@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import type { CanvasItem, Settings } from './types';
+import type { CanvasItem, Settings } from '../types';
 
 // Undo/redo for the editor.
 //

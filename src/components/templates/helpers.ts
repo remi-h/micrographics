@@ -1,4 +1,4 @@
-import { textAdvance, textBox } from '../../canvasGeometry';
+import { textAdvance, textBox } from '../../lib/canvasGeometry';
 import type { CanvasItem, CanvasSymbol, CanvasText } from '../../types';
 
 export function textItem(id: string, text: string, x: number, y: number, size = 28, rotate = 0): CanvasText {

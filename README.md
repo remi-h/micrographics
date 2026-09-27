@@ -83,7 +83,7 @@ formatting rules, so the two never disagree about the same line.
 Format the files you are working on by passing them to the script:
 
 ```bash
-npm run format -- src/App.tsx e2e/navigation.spec.ts
+npm run format -- src/components/App.tsx e2e/navigation.spec.ts
 ```
 
 The repository predates Prettier and is not formatted end to end yet, so there
@@ -174,3 +174,21 @@ everything is a reformatting change of its own.
 - Base UI
 - Lucide React icons
 - ESLint + Prettier
+
+## Project Structure
+
+```text
+app/                  Next.js routes: the landing page and /creator
+src/
+  components/         React components, App included
+    templates/        one component per template, plus their layout helpers
+  hooks/              React hooks: canvas items, history, export, keyboard
+  lib/                logic with no React state: animations, geometry,
+                      groups, export markup, GIF encoding, persistence
+  data/               palettes, templates and symbol marks
+  types/              shared types, and declarations for untyped packages
+  styles.css          global styles
+e2e/                  Playwright tests
+```
+
+Unit tests sit next to the file they cover (`groups.ts` and `groups.test.ts`).

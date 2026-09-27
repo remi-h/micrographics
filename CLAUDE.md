@@ -2,6 +2,14 @@
 
 Next.js 16 + React 19 + TypeScript app (see README.md for stack/setup).
 
+## Where code lives
+
+`src/components/` for React components (templates in `components/templates/`),
+`src/hooks/` for `use*` hooks, `src/lib/` for logic with no React state,
+`src/data/` for palettes, templates and marks, and `src/types/` for shared
+types. A unit test sits next to the file it covers. README.md's "Project
+Structure" section has the full map; keep it current when you add a folder.
+
 ## Testing
 
 - Unit tests: Jest + React Testing Library. Run `npm run test`.

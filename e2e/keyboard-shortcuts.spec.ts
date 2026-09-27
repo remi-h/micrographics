@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 // The global shortcuts run from a single window keydown listener that is bound
 // once on mount and routed through a React effect event (see
-// src/useKeyboardShortcuts.ts). That listener never re-binds, so every press
+// src/hooks/useKeyboardShortcuts.ts). That listener never re-binds, so every press
 // after the first depends on the effect event handing it the current render's
 // handlers: `undo` closes over the undo stack of the render that made it, and a
 // listener stuck with an older one undoes once and then silently does nothing.

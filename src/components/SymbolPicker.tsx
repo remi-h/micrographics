@@ -1,6 +1,6 @@
 import { Tooltip } from '@base-ui/react/tooltip';
 import { symbolTabs } from '../data';
-import { formatSymbolLabel } from '../symbolLabels';
+import { formatSymbolLabel } from '../lib/symbolLabels';
 import { MicroMark } from './MicroMark';
 
 export function SymbolPicker({

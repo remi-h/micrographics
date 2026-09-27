@@ -1,6 +1,6 @@
 import { act, fireEvent, render } from '@testing-library/react';
 import App from './App';
-import { initialSettings } from './data';
+import { initialSettings } from '../data';
 
 // The artboard re-centres on the selection when the zoom changes, and only
 // then. Selecting, nudging or editing an item must leave the viewport alone,
@@ -133,13 +133,13 @@ describe('App item ids', () => {
 // covers the module and e2e/persistence.spec.ts covers the user-visible round
 // trip, but the wiring between them had no unit test — so a broken gate or a
 // dropped listener would only surface in the slow suite, or not at all.
-jest.mock('./persistence', () => {
-  const actual = jest.requireActual('./persistence');
+jest.mock('../lib/persistence', () => {
+  const actual = jest.requireActual('../lib/persistence');
   return { ...actual, loadEditorState: jest.fn(), saveEditorState: jest.fn(() => true) };
 });
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- the mock above is only visible through a runtime require
-const persistence = require('./persistence') as {
+const persistence = require('../lib/persistence') as {
   loadEditorState: jest.Mock;
   saveEditorState: jest.Mock;
 };

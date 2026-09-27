@@ -1,5 +1,5 @@
-import { templateComponents } from './components/templates';
-import type { CanvasItem, Palette, Settings, Template } from './types';
+import { templateComponents } from '../components/templates';
+import type { CanvasItem, Palette, Settings, Template } from '../types';
 
 export const palettes: Palette[] = [
   {

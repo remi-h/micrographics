@@ -4,7 +4,7 @@ import { test, expect, type Page } from '@playwright/test';
 // picking one member picks the rest, that the group reads as one layer, and
 // that a copy of a group is a group of its own rather than a second half of
 // the one it was copied from. The arithmetic behind all of it is unit-tested
-// in src/groups.test.ts.
+// in src/lib/groups.test.ts.
 
 const layerRows = (page: Page) => page.locator('.layer-row');
 const groupRows = (page: Page) => page.locator('.layer-row[data-group]');

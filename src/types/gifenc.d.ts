@@ -1,4 +1,4 @@
-// gifenc ships no types. This declares only the surface `src/gif.ts` uses,
+// gifenc ships no types. This declares only the surface `src/lib/gif.ts` uses,
 // matching node_modules/gifenc/src: `quantize` builds a palette from RGBA
 // bytes, `applyPalette` maps those bytes onto it, and the encoder writes the
 // indexed frames out. A palette entry is [r, g, b] or [r, g, b, a].

@@ -1,8 +1,8 @@
 import { act, renderHook } from '@testing-library/react';
-import { initialSettings, palettes } from './data';
-import * as exportMarkup from './exportMarkup';
-import type { ExportScale } from './exportMarkup';
-import type { CanvasItem } from './types';
+import { initialSettings, palettes } from '../data';
+import * as exportMarkup from '../lib/exportMarkup';
+import type { ExportScale } from '../lib/exportMarkup';
+import type { CanvasItem } from '../types';
 import { useExport } from './useExport';
 
 // The PNG path has four ways to fail — a serializer that throws, a decode the
@@ -19,8 +19,8 @@ import { useExport } from './useExport';
 // The real thing, wrapped so a single test can make it throw. Everything else
 // gets the actual serializer, so the markup the exporters hand to the blob is
 // the markup exportMarkup.test.ts describes.
-jest.mock('./exportMarkup', () => {
-  const actual = jest.requireActual('./exportMarkup');
+jest.mock('../lib/exportMarkup', () => {
+  const actual = jest.requireActual('../lib/exportMarkup');
   return { ...actual, buildExportMarkup: jest.fn(actual.buildExportMarkup) };
 });
 

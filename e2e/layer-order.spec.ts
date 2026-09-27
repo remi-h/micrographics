@@ -3,7 +3,7 @@ import { test, expect, type Page } from '@playwright/test';
 // Dragging a layer in the Layers list changes the paint order. What the
 // browser has to prove is the drag itself -- the rows and the canvas both
 // follow it, a group travels whole, and the place numbers stay where they are
-// -- since the reordering arithmetic is unit-tested in src/groups.test.ts.
+// -- since the reordering arithmetic is unit-tested in src/lib/groups.test.ts.
 
 const entries = (page: Page) => page.locator('.layer-entry');
 const layerRows = (page: Page) => page.locator('.layer-row');

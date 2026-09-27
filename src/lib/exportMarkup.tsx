@@ -1,8 +1,8 @@
 import { animationClassName, animationStateAt, animationStyleSheet } from './animations';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { MicrographicSvg } from './components/MicrographicSvg';
-import type { CanvasItem, Palette, Settings } from './types';
+import { MicrographicSvg } from '../components/MicrographicSvg';
+import type { CanvasItem, Palette, Settings } from '../types';
 
 // The artboard's own coordinate system, and the units the viewBox is written
 // in. Everything exported is a multiple of it.

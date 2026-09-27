@@ -4,7 +4,7 @@ import { test, expect, type Page } from '@playwright/test';
 // that the glyphs line up -- not that a model number matches. These measure
 // what Chromium actually painted, through getBBox on the rendered items.
 //
-// The arithmetic behind it is unit-tested in src/useCanvasItems.test.ts.
+// The arithmetic behind it is unit-tested in src/hooks/useCanvasItems.test.ts.
 
 const layerRows = (page: Page) => page.locator('.layer-row');
 const alignVertical = (page: Page) => page.getByTitle('Align vertical centers');

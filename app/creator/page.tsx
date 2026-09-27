@@ -1,4 +1,4 @@
-import App from '../../src/App';
+import App from '../../src/components/App';
 
 export default function CreatorPage() {
   return <App />;

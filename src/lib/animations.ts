@@ -1,4 +1,4 @@
-import type { CanvasItem } from './types';
+import type { CanvasItem } from '../types';
 
 // Entrance animations.
 //

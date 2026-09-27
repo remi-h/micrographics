@@ -1,4 +1,4 @@
-import type { ItemAnimation } from './animations';
+import type { ItemAnimation } from '../lib/animations';
 
 export type Template = '001' | '002' | '003' | '004' | '005' | '006' | '007' | '008' | 'blank';
 

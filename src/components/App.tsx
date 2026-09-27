@@ -2,22 +2,22 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Tooltip } from '@base-ui/react/tooltip';
-import { animationRunTime } from './animations';
-import { AssetPanel } from './components/AssetPanel';
-import { ControlPanel } from './components/ControlPanel';
-import { ExportStatus } from './components/ExportStatus';
-import { GroupMenu } from './components/GroupMenu';
-import { MicrographicSvg } from './components/MicrographicSvg';
-import { StageHeader } from './components/StageHeader';
-import { initialSettings, loadTemplateItems, palettes, symbolTabs, templates } from './data';
-import { groupActions } from './groups';
-import { loadEditorState, saveEditorState, type PersistedEditorState } from './persistence';
-import type { CanvasItem, Settings, Template } from './types';
-import { useCanvasItems, visualCenter } from './useCanvasItems';
-import { useExport } from './useExport';
-import { useHistory } from './useHistory';
-import { useKeyboardShortcuts } from './useKeyboardShortcuts';
-import { clamp } from './utils';
+import { animationRunTime } from '../lib/animations';
+import { AssetPanel } from './AssetPanel';
+import { ControlPanel } from './ControlPanel';
+import { ExportStatus } from './ExportStatus';
+import { GroupMenu } from './GroupMenu';
+import { MicrographicSvg } from './MicrographicSvg';
+import { StageHeader } from './StageHeader';
+import { initialSettings, loadTemplateItems, palettes, symbolTabs, templates } from '../data';
+import { groupActions } from '../lib/groups';
+import { loadEditorState, saveEditorState, type PersistedEditorState } from '../lib/persistence';
+import type { CanvasItem, Settings, Template } from '../types';
+import { useCanvasItems, visualCenter } from '../hooks/useCanvasItems';
+import { useExport } from '../hooks/useExport';
+import { useHistory } from '../hooks/useHistory';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
+import { clamp } from '../lib/utils';
 
 // Long enough that dragging an item writes once the pointer settles rather
 // than on every pointer move, short enough to survive a quick reload.

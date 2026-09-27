@@ -1,7 +1,7 @@
-import { initialSettings, loadTemplateItems, templates } from './data';
+import { initialSettings, loadTemplateItems, templates } from '../data';
 import { createItemId } from './itemIds';
 import { loadEditorState, saveEditorState } from './persistence';
-import type { CanvasItem } from './types';
+import type { CanvasItem } from '../types';
 
 // Re-evaluates the id module the way a page reload does: a fresh module
 // instance, so the sequence counter starts over and a new session token is

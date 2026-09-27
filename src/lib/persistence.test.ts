@@ -1,6 +1,6 @@
-import { initialSettings } from './data';
+import { initialSettings } from '../data';
 import { STORAGE_KEY, STORAGE_VERSION, loadEditorState, saveEditorState, type PersistedEditorState } from './persistence';
-import type { CanvasItem } from './types';
+import type { CanvasItem } from '../types';
 
 const canvasItems: CanvasItem[] = [
   { id: 'symbol-1', kind: 'symbol', mark: 'ring', rotate: 15, size: 42, x: 100, y: 200 },
