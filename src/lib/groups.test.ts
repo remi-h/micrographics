@@ -4,8 +4,9 @@ import {
   groupItems,
   isOneWholeGroup,
   layerRows,
-  moveMember,
+  moveChild,
   moveRow,
+  normalizeGroups,
   pruneGroups,
   regroupCopies,
   rowItemIds,
@@ -13,17 +14,30 @@ import {
 } from './groups';
 import type { CanvasItem, CanvasSymbol } from '../types';
 
-// Grouping is pure array work over `groupId` (see groups.ts), so the whole of
-// it is testable without a canvas. What the browser has to prove instead --
-// that clicking one member selects the rest, and that a copied group moves on
-// its own -- is in e2e/groups.spec.ts.
+// Grouping is pure array work over each item's path of groups (see
+// groups.ts), so the whole of it is testable without a canvas. What the
+// browser has to prove instead -- that clicking one member selects the rest,
+// and that a copied group moves on its own -- is in e2e/groups.spec.ts.
 
-function symbol(id: string, groupId?: string): CanvasSymbol {
-  return { ...(groupId ? { groupId } : {}), id, kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 100, y: 200 };
+/** A symbol in the groups named, outermost first. */
+function symbol(id: string, ...groupIds: string[]): CanvasSymbol {
+  return {
+    ...(groupIds.length ? { groups: groupIds.map((groupId) => ({ id: groupId })) } : {}),
+    id,
+    kind: 'symbol',
+    mark: 'ring',
+    rotate: 0,
+    size: 42,
+    x: 100,
+    y: 200,
+  };
 }
 
 const ids = (items: CanvasItem[]) => items.map((item) => item.id);
-const groupOf = (items: CanvasItem[], id: string) => items.find((item) => item.id === id)?.groupId;
+/** The outermost group an item is in. */
+const groupOf = (items: CanvasItem[], id: string) => items.find((item) => item.id === id)?.groups?.[0]?.id;
+/** Every group an item is in, outermost first. */
+const pathOf = (items: CanvasItem[], id: string) => items.find((item) => item.id === id)?.groups?.map((level) => level.id) ?? [];
 
 describe('expandToGroups', () => {
   it('returns the ids unchanged when nothing is grouped', () => {
@@ -114,14 +128,32 @@ describe('groupItems', () => {
     expect(ids(grouped)).toEqual(['a', 'b', 'c']);
   });
 
-  it('merges existing groups into the new one rather than nesting them', () => {
+  it('nests an existing group inside the new one, keeping it whole', () => {
     const items = [symbol('a', 'g1'), symbol('b', 'g1'), symbol('c')];
     const grouped = groupItems(items, ['a', 'c']);
 
-    const shared = groupOf(grouped, 'a');
-    expect(shared).not.toBe('g1');
-    expect(groupOf(grouped, 'b')).toBe(shared);
-    expect(groupOf(grouped, 'c')).toBe(shared);
+    const outer = groupOf(grouped, 'a');
+    expect(outer).not.toBe('g1');
+    expect(pathOf(grouped, 'a')).toEqual([outer, 'g1']);
+    expect(pathOf(grouped, 'b')).toEqual([outer, 'g1']);
+    expect(pathOf(grouped, 'c')).toEqual([outer]);
+  });
+
+  it('nests two groups side by side in a new one', () => {
+    const items = [symbol('a', 'g1'), symbol('b', 'g1'), symbol('c', 'g2'), symbol('d', 'g2')];
+    const grouped = groupItems(items, ['a', 'c']);
+
+    const outer = groupOf(grouped, 'a');
+    expect(pathOf(grouped, 'b')).toEqual([outer, 'g1']);
+    expect(pathOf(grouped, 'd')).toEqual([outer, 'g2']);
+  });
+
+  it('starts the new group with the settings it is given', () => {
+    const pop = { delay: 0, duration: 1, kind: 'pop' as const };
+    const grouped = groupItems([symbol('a'), symbol('b')], ['a', 'b'], { animation: pop, stagger: 0.2 });
+
+    expect(grouped[0].groups?.[0]).toMatchObject({ animation: pop, stagger: 0.2 });
+    expect(grouped[1].groups?.[0]).toEqual(grouped[0].groups?.[0]);
   });
 
   it('does nothing with fewer than two items, and says so by identity', () => {
@@ -159,7 +191,16 @@ describe('ungroupItems', () => {
   it('dissolves the group a named item belongs to', () => {
     const ungrouped = ungroupItems([symbol('a', 'g1'), symbol('b', 'g1')], ['a']);
 
-    expect(ungrouped.every((item) => item.groupId === undefined)).toBe(true);
+    expect(ungrouped.every((item) => item.groups === undefined)).toBe(true);
+  });
+
+  it('takes one level off a group of groups, leaving the groups inside whole', () => {
+    const items = [symbol('a', 'outer', 'g1'), symbol('b', 'outer', 'g1'), symbol('c', 'outer')];
+    const ungrouped = ungroupItems(items, ['c']);
+
+    expect(pathOf(ungrouped, 'a')).toEqual(['g1']);
+    expect(pathOf(ungrouped, 'b')).toEqual(['g1']);
+    expect(pathOf(ungrouped, 'c')).toEqual([]);
   });
 
   it('leaves other groups alone', () => {
@@ -173,7 +214,7 @@ describe('ungroupItems', () => {
   it('drops the key entirely rather than leaving an undefined behind', () => {
     const [item] = ungroupItems([symbol('a', 'g1'), symbol('b', 'g1')], ['a']);
 
-    expect(Object.hasOwnProperty.call(item, 'groupId')).toBe(false);
+    expect(Object.hasOwnProperty.call(item, 'groups')).toBe(false);
   });
 
   it('does nothing when nothing named is grouped', () => {
@@ -202,6 +243,27 @@ describe('pruneGroups', () => {
     expect(groupOf(pruned, 'a')).toBe('g1');
     expect(groupOf(pruned, 'c')).toBeUndefined();
   });
+
+  it('dissolves a group whose only child is another group', () => {
+    // Two members, but one child: the outer group adds nothing but a row.
+    const pruned = pruneGroups([symbol('a', 'outer', 'g1'), symbol('b', 'outer', 'g1')]);
+
+    expect(pathOf(pruned, 'a')).toEqual(['g1']);
+    expect(pathOf(pruned, 'b')).toEqual(['g1']);
+  });
+
+  it('keeps going when dissolving an inner group leaves its parent short', () => {
+    // g1 is down to one member; once it goes, outer holds only a.
+    const pruned = pruneGroups([symbol('a', 'outer', 'g1'), symbol('b')]);
+
+    expect(pathOf(pruned, 'a')).toEqual([]);
+  });
+
+  it('counts an inner group as one child of its parent', () => {
+    const items = [symbol('a', 'outer', 'g1'), symbol('b', 'outer', 'g1'), symbol('c', 'outer')];
+
+    expect(pruneGroups(items)).toBe(items);
+  });
 });
 
 describe('regroupCopies', () => {
@@ -222,6 +284,16 @@ describe('regroupCopies', () => {
     const copies = regroupCopies([symbol('a'), symbol('b', 'g1'), symbol('c', 'g1')]);
 
     expect(groupOf(copies, 'a')).toBeUndefined();
+  });
+
+  it('re-mints every level of a nested group, keeping the shape', () => {
+    const copies = regroupCopies([symbol('a', 'outer', 'g1'), symbol('b', 'outer', 'g1'), symbol('c', 'outer')]);
+
+    const [outer, inner] = pathOf(copies, 'a');
+    expect([outer, inner]).not.toContain('outer');
+    expect([outer, inner]).not.toContain('g1');
+    expect(pathOf(copies, 'b')).toEqual([outer, inner]);
+    expect(pathOf(copies, 'c')).toEqual([outer]);
   });
 });
 
@@ -261,11 +333,23 @@ describe('layerRows', () => {
   it('has no rows for an empty canvas', () => {
     expect(layerRows([])).toEqual([]);
   });
+
+  it('nests a group inside a group as a child of its row, topmost first', () => {
+    const rows = layerRows([symbol('a', 'outer', 'g1'), symbol('b', 'outer', 'g1'), symbol('c', 'outer'), symbol('d')]);
+
+    expect(rows.map((row) => row.id)).toEqual(['d', 'outer']);
+    const outer = rows[1];
+    if (outer.kind !== 'group') throw new Error('expected a group row');
+    expect(outer.children.map((child) => child.id)).toEqual(['c', 'g1']);
+    expect(rowItemIds(outer)).toEqual(['a', 'b', 'c']);
+    const inner = outer.children[1];
+    expect(inner.kind === 'group' && inner.children.map((child) => child.id)).toEqual(['b', 'a']);
+  });
 });
 
 describe('groupActions', () => {
   const loose = (id: string): CanvasItem => ({ id, kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 });
-  const member = (id: string, groupId: string): CanvasItem => ({ ...loose(id), groupId });
+  const member = (id: string, groupId: string): CanvasItem => ({ ...loose(id), groups: [{ id: groupId }] });
   const items = [loose('a'), loose('b'), member('c', 'g1'), member('d', 'g1'), member('e', 'g2'), member('f', 'g2')];
 
   it('offers nothing for a single loose item', () => {
@@ -288,37 +372,43 @@ describe('groupActions', () => {
   it('offers nothing for an empty selection', () => {
     expect(groupActions(items, [])).toEqual({ canGroup: false, canUngroup: false });
   });
+
+  it('treats a group of groups as one whole group', () => {
+    const nested = [symbol('a', 'outer', 'g1'), symbol('b', 'outer', 'g1'), symbol('c', 'outer')];
+
+    expect(groupActions(nested, ['a', 'b', 'c'])).toEqual({ canGroup: false, canUngroup: true });
+  });
 });
 
 describe('moveRow', () => {
   // Paint order, bottom first: a, then the group [g1, g2], then b on top. So
   // the Layers list reads, topmost first: b, group, a. A group row takes the
-  // id of its topmost member, g2.
+  // group's id, group-1.
   const items = [symbol('a'), symbol('g1', 'group-1'), symbol('g2', 'group-1'), symbol('b')];
   const rowOrder = (moved: CanvasItem[]) => layerRows(moved).map((row) => row.id);
 
   it('moves an item to the top of the list, which is the top of the paint order', () => {
     const moved = moveRow(items, 'a', 0);
 
-    expect(rowOrder(moved)).toEqual(['a', 'b', 'g2']);
+    expect(rowOrder(moved)).toEqual(['a', 'b', 'group-1']);
     expect(ids(moved)).toEqual(['g1', 'g2', 'b', 'a']);
   });
 
   it('moves an item to the bottom of the list', () => {
     const moved = moveRow(items, 'b', 3);
 
-    expect(rowOrder(moved)).toEqual(['g2', 'a', 'b']);
+    expect(rowOrder(moved)).toEqual(['group-1', 'a', 'b']);
     expect(ids(moved)).toEqual(['b', 'a', 'g1', 'g2']);
   });
 
   it('counts the gap in the list as it stands, before the row is lifted out', () => {
     // Gap 2 sits between the group and a. Dragging b down into it lands b
     // directly above a, not one further down.
-    expect(rowOrder(moveRow(items, 'b', 2))).toEqual(['g2', 'b', 'a']);
+    expect(rowOrder(moveRow(items, 'b', 2))).toEqual(['group-1', 'b', 'a']);
   });
 
   it('moves a group whole, with its members still together and in order', () => {
-    const moved = moveRow(items, 'g2', 0);
+    const moved = moveRow(items, 'group-1', 0);
 
     expect(ids(moved)).toEqual(['a', 'b', 'g1', 'g2']);
     expect(layerRows(moved).filter((row) => row.kind === 'group')).toHaveLength(1);
@@ -332,8 +422,8 @@ describe('moveRow', () => {
 
   it('returns the same array for a drop just above or just below the row itself', () => {
     // The group is row 1, so gaps 1 and 2 both leave it where it is.
-    expect(moveRow(items, 'g2', 1)).toBe(items);
-    expect(moveRow(items, 'g2', 2)).toBe(items);
+    expect(moveRow(items, 'group-1', 1)).toBe(items);
+    expect(moveRow(items, 'group-1', 2)).toBe(items);
   });
 
   it('returns the same array for a row that is not in the list', () => {
@@ -343,57 +433,105 @@ describe('moveRow', () => {
   });
 
   it('clamps a gap past either end of the list', () => {
-    expect(rowOrder(moveRow(items, 'a', -4))).toEqual(['a', 'b', 'g2']);
-    expect(rowOrder(moveRow(items, 'b', 99))).toEqual(['g2', 'a', 'b']);
+    expect(rowOrder(moveRow(items, 'a', -4))).toEqual(['a', 'b', 'group-1']);
+    expect(rowOrder(moveRow(items, 'b', 99))).toEqual(['group-1', 'a', 'b']);
   });
 });
 
-describe('moveMember', () => {
+describe('moveChild', () => {
   // Paint order, bottom first: a, then the group [g1, g2, g3], then b. An
-  // open group lists its members top first: g3, g2, g1.
+  // open group lists its children top first: g3, g2, g1.
   const items = [symbol('a'), symbol('g1', 'group-1'), symbol('g2', 'group-1'), symbol('g3', 'group-1'), symbol('b')];
-  const listed = (moved: CanvasItem[]) => {
-    const group = layerRows(moved).find((row) => row.kind === 'group');
-    return group?.kind === 'group' ? [...group.items].reverse().map((item) => item.id) : [];
+  const listed = (moved: CanvasItem[], groupId = 'group-1') => {
+    const group = layerRows(moved).find((row) => row.id === groupId);
+    return group?.kind === 'group' ? group.children.map((child) => child.id) : [];
   };
 
   it('moves a member to the top of its group, and so in front of the others', () => {
-    const moved = moveMember(items, 'g1', 0);
+    const moved = moveChild(items, 'group-1', 'g1', 0);
 
     expect(listed(moved)).toEqual(['g1', 'g3', 'g2']);
     expect(ids(moved)).toEqual(['a', 'g2', 'g3', 'g1', 'b']);
   });
 
   it('moves a member to the bottom of its group', () => {
-    expect(listed(moveMember(items, 'g3', 3))).toEqual(['g2', 'g1', 'g3']);
+    expect(listed(moveChild(items, 'group-1', 'g3', 3))).toEqual(['g2', 'g1', 'g3']);
   });
 
-  it('counts the gap among the members as they stand', () => {
+  it('counts the gap among the children as they stand', () => {
     // Gap 2 sits between g2 and g1: g3 lands directly above g1.
-    expect(listed(moveMember(items, 'g3', 2))).toEqual(['g2', 'g3', 'g1']);
+    expect(listed(moveChild(items, 'group-1', 'g3', 2))).toEqual(['g2', 'g3', 'g1']);
   });
 
   it('leaves everything outside the group where it was', () => {
-    const moved = moveMember(items, 'g1', 0);
+    const moved = moveChild(items, 'group-1', 'g1', 0);
 
     expect(moved[0].id).toBe('a');
     expect(moved[4].id).toBe('b');
-    expect(moved.filter((item) => item.groupId === 'group-1')).toHaveLength(3);
+    expect(moved.filter((item) => groupOf(moved, item.id) === 'group-1')).toHaveLength(3);
   });
 
-  it('returns the same array for a drop that leaves the member where it was', () => {
-    expect(moveMember(items, 'g2', 1)).toBe(items);
-    expect(moveMember(items, 'g2', 2)).toBe(items);
+  it('returns the same array for a drop that leaves the child where it was', () => {
+    expect(moveChild(items, 'group-1', 'g2', 1)).toBe(items);
+    expect(moveChild(items, 'group-1', 'g2', 2)).toBe(items);
   });
 
-  it('returns the same array for an ungrouped item, or one not on the canvas', () => {
-    expect(moveMember(items, 'a', 0)).toBe(items);
-    expect(moveMember(items, 'missing', 0)).toBe(items);
+  it('returns the same array for a child not in that group, or a group that is not there', () => {
+    expect(moveChild(items, 'group-1', 'a', 0)).toBe(items);
+    expect(moveChild(items, 'group-1', 'missing', 0)).toBe(items);
+    expect(moveChild(items, 'missing', 'g1', 0)).toBe(items);
   });
 
-  it('reorders a group whose members a hand-edited save left apart, in the places they hold', () => {
-    const scattered = [symbol('g1', 'group-1'), symbol('a'), symbol('g2', 'group-1')];
+  it('moves a group inside a group as one child, whole', () => {
+    // outer lists, top first: inner (b over a), then c.
+    const nested = [symbol('c', 'outer'), symbol('a', 'outer', 'inner'), symbol('b', 'outer', 'inner'), symbol('d')];
+    const moved = moveChild(nested, 'outer', 'inner', 2);
 
-    expect(ids(moveMember(scattered, 'g1', 0))).toEqual(['g2', 'a', 'g1']);
+    expect(listed(moved, 'outer')).toEqual(['c', 'inner']);
+    expect(ids(moved)).toEqual(['a', 'b', 'c', 'd']);
+    expect(pathOf(moved, 'a')).toEqual(['outer', 'inner']);
+  });
+
+  it('reorders inside an inner group without touching its siblings', () => {
+    const nested = [symbol('c', 'outer'), symbol('a', 'outer', 'inner'), symbol('b', 'outer', 'inner')];
+    const moved = moveChild(nested, 'inner', 'a', 0);
+
+    expect(ids(moved)).toEqual(['c', 'b', 'a']);
+  });
+});
+
+describe('normalizeGroups', () => {
+  it('gathers a group a save left split apart, at its topmost member', () => {
+    const items = [symbol('g1', 'group-1'), symbol('a'), symbol('g2', 'group-1')];
+
+    expect(ids(normalizeGroups(items))).toEqual(['a', 'g1', 'g2']);
+  });
+
+  it('gathers at every level', () => {
+    const items = [symbol('x', 'outer', 'inner'), symbol('y', 'outer'), symbol('z', 'outer', 'inner')];
+
+    expect(ids(normalizeGroups(items))).toEqual(['y', 'x', 'z']);
+  });
+
+  it('cuts off a member that reaches a group by a different path', () => {
+    // inner sits in outer for a and b; c claims it sits at the top level.
+    const items = [symbol('a', 'outer', 'inner'), symbol('b', 'outer', 'inner'), symbol('x', 'outer'), symbol('c', 'inner')];
+    const normalized = normalizeGroups(items);
+
+    expect(pathOf(normalized, 'a')).toEqual(['outer', 'inner']);
+    expect(pathOf(normalized, 'c')).toEqual([]);
+  });
+
+  it('makes every copy of a level carry the first one\'s settings', () => {
+    const pop = { delay: 0, duration: 1, kind: 'pop' as const };
+    const a = { ...symbol('a'), groups: [{ id: 'g1', animation: pop }] };
+    const b = { ...symbol('b'), groups: [{ id: 'g1', stagger: 3 }] };
+    const normalized = normalizeGroups([a, b]);
+
+    expect(normalized[1].groups?.[0]).toEqual({ id: 'g1', animation: pop });
+  });
+
+  it('dissolves a group left with one child', () => {
+    expect(pathOf(normalizeGroups([symbol('a', 'g1'), symbol('b')]), 'a')).toEqual([]);
   });
 });

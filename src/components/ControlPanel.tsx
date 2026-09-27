@@ -12,15 +12,13 @@ import {
   MIN_DURATION,
   animationLabel,
   animationRunTime,
-  groupAnimation,
-  maxStagger,
-  staggeredAnimation,
+  MAX_STAGGER,
   type ItemAnimation,
 } from '../lib/animations';
 import { templates } from '../data';
-import { groupActions, layerRows, rowItemIds } from '../lib/groups';
+import { findRow, groupActions, layerRows, rowItemIds, type LayerRow } from '../lib/groups';
 import { EXPORT_SCALES, exportPixelSize, type ExportScale } from '../lib/exportMarkup';
-import type { CanvasItem, Template } from '../types';
+import type { CanvasItem, GroupLevel, Template } from '../types';
 import { BrandIcon } from './BrandIcon';
 import { Field, ToolButton } from './Controls';
 import { GroupMenu } from './GroupMenu';
@@ -38,11 +36,12 @@ export function ControlPanel({
   onExportSvg,
   onRandomize,
   onRedo,
-  onReorderGroupMember,
+  onReorderGroupChild,
   onReorderLayer,
   onRestartTemplate,
   onSelectItem,
   onSelectItems,
+  onSetGroupAnimation,
   onSetItemAnimations,
   onGroupSelected,
   onUngroupSelected,
@@ -60,11 +59,12 @@ export function ControlPanel({
   onExportSvg: () => void;
   onRandomize: () => void;
   onRedo: () => void;
-  onReorderGroupMember: (memberId: string, gap: number) => void;
+  onReorderGroupChild: (groupId: string, childId: string, gap: number) => void;
   onReorderLayer: (rowId: string, gap: number) => void;
   onRestartTemplate: () => void;
   onSelectItem: (id: string, additive: boolean) => void;
   onSelectItems: (ids: string[], additive?: boolean) => void;
+  onSetGroupAnimation: (groupId: string, animation: ItemAnimation | null, stagger: number, record?: boolean) => void;
   onSetItemAnimations: (updates: Array<{ id: string; animation: ItemAnimation | null }>, record?: boolean) => void;
   onGroupSelected: () => void;
   onUngroupSelected: () => void;
@@ -73,11 +73,9 @@ export function ControlPanel({
   const selectedIdSet = new Set(selectedIds);
   const rows = layerRows(canvasItems);
   const { canGroup, canUngroup } = groupActions(canvasItems, selectedIds);
-  // Which group rows are open to show their members, by group id. View state
-  // for this panel only: not part of the drawing, not persisted, and not
-  // undoable. Not by row id: a group row takes its topmost member's id, which
-  // changes when a member is dragged to the top, and the group would snap
-  // shut under the drag that just reordered it.
+  // Which groups are open to show what is inside them, by group id, at any
+  // depth. View state for this panel only: not part of the drawing, not
+  // persisted, and not undoable.
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const toggleExpanded = (groupId: string) =>
     setExpanded((current) => {
@@ -86,27 +84,142 @@ export function ControlPanel({
       else next.add(groupId);
       return next;
     });
-  // What is being dragged in the list -- a whole row, or one member of an
-  // open group among the others -- and the gap it would land in if dropped
-  // now, counted topmost first as `moveRow` and `moveMember` count it. Null
-  // gap while the pointer is somewhere a drop would do nothing.
+  // What is being dragged in the list -- a whole row, or one child of an open
+  // group (an item or a group inside it) among its siblings -- and the gap it
+  // would land in if dropped now, counted topmost first as `moveRow` and
+  // `moveChild` count it. Null gap while the pointer is somewhere a drop would
+  // do nothing.
   const [drag, setDrag] = useState<
-    { kind: 'row'; id: string; gap: number | null } | { kind: 'member'; id: string; groupId: string; gap: number | null } | null
+    { kind: 'row'; id: string; gap: number | null } | { kind: 'child'; id: string; groupId: string; gap: number | null } | null
   >(null);
-  // A member drags among its group's members as the open group lists them.
-  const dragGroup = drag?.kind === 'member' ? rows.find((row) => row.kind === 'group' && row.groupId === drag.groupId) : undefined;
-  const dragList = drag?.kind === 'member' ? (dragGroup?.kind === 'group' ? [...dragGroup.items].reverse() : []) : rows;
+  // A child drags among its siblings, as its open group lists them.
+  const dragParent = drag?.kind === 'child' ? findRow(rows, drag.groupId) : undefined;
+  const dragList = drag?.kind === 'child' ? (dragParent?.kind === 'group' ? dragParent.children : []) : rows;
   const dragFrom = drag ? dragList.findIndex((entry) => entry.id === drag.id) : -1;
   // A drop just above or just below the dragged layer leaves it where it is,
   // so no line is drawn there: a line promises a move.
   const dropGap = drag && drag.gap !== null && drag.gap !== dragFrom && drag.gap !== dragFrom + 1 ? drag.gap : null;
   const rowDropGap = drag?.kind === 'row' ? dropGap : null;
-  const memberDropGap = drag?.kind === 'member' ? dropGap : null;
   const dropInList = (event: DragEvent) => {
     if (!drag) return;
     event.preventDefault();
-    if (dropGap !== null) (drag.kind === 'row' ? onReorderLayer : onReorderGroupMember)(drag.id, dropGap);
+    if (dropGap !== null) {
+      if (drag.kind === 'row') onReorderLayer(drag.id, dropGap);
+      else onReorderGroupChild(drag.groupId, drag.id, dropGap);
+    }
     setDrag(null);
+  };
+  const groupLabel = (row: Extract<LayerRow, { kind: 'group' }>) => `Group of ${row.children.length}`;
+
+  /**
+   * What an open group lists: its children, topmost first -- items, and the
+   * groups inside it, each of which can be opened in turn. Everything in here
+   * selects the whole outermost group (`selectRow`): a group is never
+   * half-selected, anywhere. The disclosure is for seeing what is inside, not
+   * for splitting it -- that is Ungroup. Dragging a child moves it among its
+   * siblings, in front of or behind them, and never out of its group.
+   */
+  const renderChildren = (group: Extract<LayerRow, { kind: 'group' }>, selectRow: (additive: boolean) => void, ids: string[]) => {
+    const childDropGap = drag?.kind === 'child' && drag.groupId === group.groupId ? dropGap : null;
+    const dropAt = (place: number) =>
+      childDropGap === place
+        ? 'before'
+        : childDropGap === group.children.length && place === group.children.length - 1
+          ? 'after'
+          : undefined;
+    const startDrag = (event: DragEvent, child: LayerRow, label: string) => {
+      // Only the child itself drags: a drag begun inside it -- in a group's
+      // own children, or its portalled animation dialog -- is not this one.
+      if (event.target !== event.currentTarget && !(event.currentTarget as Element).contains(event.target as Node)) return;
+      event.stopPropagation();
+      event.dataTransfer.effectAllowed = 'move';
+      // Firefox starts no drag without data; see the row.
+      event.dataTransfer.setData('text/plain', label);
+      setDrag({ kind: 'child', id: child.id, groupId: group.groupId, gap: null });
+    };
+    const select = (event: { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean }) =>
+      selectRow(event.shiftKey || event.metaKey || event.ctrlKey);
+    const selectOnContext = () => {
+      if (!ids.every((id) => selectedIdSet.has(id))) selectRow(false);
+    };
+
+    return (
+      <div
+        className="layer-members"
+        onDragOver={(event) => {
+          // Only a child of this group lands here; anything else carries on
+          // out to the group around this one, or to the entry, which places
+          // rows.
+          if (drag?.kind !== 'child' || drag.groupId !== group.groupId) return;
+          event.preventDefault();
+          event.stopPropagation();
+          event.dataTransfer.dropEffect = 'move';
+          // The gap is how many children's middles are above the pointer, so
+          // the 4px between two of them counts as the gap it looks like, not
+          // as nowhere. Direct children only: an open group inside counts as
+          // one child, however much of it is showing.
+          const gap = [...event.currentTarget.children].filter((node) => {
+            const box = node.getBoundingClientRect();
+            return box.top + box.height / 2 < event.clientY;
+          }).length;
+          if (gap !== drag.gap) setDrag({ ...drag, gap });
+        }}
+      >
+        {group.children.map((child, place) => {
+          const dragging = (drag?.kind === 'child' && drag.id === child.id) || undefined;
+          if (child.kind === 'item') {
+            const label = itemLabel(child.item, canvasItems.indexOf(child.item));
+            return (
+              <button
+                className="layer-member layer-child"
+                data-active={selectedIdSet.has(child.id)}
+                data-dragging={dragging}
+                data-drop={dropAt(place)}
+                draggable
+                key={child.id}
+                onClick={select}
+                onContextMenu={selectOnContext}
+                onDragEnd={() => setDrag(null)}
+                onDragStart={(event) => startDrag(event, child, label)}
+                type="button"
+              >
+                <span className="layer-name">{label}</span>
+              </button>
+            );
+          }
+          const label = groupLabel(child);
+          const open = expanded.has(child.groupId);
+          return (
+            <div className="layer-child" data-drop={dropAt(place)} key={child.id}>
+              <div
+                className="layer-subgroup"
+                data-active={child.items.every((item) => selectedIdSet.has(item.id))}
+                data-dragging={dragging}
+                draggable
+                onDragEnd={() => setDrag(null)}
+                onDragStart={(event) => startDrag(event, child, label)}
+              >
+                <button
+                  aria-expanded={open}
+                  aria-label={open ? 'Hide the layers in this group' : 'Show the layers in this group'}
+                  className="layer-disclosure"
+                  onClick={() => toggleExpanded(child.groupId)}
+                  type="button"
+                >
+                  {open ? <ChevronDown size={14} aria-hidden="true" /> : <ChevronRight size={14} aria-hidden="true" />}
+                </button>
+                <button className="layer-select" onClick={select} onContextMenu={selectOnContext} type="button">
+                  <Group size={13} aria-hidden="true" />
+                  <span className="layer-name">{label}</span>
+                </button>
+                <GroupAnimationControl groupId={child.groupId} label={label} level={child.level} onSetGroupAnimation={onSetGroupAnimation} />
+              </div>
+              {open && renderChildren(child, selectRow, ids)}
+            </div>
+          );
+        })}
+      </div>
+    );
   };
   const [exportOpen, setExportOpen] = useState(false);
   // Whether anything on the canvas actually animates decides how the dialog
@@ -304,7 +417,7 @@ export function ControlPanel({
               >
                 {rows.map((row, index) => {
                   const ids = rowItemIds(row);
-                  const label = row.kind === 'group' ? `Group of ${row.items.length}` : itemLabel(row.item, index);
+                  const label = row.kind === 'group' ? groupLabel(row) : itemLabel(row.item, index);
                   const open = row.kind === 'group' && expanded.has(row.groupId);
                   const selectRow = (additive: boolean) => {
                     // A group row stands for several items, so it goes through
@@ -332,10 +445,10 @@ export function ControlPanel({
                       key={row.id}
                       onDragOver={(event) => {
                         if (!drag) return;
-                        // A member dragged out of its group's list is over no
-                        // place it can go: it only moves among its own group.
+                        // A child dragged out of its group's list is over no
+                        // place it can go: it only moves among its siblings.
                         // (Over that list, the list takes the event first.)
-                        if (drag.kind === 'member') {
+                        if (drag.kind === 'child') {
                           if (drag.gap !== null) setDrag({ ...drag, gap: null });
                           return;
                         }
@@ -409,18 +522,16 @@ export function ControlPanel({
                         </button>
                         {/* A group is one thing everywhere else -- it moves,
                           scales and rotates as one -- so it gets one entrance
-                          that every member plays, rather than a control per
-                          member. What it adds is a stagger: each member
-                          starting a set time after the one listed above it.
-                          All of it is one write, so it is one undo step
-                          however many members there are. */}
+                          of its own rather than a control per member, plus a
+                          stagger: each child starting a set time after the
+                          one listed above it. A group inside it has its own,
+                          on its own row. */}
                         {row.kind === 'group' ? (
                           <GroupAnimationControl
-                            // Top of the list first: the order the members are
-                            // shown in when the group is opened.
-                            items={[...row.items].reverse()}
+                            groupId={row.groupId}
                             label={label}
-                            onSetItemAnimations={onSetItemAnimations}
+                            level={row.level}
+                            onSetGroupAnimation={onSetGroupAnimation}
                           />
                         ) : (
                           <AnimationControl
@@ -430,64 +541,7 @@ export function ControlPanel({
                           />
                         )}
                       </div>
-                      {open && (
-                        <div
-                          className="layer-members"
-                          onDragOver={(event) => {
-                            // Only a member of this group lands here; anything
-                            // else carries on to the entry, which places rows.
-                            if (drag?.kind !== 'member' || drag.groupId !== row.groupId) return;
-                            event.preventDefault();
-                            event.stopPropagation();
-                            event.dataTransfer.dropEffect = 'move';
-                            // The gap is how many members' middles are above the
-                            // pointer, so the 4px between two members counts as
-                            // the gap it looks like, not as nowhere.
-                            const gap = [...event.currentTarget.querySelectorAll('.layer-member')].filter((node) => {
-                              const box = node.getBoundingClientRect();
-                              return box.top + box.height / 2 < event.clientY;
-                            }).length;
-                            if (gap !== drag.gap) setDrag({ ...drag, gap });
-                          }}
-                        >
-                          {/* The members, top of the z-order first like the list
-                          itself. Clicking one selects the whole group: a group
-                          is never half-selected, anywhere. The disclosure is
-                          for seeing what is inside, not for splitting it --
-                          that is Ungroup. Dragging one moves it among the
-                          others, and so in front of or behind them. */}
-                          {[...row.items].reverse().map((member, place, members) => (
-                            <button
-                              className="layer-member"
-                              data-active={selectedIdSet.has(member.id)}
-                              data-dragging={(drag?.kind === 'member' && drag.id === member.id) || undefined}
-                              data-drop={
-                                memberDropGap === place
-                                  ? 'before'
-                                  : memberDropGap === members.length && place === members.length - 1
-                                    ? 'after'
-                                    : undefined
-                              }
-                              draggable
-                              key={member.id}
-                              onDragEnd={() => setDrag(null)}
-                              onDragStart={(event) => {
-                                event.dataTransfer.effectAllowed = 'move';
-                                // Firefox starts no drag without data; see the row.
-                                event.dataTransfer.setData('text/plain', itemLabel(member, canvasItems.indexOf(member)));
-                                setDrag({ kind: 'member', id: member.id, groupId: row.groupId, gap: null });
-                              }}
-                              onClick={(event) => selectRow(event.shiftKey || event.metaKey || event.ctrlKey)}
-                              onContextMenu={() => {
-                                if (!ids.every((id) => selectedIdSet.has(id))) selectRow(false);
-                              }}
-                              type="button"
-                            >
-                              <span className="layer-name">{itemLabel(member, canvasItems.indexOf(member))}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                      {open && row.kind === 'group' && renderChildren(row, selectRow, ids)}
                     </div>
                   );
                 })}
@@ -501,36 +555,33 @@ export function ControlPanel({
 }
 
 /**
- * A group row's entrance control: the one for a single layer, plus a stagger.
- * It reads the entrance and stagger back from the members (see
- * `groupAnimation`) and writes one entrance per member, each starting one
- * stagger after the member listed above it.
+ * A group's entrance control: the one for a single layer, plus a stagger. It
+ * reads and writes the group's own settings; what that makes each member play
+ * is worked out from them (see groupTiming.ts).
  */
 function GroupAnimationControl({
-  items,
+  groupId,
   label,
-  onSetItemAnimations,
+  level,
+  onSetGroupAnimation,
 }: {
-  /** The members, in the order they start: top of the list first. */
-  items: CanvasItem[];
+  groupId: string;
   label: string;
-  onSetItemAnimations: (updates: Array<{ id: string; animation: ItemAnimation | null }>, record?: boolean) => void;
+  level: GroupLevel;
+  onSetGroupAnimation: (groupId: string, animation: ItemAnimation | null, stagger: number, record?: boolean) => void;
 }) {
-  const shared = groupAnimation(items);
+  const stagger = level.stagger ?? 0;
   return (
     <AnimationControl
-      animation={shared?.animation}
+      animation={level.animation}
       label={label}
-      onChange={(animation, record, stagger = 0) =>
-        onSetItemAnimations(
-          items.map((item, index) => ({
-            id: item.id,
-            animation: animation && staggeredAnimation(animation, stagger, index),
-          })),
-          record,
-        )
+      onChange={(animation, record, nextStagger) =>
+        // Remove (no entrance, no stagger given) takes the stagger with it. A
+        // stagger set with no entrance of the group's own is kept: a group
+        // inside another plays the outer group's entrance, staggered its way.
+        onSetGroupAnimation(groupId, animation, nextStagger ?? (animation ? stagger : 0), record)
       }
-      stagger={{ count: items.length, seconds: shared?.stagger ?? 0 }}
+      stagger={stagger}
     />
   );
 }
@@ -555,23 +606,14 @@ function AnimationControl({
   /** `stagger` comes back only from a control that was given one. */
   onChange: (animation: ItemAnimation | null, record?: boolean, stagger?: number) => void;
   /**
-   * For a group: how far apart its members start, and how many there are,
-   * which bounds it. Leave it out for a single layer, which has no stagger.
+   * For a group: how far apart its children start. Leave it out for a
+   * single layer, which has no stagger.
    */
-  stagger?: { count: number; seconds: number };
+  stagger?: number;
 }) {
   const [open, setOpen] = useState(false);
   const current = animation ?? DEFAULT_ANIMATION;
-  const seconds = stagger?.seconds ?? 0;
-  // The last member of a staggered group starts (count - 1) staggers after the
-  // first, and that has to stay within MAX_DELAY -- a reload clamps any delay
-  // past it -- so the first one's delay and the stagger bound each other.
-  // A group's members can also arrive already set further apart than these
-  // sliders allow -- animated one by one, then grouped -- and a slider cannot
-  // show a value past its max, so each max also reaches what is stored.
-  const delayLimit = stagger
-    ? Math.max(MIN_DELAY, MAX_DELAY - seconds * (stagger.count - 1), current.delay)
-    : MAX_DELAY;
+  const seconds = stagger ?? 0;
 
   // A range input fires a change per step of a drag, and each one that took a
   // history entry would be a separate undo step -- a single drag across the
@@ -590,6 +632,13 @@ function AnimationControl({
     const record = !midGesture.current;
     midGesture.current = true;
     onChange(next, record, nextStagger);
+  };
+  // The stagger alone does not choose an entrance: a group with none of its
+  // own keeps none, and plays whatever a group around it gives.
+  const slideStagger = (nextStagger: number) => {
+    const record = !midGesture.current;
+    midGesture.current = true;
+    onChange(animation ?? null, record, nextStagger);
   };
 
   return (
@@ -648,7 +697,7 @@ function AnimationControl({
               Starts after <strong>{current.delay.toFixed(1)}s</strong>
             </span>
             <input
-              max={delayLimit}
+              max={MAX_DELAY}
               min={MIN_DELAY}
               onBlur={endGesture}
               onChange={(event) => slide({ ...current, delay: Number(event.target.value) })}
@@ -661,16 +710,19 @@ function AnimationControl({
             />
           </label>
 
-          {stagger && (
+          {stagger !== undefined && (
             <label className="animation-field">
               <span>
                 Each next layer <strong>+{seconds.toFixed(1)}s</strong>
               </span>
               <input
-                max={Math.max(maxStagger(stagger.count, current.delay), seconds)}
+                // A save from before groups nested can carry a wider stagger
+                // than the slider offers; a slider cannot show a value past
+                // its max, so the max reaches what is stored.
+                max={Math.max(MAX_STAGGER, seconds)}
                 min={0}
                 onBlur={endGesture}
-                onChange={(event) => slide(current, Number(event.target.value))}
+                onChange={(event) => slideStagger(Number(event.target.value))}
                 onKeyUp={endGesture}
                 onPointerCancel={endGesture}
                 onPointerUp={endGesture}

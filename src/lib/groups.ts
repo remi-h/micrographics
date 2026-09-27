@@ -1,47 +1,75 @@
 import { createGroupId } from './itemIds';
-import type { CanvasItem } from '../types';
+import type { CanvasItem, GroupLevel } from '../types';
 
 // Grouping.
 //
-// A group is not a container: there is no tree, and an item is never moved
-// inside anything. Each item simply carries an optional `groupId`, and two
-// items are in the same group when they carry the same one. Everything the
-// editor already does to a set of items — move, scale, rotate, align, delete,
-// export — therefore keeps working untouched, because a group only ever
-// changes *which* ids end up selected, never what happens to them afterwards.
+// A group is not a container: an item is never moved inside anything. Each
+// item carries the groups it is in as a path, outermost first, and items are
+// in the same group when their paths hold a level with the same id. Groups
+// nest because a path can be longer than one: grouping two groups gives both
+// of them's members a new outermost level.
 //
-// That is the whole design, and it is why the rest of this file is pure
-// functions over an item array. Nothing here reads or writes React state; the
-// hook that does calls into these.
+// Everything the editor already does to a set of items -- move, scale, rotate,
+// align, delete, export -- therefore keeps working untouched, because a group
+// only ever changes *which* ids end up selected, never what happens to them
+// afterwards. Selection works on outermost groups: an item is never selected
+// without the rest of the outermost group it is in.
 //
-// Two invariants the operations below maintain, both of which the layer list
-// depends on:
+// That is why the rest of this file is pure functions over an item array.
+// Nothing here reads or writes React state; the hook that does calls in.
 //
-//   - A group's members are contiguous in the items array. The array *is* the
-//     z-order (later items paint on top), so a group whose members were
+// Invariants the operations below maintain, and `normalizeGroups` restores on
+// anything that arrives from outside (a save):
+//
+//   - A group's members are contiguous in the items array, at every level. The
+//     array *is* the z-order (later items paint on top), so a group
 //     interleaved with non-members could not be drawn as one row in the layer
-//     list without that row lying about what sits above what. `groupItems`
-//     gathers the members when the group is formed.
-//   - A group has at least two members. A group of one is indistinguishable
-//     from an ungrouped item to the user but would still take a "Group of 1"
-//     row, so deleting members down to one dissolves the group instead.
+//     list without that row lying about what sits above what.
+//   - Paths agree: every member of a group reaches it through the same outer
+//     groups. A group is inside exactly one parent, or none.
+//   - A group has at least two children -- items directly in it, or groups
+//     directly in it. A group of one is indistinguishable from its only child
+//     to the user but would still take a row of its own, so it is dissolved.
+
+const path = (item: CanvasItem): GroupLevel[] => item.groups ?? [];
+
+/** The id of the outermost group an item is in, if any. */
+export function outermostGroupId(item: CanvasItem): string | undefined {
+  return item.groups?.[0]?.id;
+}
+
+/** The members of group `groupId`, in paint order. */
+export function groupMembers(items: CanvasItem[], groupId: string): CanvasItem[] {
+  return items.filter((item) => path(item).some((level) => level.id === groupId));
+}
+
+/** A group's own level -- its settings -- as its members carry it. */
+export function groupLevel(items: CanvasItem[], groupId: string): GroupLevel | undefined {
+  for (const item of items) {
+    const level = path(item).find((candidate) => candidate.id === groupId);
+    if (level) return level;
+  }
+  return undefined;
+}
 
 /**
  * The ids that must be selected together with `ids`, given the groups in
- * `items`. Ids naming nothing on the canvas are dropped: the result is always
- * a set of real items, in paint order, whether or not a group is involved.
+ * `items`: the whole outermost group of each. Ids naming nothing on the canvas
+ * are dropped: the result is always a set of real items, in paint order.
  * Callers count what comes back, so a branch that passed stale ids through
  * could report two items where the canvas holds one.
  */
 export function expandToGroups(ids: string[], items: CanvasItem[]): string[] {
   const groupIds = new Set<string>();
   for (const item of items) {
-    if (item.groupId && ids.includes(item.id)) groupIds.add(item.groupId);
+    const outer = outermostGroupId(item);
+    if (outer && ids.includes(item.id)) groupIds.add(outer);
   }
 
   const expanded = new Set(ids);
   for (const item of items) {
-    if (item.groupId && groupIds.has(item.groupId)) expanded.add(item.id);
+    const outer = outermostGroupId(item);
+    if (outer && groupIds.has(outer)) expanded.add(item.id);
   }
 
   // Item order, not click order: a selection is a set, and returning it in the
@@ -50,18 +78,18 @@ export function expandToGroups(ids: string[], items: CanvasItem[]): string[] {
 }
 
 /**
- * Whether `ids` is exactly one whole group and nothing else — the state in
- * which grouping has nothing left to do and ungrouping is the useful action.
- * A selection spanning two groups, or a group plus a loose item, is not this.
+ * Whether `ids` is exactly one whole outermost group and nothing else -- the
+ * state in which grouping has nothing left to do and ungrouping is the useful
+ * action. Two groups, or a group plus a loose item, is not this.
  */
 export function isOneWholeGroup(items: CanvasItem[], ids: string[]): boolean {
   const selected = items.filter((item) => ids.includes(item.id));
   if (selected.length < 2) return false;
 
-  const groupId = selected[0].groupId;
-  if (!groupId || !selected.every((item) => item.groupId === groupId)) return false;
+  const groupId = outermostGroupId(selected[0]);
+  if (!groupId || !selected.every((item) => outermostGroupId(item) === groupId)) return false;
 
-  return items.filter((item) => item.groupId === groupId).length === selected.length;
+  return items.filter((item) => outermostGroupId(item) === groupId).length === selected.length;
 }
 
 /**
@@ -69,39 +97,38 @@ export function isOneWholeGroup(items: CanvasItem[], ids: string[]): boolean {
  * canvas each offer these on right-click, and both ask here, so the two menus
  * cannot disagree about what a selection can do.
  *
- * - Group: two or more items that are not already exactly one whole group.
- *   Two groups, or a group plus a loose item, can be grouped -- that merges
- *   them.
+ * - Group: two or more things -- loose items or whole groups -- that are not
+ *   already exactly one whole group. Grouping groups nests them.
  * - Ungroup: any selected item belongs to a group.
- *
- * Usually only one applies, so the menu reads as a toggle. Both apply in the
- * one case where both are real choices: a group selected together with other
- * items, which can either be merged into one group or have its group taken
- * apart.
  */
 export function groupActions(items: CanvasItem[], ids: string[]): { canGroup: boolean; canUngroup: boolean } {
   const selected = items.filter((item) => ids.includes(item.id));
   return {
     canGroup: selected.length > 1 && !isOneWholeGroup(items, ids),
-    canUngroup: selected.some((item) => item.groupId !== undefined),
+    canUngroup: selected.some((item) => path(item).length > 0),
   };
 }
 
 /**
- * Puts every item in `ids` — and every group any of them belongs to — into one
- * new group, gathered together at the topmost member's position in the z-order.
- * Returns `items` unchanged when there is nothing to group.
+ * Puts every item in `ids`, with the rest of each one's outermost group, into
+ * one new group. Groups among them keep their own structure and become groups
+ * *inside* the new one. The new group is gathered together at its topmost
+ * member's position in the z-order. Returns `items` unchanged when there is
+ * nothing to group.
+ *
+ * `level` seeds the new group's settings, for a caller that wants the group
+ * to keep an entrance its members already share.
  */
-export function groupItems(items: CanvasItem[], ids: string[]): CanvasItem[] {
+export function groupItems(items: CanvasItem[], ids: string[], level: Omit<GroupLevel, 'id'> = {}): CanvasItem[] {
   const members = new Set(expandToGroups(ids, items));
   if (members.size < 2) return items;
-  // Re-grouping a group that is already whole would only mint it a new id:
-  // nothing on screen changes, but the caller would take a history entry for
-  // it, and the user's next undo would appear to do nothing.
+  // Re-grouping a group that is already whole would only wrap it in a group of
+  // one: nothing on screen changes, but the caller would take a history entry
+  // for it, and the user's next undo would appear to do nothing.
   if (isOneWholeGroup(items, [...members])) return items;
 
-  const groupId = createGroupId();
-  const grouped = items.filter((item) => members.has(item.id)).map((item) => ({ ...item, groupId }));
+  const outer: GroupLevel = { ...level, id: createGroupId() };
+  const grouped = items.filter((item) => members.has(item.id)).map((item) => ({ ...item, groups: [outer, ...path(item)] }));
   const rest = items.filter((item) => !members.has(item.id));
 
   // The group lands where its topmost member was, so grouping never sends the
@@ -112,96 +139,184 @@ export function groupItems(items: CanvasItem[], ids: string[]): CanvasItem[] {
   return [...rest.slice(0, above), ...grouped, ...rest.slice(above)];
 }
 
-/** Dissolves every group any of `ids` belongs to. Item order is untouched. */
+/**
+ * Takes the outermost group off every outermost group any of `ids` is in --
+ * one level. A group of groups comes apart into those groups; each of them
+ * stays whole until it is ungrouped in turn. Item order is untouched.
+ */
 export function ungroupItems(items: CanvasItem[], ids: string[]): CanvasItem[] {
   const groupIds = new Set<string>();
   for (const item of items) {
-    if (item.groupId && ids.includes(item.id)) groupIds.add(item.groupId);
+    const outer = outermostGroupId(item);
+    if (outer && ids.includes(item.id)) groupIds.add(outer);
   }
   if (groupIds.size === 0) return items;
 
-  return items.map((item) => (item.groupId && groupIds.has(item.groupId) ? withoutGroup(item) : item));
-}
-
-/**
- * Dissolves any group left with fewer than two members. Call after removing
- * items: deleting all but one member would otherwise leave a lone item wearing
- * a group id, which the layer list would still draw as a group row.
- */
-export function pruneGroups(items: CanvasItem[]): CanvasItem[] {
-  const counts = new Map<string, number>();
-  for (const item of items) {
-    if (item.groupId) counts.set(item.groupId, (counts.get(item.groupId) ?? 0) + 1);
-  }
-
-  if (![...counts.values()].some((count) => count < 2)) return items;
-  return items.map((item) => (item.groupId && (counts.get(item.groupId) ?? 0) < 2 ? withoutGroup(item) : item));
-}
-
-/**
- * Gives every group among `items` a fresh id, keeping which items share a group.
- * Copies are made this way so that pasting a group produces a second, separate
- * group rather than silently enlarging the one that was copied.
- */
-export function regroupCopies(items: CanvasItem[]): CanvasItem[] {
-  const replacements = new Map<string, string>();
   return items.map((item) => {
-    if (!item.groupId) return item;
-    let replacement = replacements.get(item.groupId);
-    if (!replacement) {
-      replacement = createGroupId();
-      replacements.set(item.groupId, replacement);
-    }
-    return { ...item, groupId: replacement };
+    const outer = outermostGroupId(item);
+    return outer && groupIds.has(outer) ? withPath(item, path(item).slice(1)) : item;
   });
 }
 
-/** A row in the Layers list: either one ungrouped item, or a whole group. */
-export type LayerRow =
-  | { kind: 'item'; id: string; item: CanvasItem }
-  | { kind: 'group'; id: string; groupId: string; items: CanvasItem[] };
+/**
+ * Dissolves any group left with fewer than two children. Call after removing
+ * items: deleting all but one member would otherwise leave a lone item wearing
+ * a group, which the layer list would still draw as a group row -- and a
+ * group whose only child is another group is the same thing one level up.
+ */
+export function pruneGroups(items: CanvasItem[]): CanvasItem[] {
+  let current = items;
+  // Dissolving one level can leave its parent with one child in turn, so
+  // repeat until nothing changes. Each pass removes a level or stops.
+  for (;;) {
+    const children = new Map<string, Set<string>>();
+    for (const item of current) {
+      const levels = path(item);
+      levels.forEach((level, depth) => {
+        const child = levels[depth + 1]?.id ?? `item:${item.id}`;
+        if (!children.has(level.id)) children.set(level.id, new Set());
+        children.get(level.id)!.add(child);
+      });
+    }
+    const lonely = new Set([...children].filter(([, set]) => set.size < 2).map(([id]) => id));
+    if (lonely.size === 0) return current;
+    current = current.map((item) =>
+      path(item).some((level) => lonely.has(level.id))
+        ? withPath(
+            item,
+            path(item).filter((level) => !lonely.has(level.id)),
+          )
+        : item,
+    );
+  }
+}
 
 /**
- * The Layers list, topmost first. A group's members are contiguous (see the
- * note at the top of this file), so collapsing them is a single pass: a run of
- * the same `groupId` becomes one row.
+ * Gives every group among `items` a fresh id, at every level, keeping which
+ * items share which group. Copies are made this way so that pasting a group
+ * produces a second, separate group rather than silently enlarging the one
+ * that was copied. Settings travel with the copy.
+ */
+export function regroupCopies(items: CanvasItem[]): CanvasItem[] {
+  const replacements = new Map<string, string>();
+  const fresh = (id: string) => {
+    if (!replacements.has(id)) replacements.set(id, createGroupId());
+    return replacements.get(id)!;
+  };
+  return items.map((item) =>
+    item.groups ? { ...item, groups: item.groups.map((level) => ({ ...level, id: fresh(level.id) })) } : item,
+  );
+}
+
+/**
+ * Makes groups from anywhere -- a save, a hand-edited one included -- keep
+ * the invariants at the top of this file:
+ *
+ * - Paths agree. The first member met, bottom up, decides the path to each
+ *   group; a member reaching it any other way is cut off at the first level
+ *   that disagrees, and every copy of a level takes the first one's settings.
+ * - Members are contiguous, at every level. Each group is gathered at its
+ *   topmost member's place, the way grouping gathers it.
+ * - No group has fewer than two children.
+ */
+export function normalizeGroups(items: CanvasItem[]): CanvasItem[] {
+  const parents = new Map<string, string | null>();
+  const levels = new Map<string, GroupLevel>();
+  const agreed = items.map((item) => {
+    const kept: GroupLevel[] = [];
+    for (const level of path(item)) {
+      const parent = kept[kept.length - 1]?.id ?? null;
+      if (parents.has(level.id) && parents.get(level.id) !== parent) break;
+      if (kept.some((outer) => outer.id === level.id)) break;
+      parents.set(level.id, parent);
+      if (!levels.has(level.id)) levels.set(level.id, level);
+      kept.push(levels.get(level.id)!);
+    }
+    return kept.length === path(item).length && kept.every((level, depth) => level === path(item)[depth])
+      ? item
+      : withPath(item, kept);
+  });
+
+  return pruneGroups(gather(agreed, 0));
+}
+
+// Gathers each group at `depth` into one run, at its topmost member's place,
+// then does the same inside each run one level down.
+function gather(items: CanvasItem[], depth: number): CanvasItem[] {
+  const top = new Map<string, number>();
+  items.forEach((item, index) => {
+    const id = path(item)[depth]?.id;
+    if (id) top.set(id, index);
+  });
+  const out: CanvasItem[] = [];
+  items.forEach((item, index) => {
+    const id = path(item)[depth]?.id;
+    if (!id) {
+      out.push(item);
+      return;
+    }
+    if (top.get(id) !== index) return;
+    out.push(...gather(items.filter((member) => path(member)[depth]?.id === id), depth + 1));
+  });
+  return out;
+}
+
+/**
+ * A node of the Layers list: one item, or a whole group with its children --
+ * items and groups directly in it, topmost first. `id` is the item's id or the
+ * group's; `items` is every item the node stands for, in paint order.
+ */
+export type LayerRow =
+  | { kind: 'item'; id: string; item: CanvasItem; items: CanvasItem[] }
+  | { kind: 'group'; id: string; groupId: string; level: GroupLevel; items: CanvasItem[]; children: LayerRow[] };
+
+/**
+ * The Layers list, topmost first, as a tree: outermost groups at the top
+ * level, each holding its children. A group's members are contiguous (see the
+ * note at the top of this file), so each level is a single pass: a run of the
+ * same group id becomes one node.
  */
 export function layerRows(items: CanvasItem[]): LayerRow[] {
-  const rows: LayerRow[] = [];
+  return nodesAt(items, 0);
+}
 
+function nodesAt(items: CanvasItem[], depth: number): LayerRow[] {
+  const runs: CanvasItem[][] = [];
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index];
-    if (!item.groupId) {
-      rows.push({ kind: 'item', id: item.id, item });
-      continue;
-    }
-
-    const previous = rows[rows.length - 1];
-    if (previous?.kind === 'group' && previous.groupId === item.groupId) {
+    const id = path(item)[depth]?.id;
+    const previous = runs[runs.length - 1];
+    if (id && previous && path(previous[0])[depth]?.id === id) {
       // Walking top-down, so each next member belongs under the ones already
-      // collected; unshift keeps a row's items in painting order.
-      previous.items.unshift(item);
-      continue;
+      // collected; unshift keeps a run in painting order.
+      previous.unshift(item);
+    } else {
+      runs.push([item]);
     }
-
-    // Keyed by the member it starts at rather than by the group id: the
-    // contiguity invariant above means one row per group, but a hand-edited
-    // save could break it, and two rows sharing a React key is a worse failure
-    // than two rows for one group.
-    rows.push({ kind: 'group', id: item.id, groupId: item.groupId, items: [item] });
   }
 
-  return rows;
+  const seen = new Set<string>();
+  return runs.map((run) => {
+    const level = path(run[0])[depth];
+    if (!level) return { kind: 'item', id: run[0].id, item: run[0], items: run };
+    // A hand-edited save could split a group into two runs; two nodes sharing
+    // a React key is a worse failure than two nodes for one group, so the
+    // second takes its topmost member's id. normalizeGroups prevents it.
+    const id = seen.has(level.id) ? `${level.id}:${run[run.length - 1].id}` : level.id;
+    seen.add(level.id);
+    return { kind: 'group', id, groupId: level.id, level, items: run, children: nodesAt(run, depth + 1) };
+  });
 }
 
 /** Every id a layer row stands for. */
 export function rowItemIds(row: LayerRow): string[] {
-  return row.kind === 'item' ? [row.id] : row.items.map((item) => item.id);
+  return row.items.map((item) => item.id);
 }
 
 /**
- * Moves one Layers row -- an item, or a whole group -- to a new place in the
- * list, and returns the items in the paint order that list now describes.
+ * Moves one top-level Layers row -- an item, or a whole group -- to a new
+ * place in the list, and returns the items in the paint order that list now
+ * describes.
  *
  * `gap` is where the row is dropped, counted in the list as it stands, topmost
  * first: 0 is above the top row, `rows.length` is below the bottom one, and
@@ -211,9 +326,9 @@ export function rowItemIds(row: LayerRow): string[] {
  *
  * The move is made on rows and flattened back to items, never on items
  * directly, so a group travels whole and its members stay contiguous: there
- * is no gap *inside* a group to drop a row into (members are reordered among
- * themselves by `moveMember`). Returns `items` itself when nothing moves, so
- * the caller can skip an undo entry for a no-op.
+ * is no gap *inside* a group to drop a row into (a group's children are
+ * reordered among themselves by `moveChild`). Returns `items` itself when
+ * nothing moves, so the caller can skip an undo entry for a no-op.
  */
 export function moveRow(items: CanvasItem[], rowId: string, gap: number): CanvasItem[] {
   const rows = layerRows(items);
@@ -225,38 +340,46 @@ export function moveRow(items: CanvasItem[], rowId: string, gap: number): Canvas
   if (!reordered) return items;
 
   // Rows run topmost first and items bottom first, so flatten in reverse; a
-  // group row already holds its members in painting order.
-  return reordered.reverse().flatMap((row) => (row.kind === 'item' ? [row.item] : row.items));
+  // row already holds its items in painting order.
+  return reordered.reverse().flatMap((row) => row.items);
 }
 
 /**
- * Moves one member of a group to a new place among the group's members, as an
- * open group lists them: topmost first, with `gap` counted the way `moveRow`
- * counts it. The group keeps the places in the paint order it had; only who
- * is in which of them changes, so nothing outside the group moves, and a
- * member cannot be dragged out of its group this way. Ungroup is for that.
+ * Moves one child of group `groupId` -- an item directly in it, or a group
+ * directly in it -- to a new place among the group's children, as the open
+ * group lists them: topmost first, with `gap` counted the way `moveRow`
+ * counts it. The group keeps the places in the paint order it had; only which
+ * child is in which of them changes, so nothing outside the group moves, and
+ * nothing can be dragged out of its group this way. Ungroup is for that.
  *
- * Returns `items` itself when nothing moves, or for an item in no group.
+ * Returns `items` itself when nothing moves, or when there is no such child.
  */
-export function moveMember(items: CanvasItem[], memberId: string, gap: number): CanvasItem[] {
-  const groupId = items.find((item) => item.id === memberId)?.groupId;
-  if (!groupId) return items;
+export function moveChild(items: CanvasItem[], groupId: string, childId: string, gap: number): CanvasItem[] {
+  const group = findRow(layerRows(items), groupId);
+  if (!group || group.kind !== 'group') return items;
 
-  // The places the group holds, bottom first, and its members listed top first.
-  const places = items.flatMap((item, index) => (item.groupId === groupId ? [index] : []));
-  const listed = places.map((index) => items[index]).reverse();
   const reordered = moveToGap(
-    listed,
-    listed.findIndex((item) => item.id === memberId),
+    group.children,
+    group.children.findIndex((child) => child.id === childId),
     gap,
   );
   if (!reordered) return items;
 
-  const next = [...items];
-  reordered.reverse().forEach((item, member) => {
-    next[places[member]] = item;
-  });
-  return next;
+  // The group's members are contiguous, so its places are one run of indices.
+  const start = items.indexOf(group.items[0]);
+  return [...items.slice(0, start), ...reordered.reverse().flatMap((child) => child.items), ...items.slice(start + group.items.length)];
+}
+
+/** The row for group or item `id`, wherever it sits in the tree. */
+export function findRow(rows: LayerRow[], id: string): LayerRow | undefined {
+  for (const row of rows) {
+    if (row.id === id) return row;
+    if (row.kind === 'group') {
+      const found = findRow(row.children, id);
+      if (found) return found;
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -277,12 +400,12 @@ function moveToGap<T>(list: T[], from: number, gap: number): T[] | null {
   return reordered;
 }
 
-// `delete item.groupId` on a copy rather than `groupId: undefined`: the item is
-// about to be persisted as JSON, and an explicit undefined is dropped by
-// JSON.stringify anyway, so this keeps the saved shape and the in-memory shape
-// the same object graph.
-function withoutGroup(item: CanvasItem): CanvasItem {
-  const next = { ...item };
-  delete next.groupId;
+// `delete item.groups` on a copy rather than `groups: undefined` when the path
+// empties: the item is about to be persisted as JSON, and an explicit
+// undefined is dropped by JSON.stringify anyway, so this keeps the saved shape
+// and the in-memory shape the same object graph.
+function withPath(item: CanvasItem, groups: GroupLevel[]): CanvasItem {
+  const next: CanvasItem = { ...item, groups };
+  if (groups.length === 0) delete next.groups;
   return next;
 }

@@ -282,21 +282,18 @@ export const MAX_STAGGER = 2;
 const roundDelay = (seconds: number) => Math.round(seconds * 1000) / 1000;
 
 /**
- * A group's entrance, as its layer row shows it: the entrance its members
- * share, and how far apart they start.
+ * The one staggered entrance a run of items already plays, if they play one:
+ * the entrance the first plays, and how far apart they start.
  *
- * There is nothing to store for this: a group is its members, and each member
- * keeps its own entrance. Staggering is only a way of setting them -- the
- * first plays at the group's delay, each next one `stagger` seconds after the
- * one before -- so reading it back means finding that pattern in them. Undo,
- * saving, the preview and every export already work per member, and so work
- * unchanged.
+ * A group stores its own entrance (see groupTiming.ts), but items grouped
+ * before it did -- in a save from then, or loose items being grouped now --
+ * carry only their own. This finds the pattern a group would have given them,
+ * so the group can take it over rather than read as unset: the first plays at
+ * the group's delay, each next one `stagger` seconds after the one before.
  *
  * `items` are in stagger order, the order they start in. Returns undefined
- * when there is no one pattern to show: a member with no entrance, members
- * that play a different entrance or for a different time, or delays that are
- * not evenly spaced (set one by one before they were grouped, say). The
- * control then reads as unset until one is chosen for all of them.
+ * when there is no one pattern: an item with no entrance, items that play a
+ * different entrance or for a different time, or delays not evenly spaced.
  */
 export function groupAnimation(items: CanvasItem[]): { animation: ItemAnimation; stagger: number } | undefined {
   const first = items[0]?.animation;
@@ -313,21 +310,6 @@ export function groupAnimation(items: CanvasItem[]): { animation: ItemAnimation;
 /** The entrance the member `index` places into a staggered group plays. */
 export function staggeredAnimation(animation: ItemAnimation, stagger: number, index: number): ItemAnimation {
   return { ...animation, delay: roundDelay(animation.delay + stagger * index) };
-}
-
-/**
- * How far apart a group of `count` may start, given the first one's delay:
- * as far as `MAX_STAGGER`, and no further than keeps the last member within
- * `MAX_DELAY`. A save clamps every delay to that on the way back in, so a
- * stagger that ran past it would come back from a reload bunched up at the
- * end.
- */
-export function maxStagger(count: number, delay: number): number {
-  if (count < 2) return 0;
-  // In whole tenths, the slider's step: (10 - 9.4) / 2 * 10 is 2.9999999999999982
-  // in floating point, which floors a whole step short of the 0.3 that fits.
-  const tenths = Math.floor(Math.round((MAX_DELAY - delay) * 10) / (count - 1));
-  return Math.max(0, Math.min(MAX_STAGGER, tenths / 10));
 }
 
 /** How long the whole sequence runs, in seconds. Zero when nothing animates. */

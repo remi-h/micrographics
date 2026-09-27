@@ -19,15 +19,34 @@ export type Settings = {
   showBackground: boolean;
 };
 
+/**
+ * One group an item belongs to. A group is not a container: it is the items
+ * that carry a level with its id, and every member carries a copy of the
+ * level. The copies are kept identical by the operations that change them
+ * (see groups.ts and groupAnimation.ts).
+ */
+export type GroupLevel = {
+  id: string;
+  /**
+   * The entrance this group gives its members, if it sets one. An inner
+   * group's own entrance wins over an outer group's for the inner group's
+   * members; `delay` is counted from the moment the group's turn comes.
+   */
+  animation?: ItemAnimation;
+  /** Seconds between one child of this group starting and the next. */
+  stagger?: number;
+};
+
 export type CanvasText = {
   id: string;
   /**
-   * Set when this item is part of a group. Items sharing a groupId are
-   * selected, moved and deleted together. Optional because most items are not
-   * grouped, and because a save written before groups existed has no such
-   * field. See groups.ts.
+   * The groups this item is in, outermost first, when it is in any. Groups
+   * nest: items sharing a level's id are in that group, and each level is
+   * inside the one before it. Selected, moved and deleted together by their
+   * outermost group. Optional because most items are not grouped, and because
+   * a save written before groups existed has no such field. See groups.ts.
    */
-  groupId?: string;
+  groups?: GroupLevel[];
   /**
    * The entrance this item plays, if it has one. Optional because most items
    * have none, and because a save written before animations existed has no
@@ -44,8 +63,8 @@ export type CanvasText = {
 
 export type CanvasSymbol = {
   id: string;
-  /** Set when this item is part of a group; see CanvasText above and groups.ts. */
-  groupId?: string;
+  /** The groups this item is in, outermost first; see CanvasText above and groups.ts. */
+  groups?: GroupLevel[];
   /** The entrance this item plays, if it has one; see CanvasText above. */
   animation?: ItemAnimation;
   kind: 'symbol';

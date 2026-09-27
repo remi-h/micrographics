@@ -943,18 +943,50 @@ h1 {
   border-left-color: #f4f0e8;
 }
 
-/* A member being dragged among the others, and where it will land: the same
+/* A group inside an open group: a row of its own -- disclosure, name and
+   entrance control, like a top-level group -- indented with the layers
+   beside it and tinted the same way a group row is. Its wrapper carries the
+   indent, so what it lists when open indents one step further. */
+div.layer-child {
+  margin-left: 28px;
+}
+
+.layer-subgroup {
+  min-width: 0;
+  min-height: 32px;
+  display: flex;
+  align-items: stretch;
+  border-left: 1px solid rgba(245, 242, 234, 0.16);
+  border-radius: 0 6px 6px 0;
+  background: rgba(245, 242, 234, 0.06);
+  cursor: pointer;
+}
+
+.layer-subgroup .layer-select {
+  padding: 6px 11px;
+}
+
+.layer-subgroup .layer-select .layer-name {
+  font-size: 12px;
+}
+
+.layer-subgroup[data-active="true"] {
+  border-left-color: #f4f0e8;
+}
+
+/* A child being dragged among its siblings, and where it will land: the same
    fade and line as a whole row, inside the group's list and centred in the
-   4px between two members. */
-.layer-member {
+   4px between two children. */
+.layer-child {
   position: relative;
 }
 
-.layer-member[data-dragging] {
+.layer-member[data-dragging],
+.layer-subgroup[data-dragging] {
   opacity: 0.4;
 }
 
-.layer-member[data-drop]::before {
+.layer-child[data-drop]::before {
   content: "";
   position: absolute;
   left: 0;
@@ -965,11 +997,11 @@ h1 {
   pointer-events: none;
 }
 
-.layer-member[data-drop="before"]::before {
+.layer-child[data-drop="before"]::before {
   top: -3px;
 }
 
-.layer-member[data-drop="after"]::before {
+.layer-child[data-drop="after"]::before {
   bottom: -3px;
 }
 

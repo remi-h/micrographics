@@ -178,13 +178,86 @@ describe('saveEditorState / loadEditorState', () => {
     const withGroup: PersistedEditorState = {
       ...state,
       canvasItems: [
-        { groupId: 'group-1', id: 'symbol-1', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 100, y: 200 },
-        { groupId: 'group-1', id: 'text-1', kind: 'text', rotate: 0, size: 42, text: 'MICRO', x: 300, y: 400 },
+        { groups: [{ id: 'group-1' }], id: 'symbol-1', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 100, y: 200 },
+        { groups: [{ id: 'group-1' }], id: 'text-1', kind: 'text', rotate: 0, size: 42, text: 'MICRO', x: 300, y: 400 },
       ],
     };
 
     expect(saveEditorState(withGroup)).toBe(true);
     expect(loadEditorState()).toEqual(withGroup);
+  });
+
+  it('round-trips a group inside a group, with each group\'s own entrance', () => {
+    const pop = { delay: 0, duration: 0.6, kind: 'pop' as const };
+    const slide = { delay: 0, duration: 0.6, kind: 'slide-left' as const };
+    const outer = { id: 'outer', animation: pop, stagger: 0.5 };
+    const inner = { id: 'inner', animation: slide, stagger: 0.2 };
+    const nested: PersistedEditorState = {
+      ...state,
+      canvasItems: [
+        { animation: { ...pop, delay: 0.5 }, groups: [outer], id: 'C', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 },
+        { animation: { ...slide, delay: 0.2 }, groups: [outer, inner], id: 'A', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 },
+        { animation: slide, groups: [outer, inner], id: 'B', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 },
+      ],
+    };
+
+    expect(saveEditorState(nested)).toBe(true);
+    expect(loadEditorState()).toEqual(nested);
+  });
+
+  it('works each item\'s entrance out again from its groups, rather than trusting the copy saved on it', () => {
+    const pop = { delay: 0, duration: 0.6, kind: 'pop' as const };
+    const group = { id: 'g', animation: pop, stagger: 0.5 };
+    writeRaw(
+      JSON.stringify({
+        version: STORAGE_VERSION,
+        settings: state.settings,
+        canvasItems: [
+          { animation: { ...pop, delay: 9 }, groups: [group], id: 'a', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 },
+          { groups: [group], id: 'b', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 },
+        ],
+        canvasZoom: 1,
+      }),
+    );
+
+    expect(loadEditorState()?.canvasItems.map((item) => item.animation?.delay)).toEqual([0.5, 0]);
+  });
+
+  it('gives a group from a save before groups nested the staggered entrance its members played', () => {
+    // Then, a group was a bare groupId, and its entrance lived only in its
+    // members: here a pop, 0.3s apart, top of the list (b) first.
+    const pop = { delay: 0.2, duration: 0.6, kind: 'pop' as const };
+    writeRaw(
+      JSON.stringify({
+        version: STORAGE_VERSION,
+        settings: state.settings,
+        canvasItems: [
+          { animation: { ...pop, delay: 0.5 }, groupId: 'g', id: 'a', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 },
+          { animation: pop, groupId: 'g', id: 'b', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 },
+        ],
+        canvasZoom: 1,
+      }),
+    );
+
+    const restored = loadEditorState()?.canvasItems;
+    expect(restored?.[0].groups).toEqual([{ id: 'g', animation: pop, stagger: 0.3 }]);
+    expect(restored?.map((item) => item.animation?.delay)).toEqual([0.5, 0.2]);
+  });
+
+  it('restores a group from before groups nested with no entrance when its members did not share one', () => {
+    writeRaw(
+      JSON.stringify({
+        version: STORAGE_VERSION,
+        settings: state.settings,
+        canvasItems: [
+          { groupId: 'g', id: 'a', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 },
+          { groupId: 'g', id: 'b', kind: 'symbol', mark: 'ring', rotate: 0, size: 42, x: 0, y: 0 },
+        ],
+        canvasZoom: 1,
+      }),
+    );
+
+    expect(loadEditorState()?.canvasItems[0].groups).toEqual([{ id: 'g' }]);
   });
 
   it('restores a save written before groups existed, ungrouped', () => {
@@ -197,7 +270,7 @@ describe('saveEditorState / loadEditorState', () => {
       }),
     );
 
-    expect(loadEditorState()?.canvasItems[0].groupId).toBeUndefined();
+    expect(loadEditorState()?.canvasItems[0].groups).toBeUndefined();
   });
 
   it('drops a group id that no second item shares, rather than restoring a group of one', () => {
@@ -210,7 +283,7 @@ describe('saveEditorState / loadEditorState', () => {
       }),
     );
 
-    expect(loadEditorState()?.canvasItems[0].groupId).toBeUndefined();
+    expect(loadEditorState()?.canvasItems[0].groups).toBeUndefined();
   });
 
   it('keeps the rest of an item whose group id is unusable', () => {
@@ -228,7 +301,7 @@ describe('saveEditorState / loadEditorState', () => {
 
     const loaded = loadEditorState();
     expect(loaded?.canvasItems).toHaveLength(2);
-    expect(loaded?.canvasItems[0].groupId).toBeUndefined();
+    expect(loaded?.canvasItems[0].groups).toBeUndefined();
   });
   // Animations, like groups, are newer than the saved shape.
   it('round-trips an animation', () => {
