@@ -94,7 +94,7 @@ function App() {
     selectItem,
     selectItems,
     setEditingTextDraft,
-    setItemAnimation,
+    setItemAnimations,
     setTextDraft,
     textDraft,
     ungroupSelected,
@@ -288,7 +288,7 @@ function App() {
           onRestartTemplate={restartTemplate}
           onSelectItem={selectItem}
           onSelectItems={selectItems}
-          onSetItemAnimation={setItemAnimation}
+          onSetItemAnimations={setItemAnimations}
           onUndo={undo}
           onUngroupSelected={ungroupSelected}
         />

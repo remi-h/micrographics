@@ -1,5 +1,5 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { sameAnimation, type ItemAnimation } from './animations';
+import { groupAnimation, sameAnimation, staggeredAnimation, type ItemAnimation } from './animations';
 import { hitBounds, inkBounds, type Box } from './canvasGeometry';
 import { expandToGroups, groupItems, moveMember, moveRow, pruneGroups, regroupCopies, ungroupItems } from './groups';
 import { createItemId } from './itemIds';
@@ -104,6 +104,14 @@ export type CanvasItems = {
    * after. Pass false for the steps after the first.
    */
   setItemAnimation: (id: string, animation: ItemAnimation | null, record?: boolean) => void;
+  /**
+   * Sets several items' entrances as one change: one history entry for all of
+   * them, or none when none of them changes. A group's entrance goes through
+   * here, since a staggered group gives each member a different one; setting
+   * them one at a time would hang the undo snapshot on whichever went first,
+   * and changing only the stagger leaves the first member exactly as it was.
+   */
+  setItemAnimations: (updates: Array<{ id: string; animation: ItemAnimation | null }>, record?: boolean) => void;
   setEditingTextDraft: Dispatch<SetStateAction<string>>;
   setTextDraft: Dispatch<SetStateAction<string>>;
   textDraft: string;
@@ -190,6 +198,35 @@ export function moveKeepingTogether(
   return new Map(
     moved.map(({ dx, dy, item }) => [item.id, { x: item.x + dx + shiftX, y: item.y + dy + shiftY }]),
   );
+}
+
+// The members of `member`'s group as an open group lists them: top first.
+function listedMembers(items: CanvasItem[], member: string) {
+  const groupId = items.find((item) => item.id === member)?.groupId;
+  return groupId ? items.filter((item) => item.groupId === groupId).reverse() : [];
+}
+
+/**
+ * A staggered group starts its members in the order it lists them, and each
+ * member carries its own delay. Moving a member within the group keeps those
+ * delays with the items, so without this the member dragged to the top would
+ * still start last -- and the group's delays would no longer be evenly spaced
+ * in its new order, so its entrance would read as unset. Dragging a member is
+ * how the order it starts in is chosen, so the stagger is laid out again in
+ * the new order. A group with no stagger, or no shared entrance, is left as
+ * it is.
+ */
+function restagger(before: CanvasItem[], after: CanvasItem[], member: string): CanvasItem[] {
+  const shared = groupAnimation(listedMembers(before, member));
+  if (!shared || shared.stagger === 0) return after;
+
+  const delays = new Map(
+    listedMembers(after, member).map((item, index) => [
+      item.id,
+      staggeredAnimation(shared.animation, shared.stagger, index),
+    ]),
+  );
+  return after.map((item) => (delays.has(item.id) ? { ...item, animation: delays.get(item.id) } : item));
 }
 
 // A copy of each item, nudged clear of the original so the user can see that
@@ -439,7 +476,7 @@ export function useCanvasItems({
     const reordered = moveMember(canvasItems, memberId, gap);
     if (reordered === canvasItems) return;
     beginHistoryAction();
-    setCanvasItems(reordered);
+    setCanvasItems(restagger(canvasItems, reordered, memberId));
   };
 
   const ungroupSelected = () => {
@@ -449,18 +486,26 @@ export function useCanvasItems({
     setCanvasItems(ungrouped);
   };
 
-  const setItemAnimation = (id: string, animation: ItemAnimation | null, record = true) => {
-    const target = canvasItems.find((item) => item.id === id);
-    if (!target) return;
-    // Nothing to do at all when the item already has exactly this entrance, or
-    // already has none: an undo entry for a no-op reads as a broken undo, and
-    // clicking the entrance that is already chosen is an easy way to make one.
-    if (sameAnimation(target.animation, animation)) return;
+  const setItemAnimations = (updates: Array<{ id: string; animation: ItemAnimation | null }>, record = true) => {
+    // Nothing to do at all when every item already has exactly this entrance,
+    // or already has none: an undo entry for a no-op reads as a broken undo,
+    // and clicking the entrance that is already chosen is an easy way to make
+    // one.
+    const changes = new Map(
+      updates
+        .filter(({ id, animation }) => {
+          const target = canvasItems.find((item) => item.id === id);
+          return target && !sameAnimation(target.animation, animation);
+        })
+        .map(({ id, animation }) => [id, animation]),
+    );
+    if (changes.size === 0) return;
 
     if (record) beginHistoryAction();
     setCanvasItems((current) =>
       current.map((item) => {
-        if (item.id !== id) return item;
+        if (!changes.has(item.id)) return item;
+        const animation = changes.get(item.id);
         if (!animation) {
           const next = { ...item };
           delete next.animation;
@@ -470,6 +515,9 @@ export function useCanvasItems({
       }),
     );
   };
+
+  const setItemAnimation = (id: string, animation: ItemAnimation | null, record = true) =>
+    setItemAnimations([{ id, animation }], record);
 
   const copySelected = () => {
     clipboardRef.current = canvasItems.filter((item) => selectedIds.includes(item.id));
@@ -589,6 +637,7 @@ export function useCanvasItems({
     selectItems,
     setEditingTextDraft,
     setItemAnimation,
+    setItemAnimations,
     setTextDraft,
     textDraft,
     ungroupSelected,

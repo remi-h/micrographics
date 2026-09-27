@@ -668,6 +668,39 @@ describe('useCanvasItems layer order', () => {
     expect(result.current.selectedIds).toEqual(['symbol-2']);
   });
 
+  it('keeps a staggered group staggered in its new order when a member is moved', () => {
+    // Listed top first: symbol-3 at 0s, symbol-2 at 0.5s, symbol-1 at 1s.
+    const at = (delay: number) => ({ delay, duration: 0.6, kind: 'pop' as const });
+    const { result } = setUp({
+      canvasItems: [
+        { ...symbol('symbol-1'), groupId: 'group-1', animation: at(1) },
+        { ...symbol('symbol-2', 300), groupId: 'group-1', animation: at(0.5) },
+        { ...symbol('symbol-3', 500), groupId: 'group-1', animation: at(0) },
+      ],
+    });
+
+    // symbol-1, which started last, goes to the top: now it starts first.
+    act(() => result.current.reorderGroupMember('symbol-1', 0));
+
+    expect(itemById(result.current.canvasItems, 'symbol-1').animation?.delay).toBe(0);
+    expect(itemById(result.current.canvasItems, 'symbol-3').animation?.delay).toBe(0.5);
+    expect(itemById(result.current.canvasItems, 'symbol-2').animation?.delay).toBe(1);
+  });
+
+  it('leaves the entrances alone when a member of an unstaggered group is moved', () => {
+    const pop = { delay: 0.2, duration: 0.6, kind: 'pop' as const };
+    const { result } = setUp({
+      canvasItems: [
+        { ...symbol('symbol-1'), groupId: 'group-1', animation: pop },
+        { ...symbol('symbol-2', 300), groupId: 'group-1', animation: pop },
+      ],
+    });
+
+    act(() => result.current.reorderGroupMember('symbol-1', 0));
+
+    expect(result.current.canvasItems.map((item) => item.animation)).toEqual([pop, pop]);
+  });
+
   it('moves a member within its group as one history entry, and a no-op as none', () => {
     const { result, beginHistoryAction } = setUp({
       canvasItems: [
@@ -769,6 +802,53 @@ describe('useCanvasItems animation', () => {
 
     const copy = result.current.canvasItems.find((item) => item.id !== 'symbol-1');
     expect(copy?.animation).toEqual(slide);
+  });
+
+  it('sets several entrances as one history entry', () => {
+    const { result, beginHistoryAction } = setUp({ canvasItems: [symbol('symbol-1'), symbol('symbol-2')] });
+
+    act(() =>
+      result.current.setItemAnimations([
+        { id: 'symbol-1', animation: slide },
+        { id: 'symbol-2', animation: { ...slide, delay: 0.5 } },
+      ]),
+    );
+
+    expect(itemById(result.current.canvasItems, 'symbol-1').animation).toEqual(slide);
+    expect(itemById(result.current.canvasItems, 'symbol-2').animation).toEqual({ ...slide, delay: 0.5 });
+    expect(beginHistoryAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('records a change even when the first item in the batch is already set', () => {
+    // Changing a group's stagger leaves its first member exactly as it was.
+    // Hanging the undo snapshot on that member would lose the change from
+    // undo altogether.
+    const { result, beginHistoryAction } = setUp({ canvasItems: [symbol('symbol-1'), symbol('symbol-2')] });
+    act(() => result.current.setItemAnimation('symbol-1', slide));
+    beginHistoryAction.mockClear();
+
+    act(() =>
+      result.current.setItemAnimations([
+        { id: 'symbol-1', animation: slide },
+        { id: 'symbol-2', animation: { ...slide, delay: 0.9 } },
+      ]),
+    );
+
+    expect(beginHistoryAction).toHaveBeenCalledTimes(1);
+    expect(itemById(result.current.canvasItems, 'symbol-2').animation?.delay).toBe(0.9);
+  });
+
+  it('records nothing for a batch that changes nothing', () => {
+    const { result, beginHistoryAction } = setUp({ canvasItems: [symbol('symbol-1'), symbol('symbol-2')] });
+
+    act(() =>
+      result.current.setItemAnimations([
+        { id: 'symbol-1', animation: null },
+        { id: 'symbol-2', animation: null },
+      ]),
+    );
+
+    expect(beginHistoryAction).not.toHaveBeenCalled();
   });
 });
 
