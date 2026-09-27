@@ -19,7 +19,7 @@ import {
   type AnimationKind,
   type ItemAnimation,
 } from './animations';
-import type { CanvasItem, CanvasSymbol } from './types';
+import type { CanvasItem, CanvasSymbol } from '../types';
 
 // One description, two consumers: the canvas previews through the Web
 // Animations API and the export writes CSS. These cover that both come out of

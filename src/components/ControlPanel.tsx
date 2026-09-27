@@ -16,10 +16,10 @@ import {
   maxStagger,
   staggeredAnimation,
   type ItemAnimation,
-} from '../animations';
+} from '../lib/animations';
 import { templates } from '../data';
-import { groupActions, layerRows, rowItemIds } from '../groups';
-import { EXPORT_SCALES, exportPixelSize, type ExportScale } from '../exportMarkup';
+import { groupActions, layerRows, rowItemIds } from '../lib/groups';
+import { EXPORT_SCALES, exportPixelSize, type ExportScale } from '../lib/exportMarkup';
 import type { CanvasItem, Template } from '../types';
 import { BrandIcon } from './BrandIcon';
 import { Field, ToolButton } from './Controls';

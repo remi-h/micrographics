@@ -1,10 +1,10 @@
 import { forwardRef, useEffect, useEffectEvent, useRef, useState } from 'react';
 import { AlignCenterHorizontal, AlignCenterVertical, AlignHorizontalSpaceBetween, AlignVerticalSpaceBetween } from 'lucide-react';
 import type { MouseEvent, PointerEvent, ReactNode } from 'react';
-import { ANIMATION_ORIGIN_STYLE, animationClassName, animationFrames, animationTiming } from '../animations';
-import { hitBounds, intersects, LETTER_SPACING, textBox as modelTextBox } from '../canvasGeometry';
-import { expandToGroups } from '../groups';
-import type { ItemAnimation } from '../animations';
+import { ANIMATION_ORIGIN_STYLE, animationClassName, animationFrames, animationTiming } from '../lib/animations';
+import { hitBounds, intersects, LETTER_SPACING, textBox as modelTextBox } from '../lib/canvasGeometry';
+import { expandToGroups } from '../lib/groups';
+import type { ItemAnimation } from '../lib/animations';
 import type { CanvasItem, CanvasSymbol, CanvasText, Palette, Settings } from '../types';
 import { MicroMark } from './MicroMark';
 

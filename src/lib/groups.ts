@@ -1,5 +1,5 @@
 import { createGroupId } from './itemIds';
-import type { CanvasItem } from './types';
+import type { CanvasItem } from '../types';
 
 // Grouping.
 //

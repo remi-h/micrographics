@@ -1,5 +1,5 @@
 import { hitBounds, inkBounds, intersects, textAdvance, textBox } from './canvasGeometry';
-import type { CanvasSymbol, CanvasText } from './types';
+import type { CanvasSymbol, CanvasText } from '../types';
 
 function symbol(overrides: Partial<CanvasSymbol> = {}): CanvasSymbol {
   return { id: 's1', kind: 'symbol', mark: 'star', rotate: 0, size: 42, x: 100, y: 100, ...overrides };

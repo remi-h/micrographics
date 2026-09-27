@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { useState } from 'react';
-import { initialSettings } from './data';
-import type { CanvasItem, Settings } from './types';
+import { initialSettings } from '../data';
+import type { CanvasItem, Settings } from '../types';
 import { useHistory, type HistorySnapshot } from './useHistory';
 
 // The hook is a layer over state somebody else owns, so the tests stand up the

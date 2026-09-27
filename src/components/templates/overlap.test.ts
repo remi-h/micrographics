@@ -1,5 +1,5 @@
-import { inkBounds, intersects } from '../../canvasGeometry';
-import { templateComponents } from './index';
+import { inkBounds, intersects } from '../../lib/canvasGeometry';
+import { templateComponents } from '.';
 
 const CANVAS = { x: 0, y: 0, width: 1200, height: 800 };
 

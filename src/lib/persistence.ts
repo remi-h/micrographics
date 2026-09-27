@@ -1,7 +1,7 @@
 import { ANIMATION_KINDS, MAX_DELAY, MAX_DURATION, MIN_DELAY, MIN_DURATION, type ItemAnimation } from './animations';
-import { palettes } from './data';
+import { palettes } from '../data';
 import { pruneGroups } from './groups';
-import type { CanvasItem, Settings, Template } from './types';
+import type { CanvasItem, Settings, Template } from '../types';
 
 export const STORAGE_KEY = 'micrographics.editor';
 

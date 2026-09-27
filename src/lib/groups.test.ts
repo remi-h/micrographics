@@ -11,7 +11,7 @@ import {
   rowItemIds,
   ungroupItems,
 } from './groups';
-import type { CanvasItem, CanvasSymbol } from './types';
+import type { CanvasItem, CanvasSymbol } from '../types';
 
 // Grouping is pure array work over `groupId` (see groups.ts), so the whole of
 // it is testable without a canvas. What the browser has to prove instead --

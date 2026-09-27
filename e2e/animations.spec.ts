@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { test, expect, type Page } from '@playwright/test';
 
-// Entrances are described once (src/animations.ts) and played two ways: on the
+// Entrances are described once (src/lib/animations.ts) and played two ways: on the
 // canvas through the Web Animations API, and in the exported .svg as CSS. The
 // unit tests cover the description; what a browser has to prove is that both
 // players actually honour it -- and, in particular, that the CSS transform

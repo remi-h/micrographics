@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent } from 'react';
-import type { CanvasItem } from './types';
+import type { CanvasItem } from '../types';
 
 // The editor's global keyboard shortcuts: one `keydown` listener on `window`,
 // covering undo/redo, delete, escape, select-all, the clipboard, duplicate,

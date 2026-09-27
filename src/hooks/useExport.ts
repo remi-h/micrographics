@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react';
-import { animationRunTime } from './animations';
-import type { ExportStatusMessage } from './components/ExportStatus';
-import { buildExportMarkup, exportPixelSize, type ExportScale } from './exportMarkup';
-import { encodeGif, gifFrameDelay, gifFrameTimes } from './gif';
-import type { CanvasItem, Palette, Settings } from './types';
-import { downloadBlob } from './utils';
+import { animationRunTime } from '../lib/animations';
+import type { ExportStatusMessage } from '../components/ExportStatus';
+import { buildExportMarkup, exportPixelSize, type ExportScale } from '../lib/exportMarkup';
+import { encodeGif, gifFrameDelay, gifFrameTimes } from '../lib/gif';
+import type { CanvasItem, Palette, Settings } from '../types';
+import { downloadBlob } from '../lib/utils';
 
 // Saving the artwork: the SVG download, the PNG rasterization, the size the
 // PNG is taken at, and the one line the user is told about how it went.

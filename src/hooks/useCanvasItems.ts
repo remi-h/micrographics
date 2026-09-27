@@ -1,10 +1,10 @@
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { groupAnimation, sameAnimation, staggeredAnimation, type ItemAnimation } from './animations';
-import { hitBounds, inkBounds, type Box } from './canvasGeometry';
-import { expandToGroups, groupItems, moveMember, moveRow, pruneGroups, regroupCopies, ungroupItems } from './groups';
-import { createItemId } from './itemIds';
-import type { CanvasItem, CanvasSymbol, CanvasText } from './types';
-import { clamp } from './utils';
+import { groupAnimation, sameAnimation, staggeredAnimation, type ItemAnimation } from '../lib/animations';
+import { hitBounds, inkBounds, type Box } from '../lib/canvasGeometry';
+import { expandToGroups, groupItems, moveMember, moveRow, pruneGroups, regroupCopies, ungroupItems } from '../lib/groups';
+import { createItemId } from '../lib/itemIds';
+import type { CanvasItem, CanvasSymbol, CanvasText } from '../types';
+import { clamp } from '../lib/utils';
 
 // Everything that creates, edits, moves or removes a canvas item.
 //

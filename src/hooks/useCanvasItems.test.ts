@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { useState } from 'react';
-import { hitBounds, inkBounds, intersects, type Box } from './canvasGeometry';
-import type { CanvasItem, CanvasSymbol, CanvasText } from './types';
+import { hitBounds, inkBounds, intersects, type Box } from '../lib/canvasGeometry';
+import type { CanvasItem, CanvasSymbol, CanvasText } from '../types';
 import { MAX_ITEM_SIZE, MIN_ITEM_SIZE, moveKeepingTogether, useCanvasItems } from './useCanvasItems';
 
 // Like useHistory, the hook is a layer over state App owns, so the tests stand

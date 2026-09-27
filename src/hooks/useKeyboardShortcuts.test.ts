@@ -1,7 +1,7 @@
 import { act, fireEvent, renderHook } from '@testing-library/react';
 import { useState } from 'react';
-import { initialSettings } from './data';
-import type { CanvasItem, CanvasSymbol, Settings } from './types';
+import { initialSettings } from '../data';
+import type { CanvasItem, CanvasSymbol, Settings } from '../types';
 import { useCanvasItems } from './useCanvasItems';
 import { useHistory } from './useHistory';
 import { useKeyboardShortcuts, type UseKeyboardShortcutsOptions } from './useKeyboardShortcuts';

@@ -1,4 +1,4 @@
-import type { CanvasItem } from './types';
+import type { CanvasItem } from '../types';
 
 export type Box = { x: number; y: number; width: number; height: number };
 

@@ -1,5 +1,5 @@
 import Image from 'next/image';
-import { BrandIcon } from './components/BrandIcon';
+import { BrandIcon } from './BrandIcon';
 
 const useCases = [
   {

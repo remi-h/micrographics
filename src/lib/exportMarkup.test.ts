@@ -1,4 +1,4 @@
-import { initialSettings, palettes } from './data';
+import { initialSettings, palettes } from '../data';
 import {
   ARTBOARD_HEIGHT,
   ARTBOARD_WIDTH,
@@ -6,7 +6,7 @@ import {
   EXPORT_SCALES,
   exportPixelSize,
 } from './exportMarkup';
-import type { CanvasItem } from './types';
+import type { CanvasItem } from '../types';
 
 const palette = palettes[0];
 
