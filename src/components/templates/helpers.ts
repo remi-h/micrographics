@@ -1,5 +1,6 @@
+import type { ItemAnimation } from '../../lib/animations';
 import { textAdvance, textBox } from '../../lib/canvasGeometry';
-import type { CanvasItem, CanvasSymbol, CanvasText } from '../../types';
+import type { CanvasItem, CanvasSymbol, CanvasText, GroupLevel } from '../../types';
 
 export function textItem(id: string, text: string, x: number, y: number, size = 28, rotate = 0): CanvasText {
   return { id, kind: 'text', rotate, size, text, x, y };
@@ -76,6 +77,27 @@ export function markGrid(
       size,
     ),
   );
+}
+
+/**
+ * `items` as one group with an entrance: `items[0]` plays first and each one
+ * after it `stagger` seconds later. An entrance `delay` holds the whole group
+ * back, so a template's second group can follow its first.
+ *
+ * A group's children take their turns in the order the layer list shows them,
+ * top first -- the reverse of painting order -- so the members are returned
+ * reversed. Place the result in the template's list as one contiguous run.
+ * The items' own `animation` is worked out from this when the template loads
+ * (see loadTemplateItems).
+ */
+export function animatedGroup(
+  id: string,
+  animation: ItemAnimation,
+  stagger: number,
+  items: CanvasItem[],
+): CanvasItem[] {
+  const level: GroupLevel = { id, animation, ...(stagger ? { stagger } : {}) };
+  return [...items].reverse().map((item) => ({ ...item, groups: [{ ...level }] }));
 }
 
 export type { CanvasItem };

@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { test, expect, type Page } from '@playwright/test';
+import { openStillCreator } from './still-template';
 
 // Entrances are described once (src/lib/animations.ts) and played two ways: on the
 // canvas through the Web Animations API, and in the exported .svg as CSS. The
@@ -53,7 +54,7 @@ function animatedGeometry(page: Page) {
 }
 
 test('every layer offers an entrance, and adding one reveals Play', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
 
   await expect(animateButtons(page).first()).toBeVisible();
   await expect(playButton(page)).toHaveCount(0);
@@ -67,7 +68,7 @@ test('every layer offers an entrance, and adding one reveals Play', async ({ pag
 });
 
 test('a slide moves the item and puts it back exactly where it was', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await giveTopLayerAnEntrance(page, 'Slide in from left');
 
   const resting = await animatedGeometry(page);
@@ -95,7 +96,7 @@ test('a slide moves the item and puts it back exactly where it was', async ({ pa
 });
 
 test('a pop grows in place rather than flying in from the canvas corner', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await giveTopLayerAnEntrance(page, 'Pop in');
 
   const resting = await animatedGeometry(page);
@@ -116,7 +117,7 @@ test('a pop grows in place rather than flying in from the canvas corner', async 
 });
 
 test('an entrance can be taken off again', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await giveTopLayerAnEntrance(page, 'Dissolve in');
   await expect(playButton(page)).toBeVisible();
 
@@ -128,7 +129,7 @@ test('an entrance can be taken off again', async ({ page }) => {
 });
 
 test('an entrance survives a reload', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await giveTopLayerAnEntrance(page, 'Pop in');
 
   // The editor autosaves on a debounce; give it the write before reloading.
@@ -140,7 +141,7 @@ test('an entrance survives a reload', async ({ page }) => {
 });
 
 test('the exported SVG carries the entrance, and still reads as the finished artwork', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await giveTopLayerAnEntrance(page, 'Slide in from left');
 
   const resting = await animatedGeometry(page);
@@ -179,7 +180,7 @@ test('the exported SVG carries the entrance, and still reads as the finished art
 });
 
 test('the PNG export is the finished artwork, not the first frame of an entrance', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await giveTopLayerAnEntrance(page, 'Slide in from left');
 
   // A PNG is one frame. Writing the entrance into it would rasterize an item
@@ -196,7 +197,7 @@ test('the PNG export is the finished artwork, not the first frame of an entrance
 });
 
 test('two entrances can be ordered by their delays', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
 
   // The first layer arrives immediately; give the second one a wait.
   await giveTopLayerAnEntrance(page, 'Dissolve in');
@@ -235,7 +236,7 @@ test('two entrances can be ordered by their delays', async ({ page }) => {
 });
 
 test('a slider drag is one undo step, not one per step of the drag', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await giveTopLayerAnEntrance(page, 'Slide in from left');
 
   await animateButtons(page).first().click();
@@ -268,7 +269,7 @@ test('a slider drag is one undo step, not one per step of the drag', async ({ pa
 });
 
 test('a copy of an animated item does not play its entrance by itself', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await giveTopLayerAnEntrance(page, 'Slide in from left');
 
   // Play once, so the token is past zero. A layer mounting after that -- the
@@ -288,7 +289,7 @@ test('a copy of an animated item does not play its entrance by itself', async ({
 });
 
 test('the Layers list fits its panel, however long a layer is named', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
 
   // The row is a grid item, and the layer name does not wrap, so without an
   // explicit minimum the list's single column grows to the longest name and
@@ -316,7 +317,7 @@ test('the Layers list fits its panel, however long a layer is named', async ({ p
 // which of them keep the animation: a PNG is a single frame, so choosing it
 // silently drops the entrances the user just set up.
 test('the export dialog offers every format and says which ones animate', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await openExportDialog(page);
 
   const dialog = page.getByRole('dialog');
@@ -339,7 +340,7 @@ test('the export dialog offers every format and says which ones animate', async 
 
 test('the GIF export writes a real animated gif', async ({ page }) => {
   test.setTimeout(60_000);
-  await page.goto('/creator');
+  await openStillCreator(page);
   await giveTopLayerAnEntrance(page, 'Pop in');
 
   await openExportDialog(page);
@@ -372,7 +373,7 @@ test('the GIF export writes a real animated gif', async ({ page }) => {
 // only way to reach a transparent artboard.
 test('a GIF exported with the background off is still opaque, not black', async ({ page }) => {
   test.setTimeout(60_000);
-  await page.goto('/creator');
+  await openStillCreator(page);
   await giveTopLayerAnEntrance(page, 'Dissolve in');
   // A Base UI Switch inside a <label>, so it is reached by role rather than
   // by the label association a native checkbox would have.

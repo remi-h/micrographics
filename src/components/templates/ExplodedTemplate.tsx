@@ -1,5 +1,5 @@
 import type { CanvasItem } from '../../types';
-import { ruleLine, symbolItem, textItem } from './helpers';
+import { animatedGroup, ruleLine, symbolItem, textItem } from './helpers';
 
 const STEPS: Array<[string, string, string]> = [
   ['bracket', '01', 'MOUNT BRACKET'],
@@ -10,6 +10,8 @@ const STEPS: Array<[string, string, string]> = [
 
 const PARTS = ['BR-01    X2', 'DM-02    X1', 'CA-03    X4', 'BP-04    X1'];
 
+const stepY = (index: number) => 232 + index * 130;
+
 // Archetype: assembly drawing. Parts stacked down a centre line with dashed
 // connectors, each one numbered and called out to the right.
 export function ExplodedTemplate(): CanvasItem[] {
@@ -17,10 +19,16 @@ export function ExplodedTemplate(): CanvasItem[] {
     textItem('008-title', 'EXPLODED VIEW', 120, 110, 26),
     textItem('008-sub', 'UNIT 12 / FOUR PARTS', 120, 140, 14),
     textItem('008-section', 'SECTION A-A', 150, 560, 20, -90),
-    ...STEPS.flatMap(([mark, number, label], index) => {
-      const y = 232 + index * 130;
+    // The parts drop into place top to bottom, then the parts list reads in.
+    ...animatedGroup(
+      '008-group-parts',
+      { kind: 'slide-down', duration: 0.5, delay: 0 },
+      0.15,
+      STEPS.map(([mark, number], index) => symbolItem(`008-part-${number}`, mark, 420, stepY(index), 64)),
+    ),
+    ...STEPS.flatMap(([, number, label], index) => {
+      const y = stepY(index);
       const items: CanvasItem[] = [
-        symbolItem(`008-part-${number}`, mark, 420, y, 64),
         ruleLine(`008-lead-${number}`, 472, y + 2, 76, 11),
         textItem(`008-call-${number}`, `${number}  ${label}`, 572, y + 7, 17),
       ];
@@ -33,7 +41,12 @@ export function ExplodedTemplate(): CanvasItem[] {
     }),
     textItem('008-parts-head', 'PARTS', 900, 236, 14),
     ruleLine('008-parts-rule', 900, 258, 170, 11),
-    ...PARTS.map((row, index) => textItem(`008-parts-${index}`, row, 900, 298 + index * 38, 14)),
+    ...animatedGroup(
+      '008-group-list',
+      { kind: 'fade', duration: 0.4, delay: 0.7 },
+      0.1,
+      PARTS.map((row, index) => textItem(`008-parts-${index}`, row, 900, 298 + index * 38, 14)),
+    ),
     ruleLine('008-rule', 120, 700, 960),
     textItem('008-footer', 'TIGHTEN IN A CROSS PATTERN TO 12 N.M', 120, 742, 14),
   ];

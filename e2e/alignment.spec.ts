@@ -25,12 +25,12 @@ async function paintedMiddles(page: Page) {
     return [...document.querySelectorAll('.canvas-item:has(rect[stroke-dasharray])')]
       .map((group) => {
         const glyphs = group.querySelector('g[transform^="scale"], text') as SVGGraphicsElement | null;
-        if (!glyphs) return { x: NaN, y: NaN };
+        if (!glyphs) return { x: NaN, y: NaN, text: false };
         const box = glyphs.getBBox();
         const middle = new DOMPoint(box.x + box.width / 2, box.y + box.height / 2)
           .matrixTransform(glyphs.getScreenCTM()!)
           .matrixTransform(toArtboard);
-        return { x: middle.x, y: middle.y };
+        return { x: middle.x, y: middle.y, text: glyphs instanceof SVGTextElement };
       })
       .filter((point) => Number.isFinite(point.x));
   });
@@ -45,7 +45,9 @@ async function selectMarkAndLabel(page: Page, label: string) {
   await page.locator('.text-input').fill(label);
   await page.locator('.add-button').click();
   await layerRows(page).nth(0).click();
-  await layerRows(page).nth(1).click({ modifiers: ['Shift'] });
+  await layerRows(page)
+    .nth(1)
+    .click({ modifiers: ['Shift'] });
   await expect(page.locator('.canvas-item rect[stroke-dasharray]')).toHaveCount(2);
 }
 
@@ -125,16 +127,21 @@ test('the care label paints its column on one axis, and aligning keeps it there'
   const offAxis = middles.filter((line) => Math.abs(line.x - 600) > 2);
   expect(offAxis.map((line) => `"${line.text.slice(0, 30)}" at ${line.x.toFixed(1)}`)).toEqual([]);
 
-  // The mark in the middle of the row and the wash label beneath it: select
-  // both and align vertical centres, as in the report.
-  await page.locator('.layer-row', { hasText: 'tumble-dry symbol' }).click();
+  // The row of care marks and the wash label beneath it: select both and
+  // align vertical centres, as in the report. The marks play their entrance
+  // as one group, so they are selected, and aligned, as one.
+  await page.locator('.layer-row[data-group]', { hasText: 'Group of 5' }).click();
   await page.locator('.layer-row', { hasText: 'MACHINE WASH COLD' }).click({ modifiers: ['Shift'] });
-  await expect(page.locator('.canvas-item rect[stroke-dasharray]')).toHaveCount(2);
+  await expect(page.locator('.canvas-item rect[stroke-dasharray]')).toHaveCount(6);
   await alignVertical(page).click();
 
+  // Already on the axis, so aligning them should not have moved them off it:
+  // the label's middle and the middle of the row of marks both stay on 600.
   const after = await paintedMiddles(page);
-  const xs = after.map((point) => point.x);
-  expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(2);
-  // Already on the axis, so aligning them should not have moved them off it.
-  for (const x of xs) expect(Math.abs(x - 600)).toBeLessThan(2);
+  const label = after.filter((point) => point.text);
+  const marks = after.filter((point) => !point.text).map((point) => point.x);
+  expect(label).toHaveLength(1);
+  expect(marks).toHaveLength(5);
+  expect(Math.abs(label[0].x - 600)).toBeLessThan(2);
+  expect(Math.abs((Math.min(...marks) + Math.max(...marks)) / 2 - 600)).toBeLessThan(2);
 });

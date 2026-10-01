@@ -1,5 +1,5 @@
 import type { CanvasItem } from '../../types';
-import { centredRuleLine, centredText, symbolItem } from './helpers';
+import { animatedGroup, centredRuleLine, centredText, symbolItem } from './helpers';
 
 const CARE_MARKS = ['wash', 'bleach', 'tumble-dry', 'iron', 'dry-clean'];
 
@@ -15,7 +15,13 @@ export function CareLabelTemplate(): CanvasItem[] {
     centredRuleLine('006-rule-top', AXIS, 140, 340),
     centredText('006-brand', 'MICRO', AXIS, 234, 58),
     centredText('006-dept', 'FORM DEPT.', AXIS, 268, 14),
-    ...CARE_MARKS.map((mark, index) => symbolItem(`006-care-${mark}`, mark, AXIS - 200 + index * 100, 384, 50)),
+    // The care symbols pop in left to right.
+    ...animatedGroup(
+      '006-group-care',
+      { kind: 'pop', duration: 0.4, delay: 0 },
+      0.12,
+      CARE_MARKS.map((mark, index) => symbolItem(`006-care-${mark}`, mark, AXIS - 200 + index * 100, 384, 50)),
+    ),
     centredText('006-care-text', 'MACHINE WASH COLD / DO NOT BLEACH / WARM IRON', AXIS, 456, 13),
     centredText('006-composition', '60% SIGNAL  40% NOISE', AXIS, 516, 16),
     centredText('006-size', 'SIZE M', AXIS, 552, 16),

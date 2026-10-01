@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { openStillCreator } from './still-template';
 
 // The selection outline used to be drawn from an estimate of an item's size
 // rather than from what it actually renders. For text the estimate
@@ -38,7 +39,7 @@ function expectInkInsideOutline(rows: Awaited<ReturnType<typeof selectionPadding
 }
 
 test('a selected symbol sits inside its selection outline', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await page.locator('.symbol-button').first().click();
 
   await expect(page.locator('.canvas-item rect[stroke-dasharray]')).toHaveCount(1);
@@ -60,7 +61,7 @@ async function selectATextLayer(page: Page) {
 }
 
 test('a selected text item sits inside its selection outline', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await selectATextLayer(page);
 
   await expect(page.locator('.canvas-item rect[stroke-dasharray]')).toHaveCount(1);
@@ -120,7 +121,7 @@ async function dragTheResizeHandle(page: Page) {
 }
 
 test('a text item stays inside its outline all the way through a resize', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await selectATextLayer(page);
   await expect(page.locator('.canvas-item rect[stroke-dasharray]')).toHaveCount(1);
 
@@ -144,7 +145,7 @@ test('a text item stays inside its outline all the way through a resize', async 
 });
 
 test('a symbol stays inside its outline all the way through a resize', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await page.locator('.symbol-button').first().click();
   await expect(page.locator('.canvas-item rect[stroke-dasharray]')).toHaveCount(1);
 
@@ -168,7 +169,7 @@ test('a symbol stays inside its outline all the way through a resize', async ({ 
 // hundred pixels of dragging. That last part is what reads as "delayed" --
 // the pointer moves and nothing does.
 test('resizing tracks the pointer steadily, without running out of room', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await page.locator('.symbol-button').first().click();
   await expect(page.locator('.canvas-item rect[stroke-dasharray]')).toHaveCount(1);
 
@@ -226,7 +227,7 @@ test('resizing tracks the pointer steadily, without running out of room', async 
 // every size, so twenty pixels of drag was a ratio of eleven and the item went
 // straight to its size ceiling in one flick.
 test('resizing a rotated item is no more sensitive than resizing an upright one', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await page.locator('.symbol-button').first().click();
 
   // The page opens on a template, so the item just added is found through its
