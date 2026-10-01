@@ -136,8 +136,10 @@ test('an entrance survives a reload', async ({ page }) => {
   await page.waitForTimeout(700);
   await page.reload();
 
-  await expect(playButton(page)).toBeVisible();
+  // Play alone proves nothing now that the template animates; the top row is
+  // its unanimated mark until the save is back.
   await expect(animateButtons(page).first()).toHaveAttribute('data-on', 'true');
+  await expect(playButton(page)).toBeVisible();
 });
 
 test('the exported SVG carries the entrance, and still reads as the finished artwork', async ({ page }) => {

@@ -31,7 +31,12 @@ describe('animatedGroup', () => {
   });
 
   it('leaves the stagger off a group that has none', () => {
-    expect(animatedGroup('g', slide, 0, [textItem('a', 'A', 0, 0)])[0].groups).toEqual([{ id: 'g', animation: slide }]);
+    const pair = [textItem('a', 'A', 0, 0), textItem('b', 'B', 0, 40)];
+    expect(animatedGroup('g', slide, 0, pair)[0].groups).toEqual([{ id: 'g', animation: slide }]);
+  });
+
+  it('refuses a group of one, which would be taken apart on load', () => {
+    expect(() => animatedGroup('g', slide, 0, [textItem('a', 'A', 0, 0)])).toThrow(/at least two/);
   });
 });
 

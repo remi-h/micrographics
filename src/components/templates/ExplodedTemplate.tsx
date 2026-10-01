@@ -19,13 +19,6 @@ export function ExplodedTemplate(): CanvasItem[] {
     textItem('008-title', 'EXPLODED VIEW', 120, 110, 26),
     textItem('008-sub', 'UNIT 12 / FOUR PARTS', 120, 140, 14),
     textItem('008-section', 'SECTION A-A', 150, 560, 20, -90),
-    // The parts drop into place top to bottom, then the parts list reads in.
-    ...animatedGroup(
-      '008-group-parts',
-      { kind: 'slide-down', duration: 0.5, delay: 0 },
-      0.15,
-      STEPS.map(([mark, number], index) => symbolItem(`008-part-${number}`, mark, 420, stepY(index), 64)),
-    ),
     ...STEPS.flatMap(([, number, label], index) => {
       const y = stepY(index);
       const items: CanvasItem[] = [
@@ -39,6 +32,14 @@ export function ExplodedTemplate(): CanvasItem[] {
       }
       return items;
     }),
+    // The parts drop into place top to bottom, then the parts list reads in.
+    // Painted after the connectors, so each part sits over the dashes above it.
+    ...animatedGroup(
+      '008-group-parts',
+      { kind: 'slide-down', duration: 0.5, delay: 0 },
+      0.15,
+      STEPS.map(([mark, number], index) => symbolItem(`008-part-${number}`, mark, 420, stepY(index), 64)),
+    ),
     textItem('008-parts-head', 'PARTS', 900, 236, 14),
     ruleLine('008-parts-rule', 900, 258, 170, 11),
     ...animatedGroup(

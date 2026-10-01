@@ -37,9 +37,16 @@ test('the default template opens with its headline group ready to play, top to b
   await expect(groupRows(page)).toContainText('Group of 3');
   await expect(groupRows(page).locator('.layer-animate[data-on]')).toHaveCount(1);
 
-  const delays = await playedDelays(page);
-  // The word, then the rule and the caption under it -- and only those.
-  expect(Object.keys(delays)).toHaveLength(3);
+  // Everything above is in the server-rendered page, so Play may be pressed
+  // before React has hydrated it; press until it plays.
+  let delays: Record<string, number> = {};
+  await expect
+    .poll(async () => {
+      delays = await playedDelays(page);
+      return Object.keys(delays).length;
+    })
+    // The word, then the rule and the caption under it -- and only those.
+    .toBe(3);
   const word = delays['QUIET'];
   const rule = Object.entries(delays).find(([text]) => text.startsWith('-'))?.[1];
   const caption = delays['NO SIGNAL DETECTED BETWEEN 04:00 AND 05:00'];

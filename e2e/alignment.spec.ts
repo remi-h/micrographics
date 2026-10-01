@@ -45,9 +45,7 @@ async function selectMarkAndLabel(page: Page, label: string) {
   await page.locator('.text-input').fill(label);
   await page.locator('.add-button').click();
   await layerRows(page).nth(0).click();
-  await layerRows(page)
-    .nth(1)
-    .click({ modifiers: ['Shift'] });
+  await layerRows(page).nth(1).click({ modifiers: ['Shift'] });
   await expect(page.locator('.canvas-item rect[stroke-dasharray]')).toHaveCount(2);
 }
 
@@ -133,6 +131,7 @@ test('the care label paints its column on one axis, and aligning keeps it there'
   await page.locator('.layer-row[data-group]', { hasText: 'Group of 5' }).click();
   await page.locator('.layer-row', { hasText: 'MACHINE WASH COLD' }).click({ modifiers: ['Shift'] });
   await expect(page.locator('.canvas-item rect[stroke-dasharray]')).toHaveCount(6);
+  const marksBefore = (await paintedMiddles(page)).filter((point) => !point.text).map((point) => point.x);
   await alignVertical(page).click();
 
   // Already on the axis, so aligning them should not have moved them off it:
@@ -144,4 +143,7 @@ test('the care label paints its column on one axis, and aligning keeps it there'
   expect(marks).toHaveLength(5);
   expect(Math.abs(label[0].x - 600)).toBeLessThan(2);
   expect(Math.abs((Math.min(...marks) + Math.max(...marks)) / 2 - 600)).toBeLessThan(2);
+  // And the row moved as one: aligning each mark on its own would have
+  // stacked all five on the axis.
+  marks.forEach((x, index) => expect(Math.abs(x - marksBefore[index])).toBeLessThan(2));
 });

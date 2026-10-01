@@ -96,6 +96,9 @@ export function animatedGroup(
   stagger: number,
   items: CanvasItem[],
 ): CanvasItem[] {
+  // A group of one is taken apart on load (normalizeGroups), and its item
+  // would lose the entrance with it.
+  if (items.length < 2) throw new Error(`animatedGroup ${id} needs at least two items`);
   const level: GroupLevel = { id, animation, ...(stagger ? { stagger } : {}) };
   return [...items].reverse().map((item) => ({ ...item, groups: [{ ...level }] }));
 }
