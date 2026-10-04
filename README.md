@@ -190,6 +190,11 @@ everything is a reformatting change of its own.
   reloading brings the canvas, palette, and zoom back as you left them. Use
   `Restart template` or `Start from scratch` in the toolbar to discard it. The
   save is per browser and is skipped silently if the browser blocks storage.
+- On a laptop-sized screen, `Feedback?` under the canvas opens a short form
+  (bug, idea or other, a title and optional details). `Continue on GitHub`
+  opens a new issue on this repository with it filled in, to check and submit
+  there with a GitHub account. The homepage footer asks for feedback too,
+  with the GitHub mark linking to the repository and a link to open an issue.
 
 ## Stack
 
@@ -208,8 +213,9 @@ src/
     templates/        one component per template, plus their layout helpers
   hooks/              React hooks: canvas items, history, export, keyboard
   lib/                logic with no React state: animations, geometry,
-                      groups, export markup, GIF encoding, persistence
-  data/               palettes, templates and symbol marks
+                      groups, export markup, GIF encoding, persistence,
+                      feedback links
+  data/               palettes, templates, symbol marks and links
   types/              shared types, and declarations for untyped packages
   styles.css          global styles
 e2e/                  Playwright tests

@@ -462,6 +462,29 @@ input {
   line-height: 1.6;
 }
 
+/* The GitHub mark beside a line asking for feedback, between the
+   description and the copyright. */
+.landing-footer-brand .landing-footer-feedback {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.landing-footer-feedback a {
+  color: rgba(244, 240, 232, 0.86);
+  font-weight: 700;
+}
+
+.landing-footer-feedback .landing-footer-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.landing-footer-feedback a:hover,
+.landing-footer-feedback a:focus-visible {
+  color: #f4f0e8;
+}
+
 .landing-footer-brand .landing-footer-copyright {
   margin-top: 10px;
   color: rgba(244, 240, 232, 0.42);
@@ -1511,6 +1534,147 @@ div.layer-child {
   grid-template-rows: auto minmax(0, 1fr);
   gap: 18px;
   padding: 24px;
+}
+
+/* The Feedback button sits under the canvas, and only on a laptop-sized
+   screen: below the three-column layout the stage stacks with the panels and
+   the page scrolls, so there is no fixed bottom for it to sit at. */
+.stage-footer {
+  display: none;
+}
+
+/* `width > 980px`, not `min-width: 981px`: the layouts below switch at
+   `max-width: 980px`, and a zoomed or fractional width between the two would
+   match neither. */
+@media (width > 980px) {
+  .preview-stage {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .stage-footer {
+    display: flex;
+    justify-content: flex-end;
+  }
+}
+
+.feedback-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid rgba(245, 242, 234, 0.14);
+  border-radius: 999px;
+  color: rgba(244, 240, 232, 0.72);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.feedback-trigger:hover,
+.feedback-trigger:focus-visible {
+  border-color: rgba(245, 242, 234, 0.4);
+  color: #f4f0e8;
+  outline: none;
+}
+
+.feedback-dialog {
+  width: min(420px, calc(100vw - 32px));
+}
+
+.feedback-form {
+  display: grid;
+  gap: 12px;
+}
+
+.feedback-kinds {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.feedback-kind {
+  position: relative;
+  display: grid;
+  cursor: pointer;
+}
+
+/* The radio itself is hidden; its face is what shows, and takes the checked
+   state and the focus ring through a sibling selector rather than :has(),
+   which Firefox before 121 lacks. */
+.feedback-kind input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.feedback-kind-face {
+  padding: 8px;
+  border: 1px solid rgba(245, 242, 234, 0.14);
+  border-radius: 8px;
+  color: rgba(244, 240, 232, 0.72);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.feedback-kind:hover .feedback-kind-face {
+  border-color: rgba(245, 242, 234, 0.4);
+}
+
+.feedback-kind input:focus-visible + .feedback-kind-face {
+  outline: 2px solid #f4f0e8;
+  outline-offset: 2px;
+}
+
+.feedback-kind input:checked + .feedback-kind-face {
+  border-color: #f4f0e8;
+  color: #f4f0e8;
+  background: rgba(245, 242, 234, 0.08);
+}
+
+.feedback-field {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(244, 240, 232, 0.62);
+}
+
+.feedback-details {
+  height: auto;
+  padding: 10px 12px;
+  resize: vertical;
+  font: inherit;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.feedback-note:empty {
+  display: none;
+}
+
+.feedback-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #ffd9c9;
+}
+
+.feedback-submit {
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  border-radius: 8px;
+  color: #171717;
+  background: #f4f0e8;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.feedback-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .stage-header {

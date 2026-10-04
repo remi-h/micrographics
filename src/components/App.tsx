@@ -5,6 +5,7 @@ import { Tooltip } from '@base-ui/react/tooltip';
 import { animationRunTime } from '../lib/animations';
 import { AssetPanel } from './AssetPanel';
 import { ControlPanel } from './ControlPanel';
+import { FeedbackDialog } from './FeedbackDialog';
 import { ExportStatus } from './ExportStatus';
 import { GroupMenu } from './GroupMenu';
 import { MicrographicSvg } from './MicrographicSvg';
@@ -357,6 +358,9 @@ function App() {
               />
               </GroupMenu>
             </div>
+          </div>
+          <div className="stage-footer">
+            <FeedbackDialog templateName={selectedTemplateName} />
           </div>
         </section>
         <AssetPanel
