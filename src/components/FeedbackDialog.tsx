@@ -12,11 +12,12 @@ export function FeedbackDialog({ templateName }: { templateName?: string }) {
   const [title, setTitle] = useState('');
   const [details, setDetails] = useState('');
   const titleRef = useRef<HTMLInputElement>(null);
-  const issue = feedbackIssue({ kind, title, details, templateName });
+  // Only while open: closed, the dialog still re-renders with the canvas.
+  const issue = open ? feedbackIssue({ kind, title, details, templateName }) : null;
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!title.trim()) return;
+    if (!issue || !title.trim()) return;
     window.open(issue.url, '_blank', 'noopener,noreferrer');
     setOpen(false);
     // Cut details are kept, so the rest can be copied from here into the issue.
@@ -58,7 +59,7 @@ export function FeedbackDialog({ templateName }: { templateName?: string }) {
                     type="radio"
                     value={option.kind}
                   />
-                  {option.label}
+                  <span className="feedback-kind-face">{option.label}</span>
                 </label>
               ))}
             </div>
@@ -88,12 +89,14 @@ export function FeedbackDialog({ templateName }: { templateName?: string }) {
               />
             </label>
 
-            {issue.cut && (
-              <p className="feedback-note" role="status">
-                That&rsquo;s more than a GitHub link can carry, so the end of the details will be cut. Your text stays
-                here, to copy the rest into the issue.
-              </p>
-            )}
+            {/* Always mounted, so a screen reader announces the warning when it
+                appears: a live region inserted with its text already in it is
+                often missed. */}
+            <div className="feedback-note" role="status">
+              {issue?.cut
+                ? 'That’s more than a GitHub link can carry, so the end of the details will be cut. Your text stays here, to copy the rest into the issue.'
+                : null}
+            </div>
 
             <button className="feedback-submit" disabled={!title.trim()} type="submit">
               Continue on GitHub

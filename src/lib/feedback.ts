@@ -17,12 +17,14 @@ export const FEEDBACK_KINDS: Array<{ kind: FeedbackKind; label: string }> = [
 export const MAX_FEEDBACK_DETAILS = 2000;
 
 /**
- * The longest link to hand GitHub. It answers 414 URI Too Long a little past
- * 8,200 characters, and the cap has to be on the encoded link, not on what was
- * typed: a non-ASCII character encodes to six to nine characters, so 2,000
- * characters of Cyrillic or Chinese come out at 12,000 to 19,000.
+ * The longest link to hand GitHub, measured encoded: a non-ASCII character
+ * encodes to six to nine characters, so 2,000 characters of Cyrillic or
+ * Chinese come out at 12,000 to 19,000. GitHub refuses a link a little past
+ * 8,200 characters (414 URI Too Long), and for someone signed out it drops a
+ * link much past 4,500 from the login redirect, so they would sign in and not
+ * land on the filled-in issue. This stays under both.
  */
-export const MAX_ISSUE_URL = 8000;
+export const MAX_ISSUE_URL = 4500;
 
 const CUT_NOTE = '\n\n[Cut short to fit a GitHub link.]';
 

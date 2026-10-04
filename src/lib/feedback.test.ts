@@ -46,10 +46,9 @@ describe('feedbackIssueUrl', () => {
   });
 
   it('leaves details that fit whole, and says so', () => {
-    // Punctuation a link has to escape triples in length, and still fits.
-    const issue = feedbackIssue({ kind: 'other', title: 'Short', details: '&'.repeat(MAX_FEEDBACK_DETAILS) });
+    const issue = feedbackIssue({ kind: 'other', title: 'Short', details: 'a'.repeat(MAX_FEEDBACK_DETAILS) });
     expect(issue.cut).toBe(false);
-    expect(parse(issue.url).body).toContain('&'.repeat(MAX_FEEDBACK_DETAILS));
+    expect(parse(issue.url).body).toContain('a'.repeat(MAX_FEEDBACK_DETAILS));
     expect(parse(issue.url).body).not.toContain('Cut short');
   });
 
@@ -61,6 +60,7 @@ describe('feedbackIssueUrl', () => {
     ['Cyrillic', 'ж'],
     ['Chinese', '漢'],
     ['emoji', '🎨'],
+    ['punctuation a link has to escape', '&'],
   ])('keeps the encoded link within what GitHub accepts for %s', (_name, character) => {
     const details = character.repeat(MAX_FEEDBACK_DETAILS);
     const issue = feedbackIssue({ kind: 'bug', title: '漢'.repeat(120), details, templateName: '005 Levels' });

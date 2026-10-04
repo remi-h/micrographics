@@ -1571,36 +1571,40 @@ div.layer-child {
 }
 
 .feedback-kind {
-  display: flex;
-  justify-content: center;
-  padding: 8px;
-  border: 1px solid rgba(245, 242, 234, 0.14);
-  border-radius: 8px;
-  color: rgba(244, 240, 232, 0.72);
-  background: transparent;
-  font-size: 13px;
-  font-weight: 700;
+  position: relative;
+  display: grid;
   cursor: pointer;
 }
 
-/* The radio itself is hidden; the label is what shows, and takes the focus
-   ring the input would have had. */
+/* The radio itself is hidden; its face is what shows, and takes the checked
+   state and the focus ring through a sibling selector rather than :has(),
+   which Firefox before 121 lacks. */
 .feedback-kind input {
   position: absolute;
   opacity: 0;
   pointer-events: none;
 }
 
-.feedback-kind:hover {
+.feedback-kind-face {
+  padding: 8px;
+  border: 1px solid rgba(245, 242, 234, 0.14);
+  border-radius: 8px;
+  color: rgba(244, 240, 232, 0.72);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.feedback-kind:hover .feedback-kind-face {
   border-color: rgba(245, 242, 234, 0.4);
 }
 
-.feedback-kind:has(input:focus-visible) {
+.feedback-kind input:focus-visible + .feedback-kind-face {
   outline: 2px solid #f4f0e8;
   outline-offset: 2px;
 }
 
-.feedback-kind:has(input:checked) {
+.feedback-kind input:checked + .feedback-kind-face {
   border-color: #f4f0e8;
   color: #f4f0e8;
   background: rgba(245, 242, 234, 0.08);
@@ -1621,6 +1625,10 @@ div.layer-child {
   font: inherit;
   font-weight: 400;
   line-height: 1.5;
+}
+
+.feedback-note:empty {
+  display: none;
 }
 
 .feedback-note {

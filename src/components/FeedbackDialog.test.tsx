@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MAX_ISSUE_URL } from '../lib/feedback';
 import { FeedbackDialog } from './FeedbackDialog';
 
 describe('FeedbackDialog', () => {
@@ -70,7 +71,7 @@ describe('FeedbackDialog', () => {
     expect(screen.getByText(/more than a GitHub link can carry/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Continue on GitHub' }));
-    expect(open.mock.calls[0][0].length).toBeLessThanOrEqual(8000);
+    expect(open.mock.calls[0][0].length).toBeLessThanOrEqual(MAX_ISSUE_URL);
     fireEvent.click(screen.getByRole('button', { name: /Feedback\?/ }));
     expect(screen.getByLabelText('Details (optional)')).toHaveValue('ж'.repeat(1500));
   });
