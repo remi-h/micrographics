@@ -11,7 +11,7 @@ describe('LandingPage', () => {
     );
   });
 
-  it('links to the source repository from the footer, in a new tab', () => {
+  it('links to the source repository from the footer with the GitHub icon, in a new tab', () => {
     render(<LandingPage />);
 
     const footer = screen.getByRole('navigation', { name: 'Footer' });
@@ -19,5 +19,8 @@ describe('LandingPage', () => {
     expect(github).toHaveAttribute('href', 'https://github.com/remi-h/micrographics');
     expect(github).toHaveAttribute('target', '_blank');
     expect(github).toHaveAttribute('rel', 'noopener noreferrer');
+    // An icon, not the word: the name comes from its label.
+    expect(github).toHaveTextContent('');
+    expect(github.querySelector('svg')).toBeInTheDocument();
   });
 });

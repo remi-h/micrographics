@@ -483,6 +483,12 @@ input {
   text-decoration: none;
 }
 
+/* An icon among text links: centred on the line the words sit on. */
+.landing-footer-links .landing-footer-icon {
+  display: inline-flex;
+  align-self: center;
+}
+
 .landing-footer-links a:hover,
 .landing-footer-links a:focus-visible {
   color: #f4f0e8;
