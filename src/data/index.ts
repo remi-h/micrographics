@@ -1,4 +1,5 @@
 import { templateComponents } from '../components/templates';
+import { resolveGroupTiming } from '../lib/groupTiming';
 import type { CanvasItem, Palette, Settings, Template } from '../types';
 
 export const palettes: Palette[] = [
@@ -162,5 +163,7 @@ export const initialSettings: Settings = {
 
 export function loadTemplateItems(template: Template): CanvasItem[] {
   if (template === 'blank') return [];
-  return templateComponents[template]().map((item) => ({ ...item }));
+  // A template's groups set their entrances on the group (see animatedGroup);
+  // what plays is each item's own `animation`, so resolve it into them.
+  return resolveGroupTiming(templateComponents[template]().map((item) => ({ ...item })));
 }

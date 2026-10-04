@@ -1,5 +1,5 @@
 import type { CanvasItem } from '../../types';
-import { comb, ruleLine, symbolItem, textItem } from './helpers';
+import { animatedGroup, comb, ruleLine, symbolItem, textItem } from './helpers';
 
 const STATIONS: Array<[string, string, string, number]> = [
   ['01', 'LONDON', '51.5072N 0.1276W', 268],
@@ -15,8 +15,14 @@ export function SurveyTemplate(): CanvasItem[] {
     textItem('007-title', 'SURVEY 04', 120, 110, 28),
     textItem('007-sub', 'MERCATOR / DATUM WGS-84', 120, 142, 14),
     ruleLine('007-rule-top', 120, 176, 960),
+    // The station pins drop in one after another, down the list.
+    ...animatedGroup(
+      '007-group-pins',
+      { kind: 'pop', duration: 0.4, delay: 0 },
+      0.2,
+      STATIONS.map(([number, , , y]) => symbolItem(`007-pin-${number}`, 'target', 142, y - 6, 26)),
+    ),
     ...STATIONS.flatMap(([number, name, coords, y]) => [
-      symbolItem(`007-pin-${number}`, 'target', 142, y - 6, 26),
       textItem(`007-name-${number}`, `${number}  ${name}`, 180, y, 17),
       textItem(`007-coords-${number}`, coords, 180, y + 28, 13),
     ]),

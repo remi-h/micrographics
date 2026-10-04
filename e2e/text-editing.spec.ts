@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { openStillCreator } from './still-template';
 
 // A text item used to be drawn two different ways: an SVG <text> when idle,
 // and an HTML <textarea> layered over it while editing. The textarea wrapped
@@ -40,7 +41,7 @@ async function selectATextItem(page: Page) {
 }
 
 test('a text item looks the same being edited as it does idle', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await selectATextItem(page);
   await expect(page.locator('.canvas-item rect[stroke-dasharray]')).toHaveCount(1);
 
@@ -55,7 +56,7 @@ test('a text item looks the same being edited as it does idle', async ({ page })
 });
 
 test('the selection outline grows as lines are added', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await selectATextItem(page);
   await page.locator('g.canvas-item:has(rect[stroke-dasharray])').dblclick();
   await expect(page.locator('.canvas-text-editor')).toBeVisible();
@@ -72,7 +73,7 @@ test('the selection outline grows as lines are added', async ({ page }) => {
 });
 
 test('committed text renders where the draft was', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await selectATextItem(page);
   await page.locator('g.canvas-item:has(rect[stroke-dasharray])').dblclick();
   await expect(page.locator('.canvas-text-editor')).toBeVisible();
@@ -102,7 +103,7 @@ test('committed text renders where the draft was', async ({ page }) => {
 // dragging the item. Clicks landing between glyphs still reached the textarea,
 // which made it look intermittent.
 test('clicking a character while editing moves the caret, it does not end the edit', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await selectATextItem(page);
   await page.locator('g.canvas-item:has(rect[stroke-dasharray])').dblclick();
 

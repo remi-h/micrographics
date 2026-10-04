@@ -58,6 +58,11 @@ Run end-to-end tests (Playwright):
 npm run test:e2e
 ```
 
+The templates open with animated groups. A spec about editing plain layers
+should start from `openStillCreator` in `e2e/still-template.ts`, which opens
+the default template's layers with no groups and no entrances, rather than
+`page.goto('/creator')`.
+
 Typecheck the project:
 
 ```bash
@@ -93,7 +98,11 @@ everything is a reformatting change of its own.
 ## Basic Use
 
 - Pick a starting point from the `Template` dropdown in the left panel, or
-  `Start from scratch` for an empty canvas.
+  `Start from scratch` for an empty canvas. Every template opens with a group
+  or two already set to play a simple entrance — the plate's marks popping in
+  row by row, the level bars running out one band at a time — so `Play` works
+  straight away. Change or take off a group's entrance on its row in `Layers`,
+  or ungroup it to work with its layers one by one.
 - Add symbols from the right panel. They are grouped into `Daily` marks and
   `Tech` logos. Add text from the same panel.
 - Drag items on the canvas to move them; select one to rotate or resize it

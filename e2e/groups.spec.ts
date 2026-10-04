@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { openStillCreator } from './still-template';
 
 // Grouping is a selection feature: what it has to prove in a browser is that
 // picking one member picks the rest, that the group reads as one layer, and
@@ -34,7 +35,7 @@ async function groupTopTwo(page: Page) {
 }
 
 test('two layers become one group row', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   const before = await groupTopTwo(page);
 
   await expect(layerRows(page)).toHaveCount(before - 1);
@@ -42,7 +43,7 @@ test('two layers become one group row', async ({ page }) => {
 });
 
 test('the right-click menu offers only what applies, so it reads as a toggle', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
 
   // One item is not a group, and there is nothing to group it with: the menu
   // says how to get there instead of offering either action.
@@ -67,7 +68,7 @@ test('the right-click menu offers only what applies, so it reads as a toggle', a
 });
 
 test('the standalone group buttons are gone from the panel and the canvas toolbar', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await layerRows(page).nth(0).click();
   await layerRows(page).nth(1).click({ modifiers: ['Shift'] });
   await expect(selectedOutlines(page)).toHaveCount(2);
@@ -79,7 +80,7 @@ test('the standalone group buttons are gone from the panel and the canvas toolba
 });
 
 test('right-clicking a layer that is not selected makes it the selection first', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await groupTopTwo(page);
 
   // Select something else, then right-click the group row: the menu has to be
@@ -91,7 +92,7 @@ test('right-clicking a layer that is not selected makes it the selection first',
 });
 
 test('grouping from the canvas: right-click the selection', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   const before = await layerRows(page).count();
   await layerRows(page).nth(0).click();
   await layerRows(page).nth(1).click({ modifiers: ['Shift'] });
@@ -108,7 +109,7 @@ test('grouping from the canvas: right-click the selection', async ({ page }) => 
 });
 
 test('right-clicking an unselected item on the canvas selects it, and its group', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await groupTopTwo(page);
 
   // Select one loose item, then right-click a member of the group on the
@@ -131,7 +132,7 @@ test('right-clicking an unselected item on the canvas selects it, and its group'
 });
 
 test('a right-click on the canvas does not start a marquee or drag', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await layerRows(page).nth(0).click();
   await layerRows(page).nth(1).click({ modifiers: ['Shift'] });
   await expect(selectedOutlines(page)).toHaveCount(2);
@@ -145,7 +146,7 @@ test('a right-click on the canvas does not start a marquee or drag', async ({ pa
 });
 
 test('the disclosure on a group row shows and hides the layers inside', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await groupTopTwo(page);
   const disclosure = groupRows(page).first().locator('.layer-disclosure');
 
@@ -166,7 +167,7 @@ test('the disclosure on a group row shows and hides the layers inside', async ({
 });
 
 test('clicking one member of a group selects the whole group', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await groupTopTwo(page);
 
   await page.keyboard.press('Escape');
@@ -181,7 +182,7 @@ test('clicking one member of a group selects the whole group', async ({ page }) 
 });
 
 test('a group moves as one', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await groupTopTwo(page);
 
   const positions = () =>
@@ -205,7 +206,7 @@ test('a group moves as one', async ({ page }) => {
 });
 
 test('a copy of a group is a group of its own', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await groupTopTwo(page);
 
   await page.keyboard.press('ControlOrMeta+d');
@@ -221,7 +222,7 @@ test('a copy of a group is a group of its own', async ({ page }) => {
 });
 
 test('ungrouping puts the members back as their own layers', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   const before = await groupTopTwo(page);
 
   await fromLayerMenu(page, 'Ungroup');
@@ -231,7 +232,7 @@ test('ungrouping puts the members back as their own layers', async ({ page }) =>
 });
 
 test('a group survives a reload', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await groupTopTwo(page);
 
   // The editor autosaves on a debounce; give it the write before reloading.
@@ -243,7 +244,7 @@ test('a group survives a reload', async ({ page }) => {
 });
 
 test('editing a grouped text item leaves the group whole afterwards', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
 
   // Group a text layer with whatever sits above it, then edit the text.
   const rows = layerRows(page);
@@ -286,7 +287,7 @@ test('editing a grouped text item leaves the group whole afterwards', async ({ p
 });
 
 test('two groups grouped from the Layers list nest inside a new one', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
 
   // Two groups, made from the top four layers two at a time.
   await groupTopTwo(page);
@@ -316,7 +317,7 @@ test('two groups grouped from the Layers list nest inside a new one', async ({ p
 // -- so its row carries one entrance that every member plays, rather than a
 // control per member the collapsed row has nowhere to show.
 test('a group has one entrance, and every member plays it', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await groupTopTwo(page);
 
   const groupRow = groupRows(page).first();
@@ -341,7 +342,7 @@ test('a group has one entrance, and every member plays it', async ({ page }) => 
 });
 
 test('a group can stagger its entrance, each member starting after the one listed above it', async ({ page }) => {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await page.getByRole('button', { name: 'Start from scratch' }).click();
   for (const label of ['AAA', 'BBB', 'CCC']) {
     await page.locator('.text-input').fill(label);
@@ -406,7 +407,7 @@ test('a group can stagger its entrance, each member starting after the one liste
 
 /** A blank canvas with labels added bottom to top, so the last is on top. */
 async function labels(page: Page, names: string[]) {
-  await page.goto('/creator');
+  await openStillCreator(page);
   await page.getByRole('button', { name: 'Start from scratch' }).click();
   for (const name of names) {
     await page.locator('.text-input').fill(name);
@@ -542,7 +543,10 @@ test('nested groups and their entrances survive a reload', async ({ page }) => {
   await page.waitForTimeout(800);
   await page.reload();
 
+  // The template paints first, and it has a group of its own; wait for the
+  // saved one -- A and B's group, and C -- before opening it.
   await expect(groupRows(page)).toHaveCount(1);
+  await expect(groupRows(page).first()).toContainText('Group of 2');
   await groupRows(page).first().locator('.layer-disclosure').click();
   await expect(page.locator('.layer-subgroup')).toHaveCount(1);
   const entrances = await playedEntrances(page);

@@ -15,6 +15,9 @@ Structure" section has the full map; keep it current when you add a folder.
 - Unit tests: Jest + React Testing Library. Run `npm run test`.
 - E2E tests: Playwright, in `e2e/`. Run `npm run test:e2e` (spins up its own dev
   server on port 3100).
+  The templates open with animated groups; a spec about editing plain layers
+  starts from `openStillCreator` (`e2e/still-template.ts`) instead of
+  `page.goto('/creator')`.
 - Typecheck: `npm run typecheck`. `npm run build` also typechecks.
 - Lint: ESLint. Run `npm run lint`. The config is flat config in
   `eslint.config.mjs` (`next lint` was removed in Next 16), built from
