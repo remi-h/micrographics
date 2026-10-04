@@ -27,7 +27,9 @@ test('on a laptop, Feedback? under the canvas opens a prefilled GitHub issue', a
   await button.click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  await dialog.getByRole('button', { name: 'Bug' }).click();
+  // The radio is hidden behind its label, which is what a person clicks.
+  await dialog.locator('label', { hasText: 'Bug' }).click();
+  await expect(dialog.getByRole('radio', { name: 'Bug' })).toBeChecked();
   await dialog.getByLabel('Title').fill('GIF export stalls');
   await dialog.getByLabel('Details (optional)').fill('Rendering frames never finishes.');
 
@@ -43,6 +45,28 @@ test('on a laptop, Feedback? under the canvas opens a prefilled GitHub issue', a
   expect(url.searchParams.get('body')).toContain('template: 001 Quiet');
 
   await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+// The canvas's shortcuts listen on the window and only stand down for text
+// fields, so the dialog has to open with the cursor in one: on a button,
+// Backspace deleted the selected layer behind the dialog.
+test('typing in the feedback dialog leaves the canvas alone', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/creator');
+  const rows = page.locator('.layer-row');
+  const before = await rows.count();
+  await rows.first().click();
+  await expect(page.locator('.canvas-item rect[stroke-dasharray]').first()).toBeVisible();
+
+  await feedbackButton(page).click();
+  await expect(page.getByRole('dialog').getByLabel('Title')).toBeFocused();
+  await page.keyboard.press('Backspace');
+  await page.keyboard.press('Delete');
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('Escape');
+
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(rows).toHaveCount(before);
 });
 
 test('Feedback? is not offered below laptop width', async ({ page }) => {

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { FeedbackDialog } from './FeedbackDialog';
 
 describe('FeedbackDialog', () => {
@@ -31,8 +31,8 @@ describe('FeedbackDialog', () => {
 
   it('opens a prefilled GitHub issue in a new tab and closes', () => {
     openDialog();
-    fireEvent.click(screen.getByRole('button', { name: 'Bug' }));
-    expect(screen.getByRole('button', { name: 'Bug' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('radio', { name: 'Bug' }));
+    expect(screen.getByRole('radio', { name: 'Bug' })).toBeChecked();
     fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Export fails' } });
     fireEvent.change(screen.getByLabelText('Details (optional)'), { target: { value: 'GIF never finishes' } });
     fireEvent.click(screen.getByRole('button', { name: 'Continue on GitHub' }));
@@ -54,6 +54,24 @@ describe('FeedbackDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Continue on GitHub' }));
     fireEvent.click(screen.getByRole('button', { name: /Feedback\?/ }));
     expect(screen.getByLabelText('Title')).toHaveValue('');
-    expect(screen.getByRole('button', { name: 'Idea' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('radio', { name: 'Idea' })).toBeChecked();
+  });
+
+  it('starts with the cursor in Title, so keys typed go to the form and not the canvas', async () => {
+    openDialog();
+    await waitFor(() => expect(screen.getByLabelText('Title')).toHaveFocus());
+  });
+
+  it('warns when the details are too long for a link, and keeps them to copy from', () => {
+    openDialog();
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Отчёт' } });
+    expect(screen.queryByText(/more than a GitHub link can carry/)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Details (optional)'), { target: { value: 'ж'.repeat(1500) } });
+    expect(screen.getByText(/more than a GitHub link can carry/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue on GitHub' }));
+    expect(open.mock.calls[0][0].length).toBeLessThanOrEqual(8000);
+    fireEvent.click(screen.getByRole('button', { name: /Feedback\?/ }));
+    expect(screen.getByLabelText('Details (optional)')).toHaveValue('ж'.repeat(1500));
   });
 });

@@ -1,7 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Dialog } from '@base-ui/react/dialog';
 import { MessageSquare } from 'lucide-react';
-import { FEEDBACK_KINDS, MAX_FEEDBACK_DETAILS, feedbackIssueUrl, type FeedbackKind } from '../lib/feedback';
+import { FEEDBACK_KINDS, MAX_FEEDBACK_DETAILS, feedbackIssue, type FeedbackKind } from '../lib/feedback';
 
 // A "Feedback?" button under the canvas that opens a short form and hands it
 // to GitHub as a prefilled issue (see lib/feedback). It is laptop-only: the
@@ -11,12 +11,16 @@ export function FeedbackDialog({ templateName }: { templateName?: string }) {
   const [kind, setKind] = useState<FeedbackKind>('idea');
   const [title, setTitle] = useState('');
   const [details, setDetails] = useState('');
+  const titleRef = useRef<HTMLInputElement>(null);
+  const issue = feedbackIssue({ kind, title, details, templateName });
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!title.trim()) return;
-    window.open(feedbackIssueUrl({ kind, title, details, templateName }), '_blank', 'noopener,noreferrer');
+    window.open(issue.url, '_blank', 'noopener,noreferrer');
     setOpen(false);
+    // Cut details are kept, so the rest can be copied from here into the issue.
+    if (issue.cut) return;
     setKind('idea');
     setTitle('');
     setDetails('');
@@ -30,7 +34,11 @@ export function FeedbackDialog({ templateName }: { templateName?: string }) {
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Backdrop className="dialog-backdrop" />
-        <Dialog.Popup className="dialog-popup feedback-dialog">
+        {/* Focus starts in Title, where typing begins. On a button instead,
+            Backspace and the other editing keys would reach the canvas's
+            shortcuts behind the dialog, which only stand down for text
+            fields. */}
+        <Dialog.Popup className="dialog-popup feedback-dialog" initialFocus={titleRef}>
           <Dialog.Title className="dialog-title">Send feedback</Dialog.Title>
           <Dialog.Description className="dialog-description">
             Found a bug or have an idea? This opens a GitHub issue with your note filled in, for you to check and
@@ -38,17 +46,20 @@ export function FeedbackDialog({ templateName }: { templateName?: string }) {
           </Dialog.Description>
 
           <form className="feedback-form" onSubmit={submit}>
-            <div className="feedback-kinds" role="group" aria-label="Kind of feedback">
+            {/* Native radios: one choice of three, announced and arrow-keyed
+                as such. */}
+            <div className="feedback-kinds" role="radiogroup" aria-label="Kind of feedback">
               {FEEDBACK_KINDS.map((option) => (
-                <button
-                  aria-pressed={kind === option.kind}
-                  className="feedback-kind"
-                  key={option.kind}
-                  onClick={() => setKind(option.kind)}
-                  type="button"
-                >
+                <label className="feedback-kind" key={option.kind}>
+                  <input
+                    checked={kind === option.kind}
+                    name="feedback-kind"
+                    onChange={() => setKind(option.kind)}
+                    type="radio"
+                    value={option.kind}
+                  />
                   {option.label}
-                </button>
+                </label>
               ))}
             </div>
 
@@ -57,6 +68,7 @@ export function FeedbackDialog({ templateName }: { templateName?: string }) {
               <input
                 className="text-input"
                 maxLength={120}
+                ref={titleRef}
                 onChange={(event) => setTitle(event.target.value)}
                 placeholder={kind === 'bug' ? 'What went wrong?' : 'In a sentence'}
                 required
@@ -75,6 +87,13 @@ export function FeedbackDialog({ templateName }: { templateName?: string }) {
                 value={details}
               />
             </label>
+
+            {issue.cut && (
+              <p className="feedback-note" role="status">
+                That&rsquo;s more than a GitHub link can carry, so the end of the details will be cut. Your text stays
+                here, to copy the rest into the issue.
+              </p>
+            )}
 
             <button className="feedback-submit" disabled={!title.trim()} type="submit">
               Continue on GitHub

@@ -1520,7 +1520,10 @@ div.layer-child {
   display: none;
 }
 
-@media (min-width: 981px) {
+/* `width > 980px`, not `min-width: 981px`: the layouts below switch at
+   `max-width: 980px`, and a zoomed or fractional width between the two would
+   match neither. */
+@media (width > 980px) {
   .preview-stage {
     grid-template-rows: auto minmax(0, 1fr) auto;
   }
@@ -1568,6 +1571,8 @@ div.layer-child {
 }
 
 .feedback-kind {
+  display: flex;
+  justify-content: center;
   padding: 8px;
   border: 1px solid rgba(245, 242, 234, 0.14);
   border-radius: 8px;
@@ -1578,13 +1583,24 @@ div.layer-child {
   cursor: pointer;
 }
 
-.feedback-kind:hover,
-.feedback-kind:focus-visible {
-  border-color: rgba(245, 242, 234, 0.4);
-  outline: none;
+/* The radio itself is hidden; the label is what shows, and takes the focus
+   ring the input would have had. */
+.feedback-kind input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
 }
 
-.feedback-kind[aria-pressed='true'] {
+.feedback-kind:hover {
+  border-color: rgba(245, 242, 234, 0.4);
+}
+
+.feedback-kind:has(input:focus-visible) {
+  outline: 2px solid #f4f0e8;
+  outline-offset: 2px;
+}
+
+.feedback-kind:has(input:checked) {
   border-color: #f4f0e8;
   color: #f4f0e8;
   background: rgba(245, 242, 234, 0.08);
@@ -1605,6 +1621,13 @@ div.layer-child {
   font: inherit;
   font-weight: 400;
   line-height: 1.5;
+}
+
+.feedback-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #ffd9c9;
 }
 
 .feedback-submit {

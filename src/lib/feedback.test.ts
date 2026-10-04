@@ -1,4 +1,4 @@
-import { MAX_FEEDBACK_DETAILS, feedbackIssueUrl } from './feedback';
+import { MAX_FEEDBACK_DETAILS, MAX_ISSUE_URL, feedbackIssue, feedbackIssueUrl } from './feedback';
 
 const parse = (url: string) => {
   const parsed = new URL(url);
@@ -40,9 +40,40 @@ describe('feedbackIssueUrl', () => {
     );
   });
 
-  it('caps the details so the link stays within what GitHub accepts', () => {
+  it('caps the details at MAX_FEEDBACK_DETAILS characters', () => {
     const url = feedbackIssueUrl({ kind: 'other', title: 'Long', details: 'x'.repeat(MAX_FEEDBACK_DETAILS * 3) });
     expect(parse(url).body?.match(/x+/)?.[0]).toHaveLength(MAX_FEEDBACK_DETAILS);
-    expect(url.length).toBeLessThan(8000);
+  });
+
+  it('leaves details that fit whole, and says so', () => {
+    // Punctuation a link has to escape triples in length, and still fits.
+    const issue = feedbackIssue({ kind: 'other', title: 'Short', details: '&'.repeat(MAX_FEEDBACK_DETAILS) });
+    expect(issue.cut).toBe(false);
+    expect(parse(issue.url).body).toContain('&'.repeat(MAX_FEEDBACK_DETAILS));
+    expect(parse(issue.url).body).not.toContain('Cut short');
+  });
+
+  // A non-ASCII character encodes to six to nine characters of link, so a
+  // character cap alone let 2,000 of them through as a 12,000-19,000
+  // character link, which GitHub refuses with 414 URI Too Long.
+  it.each([
+    ['accented Latin', 'é'],
+    ['Cyrillic', 'ж'],
+    ['Chinese', '漢'],
+    ['emoji', '🎨'],
+  ])('keeps the encoded link within what GitHub accepts for %s', (_name, character) => {
+    const details = character.repeat(MAX_FEEDBACK_DETAILS);
+    const issue = feedbackIssue({ kind: 'bug', title: '漢'.repeat(120), details, templateName: '005 Levels' });
+
+    expect(issue.url.length).toBeLessThanOrEqual(MAX_ISSUE_URL);
+    const { body } = parse(issue.url);
+    expect(body).toContain('[Cut short to fit a GitHub link.]');
+    expect(body).toContain('template: 005 Levels');
+    // As much as fits, not a token amount: the link ends within one encoded
+    // character (at most 12 link characters, for an emoji) of the limit.
+    const kept = body!.slice(0, body!.indexOf('\n\n[Cut short'));
+    expect(kept).toBe(character.repeat(Array.from(kept).length));
+    expect(issue.url.length).toBeGreaterThan(MAX_ISSUE_URL - 13);
+    expect(Array.from(kept).length).toBeGreaterThan(100);
   });
 });

@@ -213,8 +213,9 @@ src/
     templates/        one component per template, plus their layout helpers
   hooks/              React hooks: canvas items, history, export, keyboard
   lib/                logic with no React state: animations, geometry,
-                      groups, export markup, GIF encoding, persistence
-  data/               palettes, templates and symbol marks
+                      groups, export markup, GIF encoding, persistence,
+                      feedback links
+  data/               palettes, templates, symbol marks and links
   types/              shared types, and declarations for untyped packages
   styles.css          global styles
 e2e/                  Playwright tests
