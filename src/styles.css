@@ -1513,6 +1513,116 @@ div.layer-child {
   padding: 24px;
 }
 
+/* The Feedback button sits under the canvas, and only on a laptop-sized
+   screen: below the three-column layout the stage stacks with the panels and
+   the page scrolls, so there is no fixed bottom for it to sit at. */
+.stage-footer {
+  display: none;
+}
+
+@media (min-width: 981px) {
+  .preview-stage {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .stage-footer {
+    display: flex;
+    justify-content: flex-end;
+  }
+}
+
+.feedback-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid rgba(245, 242, 234, 0.14);
+  border-radius: 999px;
+  color: rgba(244, 240, 232, 0.72);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.feedback-trigger:hover,
+.feedback-trigger:focus-visible {
+  border-color: rgba(245, 242, 234, 0.4);
+  color: #f4f0e8;
+  outline: none;
+}
+
+.feedback-dialog {
+  width: min(420px, calc(100vw - 32px));
+}
+
+.feedback-form {
+  display: grid;
+  gap: 12px;
+}
+
+.feedback-kinds {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.feedback-kind {
+  padding: 8px;
+  border: 1px solid rgba(245, 242, 234, 0.14);
+  border-radius: 8px;
+  color: rgba(244, 240, 232, 0.72);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.feedback-kind:hover,
+.feedback-kind:focus-visible {
+  border-color: rgba(245, 242, 234, 0.4);
+  outline: none;
+}
+
+.feedback-kind[aria-pressed='true'] {
+  border-color: #f4f0e8;
+  color: #f4f0e8;
+  background: rgba(245, 242, 234, 0.08);
+}
+
+.feedback-field {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(244, 240, 232, 0.62);
+}
+
+.feedback-details {
+  height: auto;
+  padding: 10px 12px;
+  resize: vertical;
+  font: inherit;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.feedback-submit {
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  border-radius: 8px;
+  color: #171717;
+  background: #f4f0e8;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.feedback-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .stage-header {
   display: flex;
   justify-content: space-between;

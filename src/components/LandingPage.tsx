@@ -1,4 +1,5 @@
 import Image from 'next/image';
+import { REPO_URL } from '../data/links';
 import { BrandIcon } from './BrandIcon';
 
 const useCases = [
@@ -190,6 +191,9 @@ export default function LandingPage() {
             <a href="#examples">Examples</a>
             <a href="#how">How it works</a>
             <a href="/creator">Open tool</a>
+            <a href={REPO_URL} rel="noopener noreferrer" target="_blank">
+              GitHub
+            </a>
           </nav>
         </footer>
       </main>
