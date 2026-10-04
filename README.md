@@ -193,8 +193,8 @@ everything is a reformatting change of its own.
 - On a laptop-sized screen, `Feedback?` under the canvas opens a short form
   (bug, idea or other, a title and optional details). `Continue on GitHub`
   opens a new issue on this repository with it filled in, to check and submit
-  there with a GitHub account. The homepage footer links to the repository
-  too.
+  there with a GitHub account. The homepage footer asks for feedback too,
+  with the GitHub mark linking to the repository and a link to open an issue.
 
 ## Stack
 

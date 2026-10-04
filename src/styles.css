@@ -462,6 +462,29 @@ input {
   line-height: 1.6;
 }
 
+/* The GitHub mark beside a line asking for feedback, between the
+   description and the copyright. */
+.landing-footer-brand .landing-footer-feedback {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.landing-footer-feedback a {
+  color: rgba(244, 240, 232, 0.86);
+  font-weight: 700;
+}
+
+.landing-footer-feedback .landing-footer-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.landing-footer-feedback a:hover,
+.landing-footer-feedback a:focus-visible {
+  color: #f4f0e8;
+}
+
 .landing-footer-brand .landing-footer-copyright {
   margin-top: 10px;
   color: rgba(244, 240, 232, 0.42);
@@ -481,12 +504,6 @@ input {
   font-size: 13px;
   font-weight: 900;
   text-decoration: none;
-}
-
-/* An icon among text links: centred on the line the words sit on. */
-.landing-footer-links .landing-footer-icon {
-  display: inline-flex;
-  align-self: center;
 }
 
 .landing-footer-links a:hover,

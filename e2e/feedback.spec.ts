@@ -77,9 +77,16 @@ test('Feedback? is not offered below laptop width', async ({ page }) => {
   await expect(feedbackButton(page)).toBeHidden();
 });
 
-test('the homepage footer links to the repository', async ({ page }) => {
+test('the homepage footer asks for feedback and links to GitHub', async ({ page }) => {
   await page.goto('/');
-  const link = page.getByRole('navigation', { name: 'Footer' }).getByRole('link', { name: 'GitHub' });
-  await expect(link).toHaveAttribute('href', 'https://github.com/remi-h/micrographics');
-  await expect(link).toHaveAttribute('target', '_blank');
+  const feedback = page.locator('.landing-footer-feedback');
+  await expect(feedback).toBeVisible();
+  await expect(feedback.getByRole('link', { name: 'GitHub repository' })).toHaveAttribute(
+    'href',
+    'https://github.com/remi-h/micrographics',
+  );
+  await expect(feedback.getByRole('link', { name: 'open an issue on GitHub' })).toHaveAttribute(
+    'href',
+    'https://github.com/remi-h/micrographics/issues/new',
+  );
 });

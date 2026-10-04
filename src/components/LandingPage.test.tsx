@@ -5,22 +5,27 @@ describe('LandingPage', () => {
   it('renders the primary heading and a link into the creator tool', () => {
     render(<LandingPage />);
 
-    expect(screen.getAllByRole('link', { name: /open tool/i })[0]).toHaveAttribute(
-      'href',
-      '/creator',
-    );
+    expect(screen.getAllByRole('link', { name: /open tool/i })[0]).toHaveAttribute('href', '/creator');
   });
 
-  it('links to the source repository from the footer with the GitHub icon, in a new tab', () => {
-    render(<LandingPage />);
+  it('asks for feedback in the footer, with the GitHub mark and a link to open an issue', () => {
+    const { container } = render(<LandingPage />);
 
-    const footer = screen.getByRole('navigation', { name: 'Footer' });
-    const github = within(footer).getByRole('link', { name: 'GitHub' });
-    expect(github).toHaveAttribute('href', 'https://github.com/remi-h/micrographics');
-    expect(github).toHaveAttribute('target', '_blank');
-    expect(github).toHaveAttribute('rel', 'noopener noreferrer');
-    // An icon, not the word: the name comes from its label.
-    expect(github).toHaveTextContent('');
-    expect(github.querySelector('svg')).toBeInTheDocument();
+    const feedback = container.querySelector('.landing-footer-feedback') as HTMLElement;
+    expect(feedback).toHaveTextContent('Feedback is welcome. If you have any, open an issue on GitHub.');
+
+    // Between the description and the copyright.
+    const lines = [...container.querySelectorAll('.landing-footer-brand p')].map((line) => line.className);
+    expect(lines).toEqual(['', 'landing-footer-feedback', 'landing-footer-copyright']);
+
+    const repo = within(feedback).getByRole('link', { name: 'GitHub repository' });
+    expect(repo).toHaveAttribute('href', 'https://github.com/remi-h/micrographics');
+    expect(repo.querySelector('svg')).toBeInTheDocument();
+    const issue = within(feedback).getByRole('link', { name: 'open an issue on GitHub' });
+    expect(issue).toHaveAttribute('href', 'https://github.com/remi-h/micrographics/issues/new');
+    for (const link of [repo, issue]) {
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    }
   });
 });
