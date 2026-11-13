@@ -38,5 +38,10 @@
     "jest-environment-jsdom": "^29.7.0",
     "prettier": "^3.9.8",
     "typescript": "^5.7.2"
+  },
+  "overrides": {
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "^11.0.8"
+    }
   }
 }
