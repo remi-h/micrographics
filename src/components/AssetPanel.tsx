@@ -3,6 +3,7 @@ import { Check, ChevronDown, Type } from 'lucide-react';
 import { ARTBOARD_PRESETS, artboardPreset, type ArtboardPresetId } from '../lib/artboard';
 import type { Artboard } from '../types';
 import { Field, ToggleRow } from './Controls';
+import { SymbolPicker } from './SymbolPicker';
 
 /** What the Canvas size control can ask for: a preset, or the background's own shape. */
 export type ArtboardChoice = ArtboardPresetId | 'background';
@@ -12,7 +13,6 @@ export type ArtboardChoice = ArtboardPresetId | 'background';
 // value: a Select whose value matches none of its items falls back to the
 // first one, which would snap a freshly matched frame back to landscape.
 const CUSTOM_VALUE = 'custom';
-import { SymbolPicker } from './SymbolPicker';
 
 export function AssetPanel({
   activeSymbolMarks,
