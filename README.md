@@ -161,7 +161,9 @@ everything is a reformatting change of its own.
 - Toggle `Grid` and `Include background` in the right panel, or upload your
   own background image. Uploading one sets the canvas to the image's shape
   (its long side at 1200), so a portrait photo shows whole instead of being
-  cropped to a landscape strip.
+  cropped to a landscape strip. `Remove`, beside the file picker, takes the
+  image away again and leaves the palette's paper colour; the canvas keeps its
+  size. (`Include background` off hides the paper colour as well.)
 - `Canvas size` in the right panel switches the artboard between Landscape
   3:2 (1200 x 800, the default), Portrait 2:3, Square 1:1, Widescreen 16:9 and
   Story 9:16, or back to `Match background` after an upload. What is on the

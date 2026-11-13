@@ -419,6 +419,7 @@ function App() {
           onChangeShowBackground={(value) => update('showBackground', value)}
           onChangeSymbolTab={setActiveSymbolTab}
           onChangeTextDraft={setTextDraft}
+          onRemoveBackground={() => update('backgroundImage', null)}
           onUploadBackground={uploadBackground}
         />
         <ExportStatus message={exportStatus} />

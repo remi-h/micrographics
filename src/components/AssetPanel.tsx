@@ -1,5 +1,6 @@
+import { useRef } from 'react';
 import { Select } from '@base-ui/react/select';
-import { Check, ChevronDown, Type } from 'lucide-react';
+import { Check, ChevronDown, Trash2, Type } from 'lucide-react';
 import { ARTBOARD_PRESETS, artboardPreset, type ArtboardPresetId } from '../lib/artboard';
 import type { Artboard } from '../types';
 import { Field, ToggleRow } from './Controls';
@@ -27,6 +28,7 @@ export function AssetPanel({
   onChangeShowBackground,
   onChangeSymbolTab,
   onChangeTextDraft,
+  onRemoveBackground,
   onUploadBackground,
 }: {
   activeSymbolMarks: string[];
@@ -41,16 +43,44 @@ export function AssetPanel({
   onChangeShowBackground: (value: boolean) => void;
   onChangeSymbolTab: (tab: string) => void;
   onChangeTextDraft: (value: string) => void;
+  onRemoveBackground: () => void;
   onUploadBackground: (file: File | undefined) => void;
 }) {
   const preset = artboardPreset(artboard);
   const sizeLabel = `${artboard.width} × ${artboard.height}`;
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   return (
     <aside className="asset-panel">
       <div className="asset-panel-inner">
         <Field label="Uploaded background">
-          <input className="file-input" type="file" accept="image/*" onChange={(event) => onUploadBackground(event.target.files?.[0])} />
+          <div className={hasBackground ? 'add-row' : undefined}>
+            <input
+              ref={fileInputRef}
+              className="file-input"
+              type="file"
+              accept="image/*"
+              onChange={(event) => onUploadBackground(event.target.files?.[0])}
+            />
+            {/* Takes the image away and leaves the paper colour, which
+                `Include background` cannot do: it hides both. The canvas
+                keeps its size, so the layout on it does not move. */}
+            {hasBackground && (
+              <button
+                className="add-button"
+                onClick={() => {
+                  // Cleared too, or picking the same file again would not
+                  // fire a change and the image could not be put back.
+                  if (fileInputRef.current) fileInputRef.current.value = '';
+                  onRemoveBackground();
+                }}
+                type="button"
+              >
+                <Trash2 size={16} aria-hidden="true" />
+                Remove
+              </button>
+            )}
+          </div>
         </Field>
         <ToggleRow label="Include background" checked={showBackground} onChange={onChangeShowBackground} />
         <Field label="Canvas size">
