@@ -2,12 +2,14 @@ import { animationClassName, animationStateAt, animationStyleSheet } from './ani
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { MicrographicSvg } from '../components/MicrographicSvg';
-import type { CanvasItem, Palette, Settings } from '../types';
+import { DEFAULT_ARTBOARD } from './artboard';
+import type { Artboard, CanvasItem, Palette, Settings } from '../types';
 
-// The artboard's own coordinate system, and the units the viewBox is written
-// in. Everything exported is a multiple of it.
-export const ARTBOARD_WIDTH = 1200;
-export const ARTBOARD_HEIGHT = 800;
+// The default artboard's coordinate system. The viewBox is written in the
+// current artboard's units, which is DEFAULT_ARTBOARD unless the user changed
+// the canvas size; everything exported is a multiple of it.
+export const ARTBOARD_WIDTH = DEFAULT_ARTBOARD.width;
+export const ARTBOARD_HEIGHT = DEFAULT_ARTBOARD.height;
 
 // The PNG sizes offered in the toolbar: screen-scale, the 2400x1600 the export
 // used to hardcode, and a print-scale file.
@@ -17,8 +19,8 @@ export type ExportScale = (typeof EXPORT_SCALES)[number];
 
 // Pixel size of an export at a given scale. Pure, so the PNG canvas, the labels
 // on the size control and the status message all quote the same numbers.
-export function exportPixelSize(scale: number) {
-  return { width: ARTBOARD_WIDTH * scale, height: ARTBOARD_HEIGHT * scale };
+export function exportPixelSize(scale: number, artboard: Artboard = DEFAULT_ARTBOARD) {
+  return { width: artboard.width * scale, height: artboard.height * scale };
 }
 
 export type ExportInput = {
@@ -124,7 +126,7 @@ export function buildExportMarkup({ animate = false, freezeAt, items, palette, s
     // drawing is fitted to whatever box a consumer gives it (CSS, an <img
     // width>, a page layout), so an embedded file scales exactly as it did
     // before -- it now simply also has a sensible size when nobody says.
-    const { width, height } = exportPixelSize(scale);
+    const { width, height } = exportPixelSize(scale, settings.artboard);
     svg.setAttribute('width', String(width));
     svg.setAttribute('height', String(height));
 

@@ -99,7 +99,7 @@ export function useExport({ canvasItems, palette, settings }: UseExportOptions):
     try {
       // Vector: the artboard's own size, with the scale control left to the
       // PNG. A viewBox is along for the ride, so it still scales anywhere.
-      const { width, height } = exportPixelSize(1);
+      const { width, height } = exportPixelSize(1, settings.artboard);
       downloadBlob(new Blob([exportMarkup(1, true)], { type: 'image/svg+xml;charset=utf-8' }), 'micrographic.svg');
       announceExport('success', `Saved micrographic.svg (${width} × ${height}).`);
     } catch (error) {
@@ -168,7 +168,7 @@ export function useExport({ canvasItems, palette, settings }: UseExportOptions):
   };
 
   const exportPng = async (scale: ExportScale) => {
-    const { width, height } = exportPixelSize(scale);
+    const { width, height } = exportPixelSize(scale, settings.artboard);
 
     // Every step here can fail for real -- a browser that will not decode the
     // SVG, a refused 2D context, an encode that runs out of memory at 4x -- and
@@ -209,7 +209,7 @@ export function useExport({ canvasItems, palette, settings }: UseExportOptions):
       return;
     }
 
-    const { width, height } = exportPixelSize(1);
+    const { width, height } = exportPixelSize(1, settings.artboard);
     const times = gifFrameTimes(runTime);
     setExportingGif(true);
 

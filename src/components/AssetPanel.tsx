@@ -1,14 +1,29 @@
-import { Type } from 'lucide-react';
+import { Select } from '@base-ui/react/select';
+import { Check, ChevronDown, Type } from 'lucide-react';
+import { ARTBOARD_PRESETS, artboardPreset, type ArtboardPresetId } from '../lib/artboard';
+import type { Artboard } from '../types';
 import { Field, ToggleRow } from './Controls';
 import { SymbolPicker } from './SymbolPicker';
+
+/** What the Canvas size control can ask for: a preset, or the background's own shape. */
+export type ArtboardChoice = ArtboardPresetId | 'background';
+
+// The value the control shows when the frame is not a preset -- a frame
+// matched to an uploaded image. It is listed, disabled, whenever it is the
+// value: a Select whose value matches none of its items falls back to the
+// first one, which would snap a freshly matched frame back to landscape.
+const CUSTOM_VALUE = 'custom';
 
 export function AssetPanel({
   activeSymbolMarks,
   activeSymbolTab,
+  artboard,
+  hasBackground,
   showBackground,
   textDraft,
   onAddSymbol,
   onAddText,
+  onChangeArtboard,
   onChangeShowBackground,
   onChangeSymbolTab,
   onChangeTextDraft,
@@ -16,15 +31,21 @@ export function AssetPanel({
 }: {
   activeSymbolMarks: string[];
   activeSymbolTab: string;
+  artboard: Artboard;
+  hasBackground: boolean;
   showBackground: boolean;
   textDraft: string;
   onAddSymbol: (mark: string) => void;
   onAddText: () => void;
+  onChangeArtboard: (choice: ArtboardChoice) => void;
   onChangeShowBackground: (value: boolean) => void;
   onChangeSymbolTab: (tab: string) => void;
   onChangeTextDraft: (value: string) => void;
   onUploadBackground: (file: File | undefined) => void;
 }) {
+  const preset = artboardPreset(artboard);
+  const sizeLabel = `${artboard.width} × ${artboard.height}`;
+
   return (
     <aside className="asset-panel">
       <div className="asset-panel-inner">
@@ -32,6 +53,50 @@ export function AssetPanel({
           <input className="file-input" type="file" accept="image/*" onChange={(event) => onUploadBackground(event.target.files?.[0])} />
         </Field>
         <ToggleRow label="Include background" checked={showBackground} onChange={onChangeShowBackground} />
+        <Field label="Canvas size">
+          <Select.Root
+            value={preset?.id ?? CUSTOM_VALUE}
+            onValueChange={(value) => {
+              if (value && value !== CUSTOM_VALUE) onChangeArtboard(value as ArtboardChoice);
+            }}
+          >
+            <Select.Trigger className="select-trigger" aria-label="Canvas size">
+              <span>{preset ? `${preset.name} · ${sizeLabel}` : `Custom · ${sizeLabel}`}</span>
+              <Select.Icon className="select-icon">
+                <ChevronDown size={16} aria-hidden="true" />
+              </Select.Icon>
+            </Select.Trigger>
+            <Select.Portal>
+              <Select.Positioner sideOffset={8}>
+                <Select.Popup className="select-popup">
+                  {ARTBOARD_PRESETS.map((item) => (
+                    <Select.Item className="select-item" key={item.id} value={item.id}>
+                      <Select.ItemText>
+                        {item.name} · {item.width} × {item.height}
+                      </Select.ItemText>
+                      <Select.ItemIndicator className="select-item-indicator">
+                        <Check size={14} aria-hidden="true" />
+                      </Select.ItemIndicator>
+                    </Select.Item>
+                  ))}
+                  {!preset && (
+                    <Select.Item className="select-item" disabled value={CUSTOM_VALUE}>
+                      <Select.ItemText>Custom · {sizeLabel}</Select.ItemText>
+                      <Select.ItemIndicator className="select-item-indicator">
+                        <Check size={14} aria-hidden="true" />
+                      </Select.ItemIndicator>
+                    </Select.Item>
+                  )}
+                  {hasBackground && (
+                    <Select.Item className="select-item" value="background">
+                      <Select.ItemText>Match background</Select.ItemText>
+                    </Select.Item>
+                  )}
+                </Select.Popup>
+              </Select.Positioner>
+            </Select.Portal>
+          </Select.Root>
+        </Field>
         <Field label="Symbols">
           <SymbolPicker
             activeSymbolMarks={activeSymbolMarks}

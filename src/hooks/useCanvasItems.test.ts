@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { useState } from 'react';
 import { hitBounds, inkBounds, intersects, type Box } from '../lib/canvasGeometry';
-import type { CanvasItem, CanvasSymbol, CanvasText } from '../types';
+import type { Artboard, CanvasItem, CanvasSymbol, CanvasText } from '../types';
 import { MAX_ITEM_SIZE, MIN_ITEM_SIZE, moveKeepingTogether, unitBounds, useCanvasItems } from './useCanvasItems';
 
 // Like useHistory, the hook is a layer over state App owns, so the tests stand
@@ -9,10 +9,14 @@ import { MAX_ITEM_SIZE, MIN_ITEM_SIZE, moveKeepingTogether, unitBounds, useCanva
 // exactly the shape App passes in. `beginHistoryAction` is a spy, and the
 // visible artboard rectangle is a stub, since the real one measures DOM nodes
 // that only the layout has.
-function useCanvasHarness(initial: { canvasItems: CanvasItem[]; selectedIds: string[] }, options: { beginHistoryAction: () => void; visible: Box | null }) {
+function useCanvasHarness(
+  initial: { canvasItems: CanvasItem[]; selectedIds: string[] },
+  options: { artboard?: Artboard; beginHistoryAction: () => void; visible: Box | null },
+) {
   const [canvasItems, setCanvasItems] = useState<CanvasItem[]>(initial.canvasItems);
   const [selectedIds, setSelectedIds] = useState<string[]>(initial.selectedIds);
   const canvas = useCanvasItems({
+    artboard: options.artboard,
     beginHistoryAction: options.beginHistoryAction,
     canvasItems,
     selectedIds,
@@ -56,6 +60,17 @@ describe('useCanvasItems moving', () => {
     act(() => result.current.moveItem('symbol-1', 5000, -500));
 
     expect(itemById(result.current.canvasItems, 'symbol-1')).toMatchObject({ x: 1148, y: 48 });
+  });
+
+  it('clamps a move to the current artboard, not the default one', () => {
+    const start = { canvasItems: [symbol('symbol-1')], selectedIds: [] };
+    const { result } = renderHook(() =>
+      useCanvasHarness(start, { artboard: { width: 800, height: 1200 }, beginHistoryAction: jest.fn(), visible: null }),
+    );
+
+    act(() => result.current.moveItem('symbol-1', 5000, 5000));
+
+    expect(itemById(result.current.canvasItems, 'symbol-1')).toMatchObject({ x: 748, y: 1152 });
   });
 
   it('moves the whole selection when one of its items is dragged', () => {

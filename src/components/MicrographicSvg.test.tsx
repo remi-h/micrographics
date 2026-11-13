@@ -365,4 +365,9 @@ describe('selectionToolbarPosition', () => {
   it('keeps the toolbar on the artboard for a selection against the top', () => {
     expect(selectionToolbarPosition({ left: 400, right: 600, top: 0 }).toolbarY).toBeGreaterThanOrEqual(0);
   });
+
+  it('keeps the toolbar inside a narrower artboard', () => {
+    const { toolbarX } = selectionToolbarPosition({ left: 740, right: 790, top: 400 }, { width: 800, height: 1200 });
+    expect(toolbarX + SELECTION_TOOLBAR_WIDTH).toBeLessThanOrEqual(800);
+  });
 });

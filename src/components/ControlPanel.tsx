@@ -18,12 +18,13 @@ import {
 import { templates } from '../data';
 import { findRow, groupActions, layerRows, rowItemIds, type LayerRow } from '../lib/groups';
 import { EXPORT_SCALES, exportPixelSize, type ExportScale } from '../lib/exportMarkup';
-import type { CanvasItem, GroupLevel, Template } from '../types';
+import type { Artboard, CanvasItem, GroupLevel, Template } from '../types';
 import { BrandIcon } from './BrandIcon';
 import { Field, ToolButton } from './Controls';
 import { GroupMenu } from './GroupMenu';
 
 export function ControlPanel({
+  artboard,
   canvasItems,
   exportingGif,
   itemLabel,
@@ -47,6 +48,7 @@ export function ControlPanel({
   onUngroupSelected,
   onUndo,
 }: {
+  artboard: Artboard;
   canvasItems: CanvasItem[];
   exportingGif: boolean;
   itemLabel: (item: CanvasItem, index: number) => string;
@@ -285,7 +287,7 @@ export function ControlPanel({
               <Dialog.Description className="dialog-description">
                 {animated
                   ? 'Choose a format. Only SVG and GIF carry the animation — a PNG is a single frame.'
-                  : 'Choose a format. The artboard is 1200 × 800.'}
+                  : `Choose a format. The artboard is ${artboard.width} × ${artboard.height}.`}
               </Dialog.Description>
 
               <div className="export-group">
@@ -312,7 +314,7 @@ export function ControlPanel({
                     spot. */}
                 <div className="size-options">
                   {EXPORT_SCALES.map((scale) => {
-                    const { width, height } = exportPixelSize(scale);
+                    const { width, height } = exportPixelSize(scale, artboard);
                     return (
                       <button
                         className="size-option"
@@ -352,7 +354,7 @@ export function ControlPanel({
                     {exportingGif
                       ? 'Rendering frames…'
                       : animated
-                        ? 'Plays the entrances, 1200 × 800, on the background colour'
+                        ? `Plays the entrances, ${artboard.width} × ${artboard.height}, on the background colour`
                         : 'Give a layer an entrance first'}
                   </span>
                 </button>

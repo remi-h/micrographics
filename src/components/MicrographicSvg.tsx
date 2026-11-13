@@ -5,7 +5,8 @@ import { ANIMATION_ORIGIN_STYLE, animationClassName, animationFrames, animationT
 import { hitBounds, intersects, LETTER_SPACING, textBox as modelTextBox } from '../lib/canvasGeometry';
 import { expandToGroups, selectionUnits } from '../lib/groups';
 import type { ItemAnimation } from '../lib/animations';
-import type { CanvasItem, CanvasSymbol, CanvasText, Palette, Settings } from '../types';
+import { DEFAULT_ARTBOARD } from '../lib/artboard';
+import type { Artboard, CanvasItem, CanvasSymbol, CanvasText, Palette, Settings } from '../types';
 import { MicroMark } from './MicroMark';
 
 export type Box = { x: number; y: number; width: number; height: number };
@@ -28,12 +29,15 @@ export const SELECTION_TOOLBAR_WIDTH = 200;
 export const SELECTION_TOOLBAR_HEIGHT = 52;
 
 // Where the toolbar sits over a selection: centred on it, then kept inside the
-// 1200 x 800 artboard. The outer <svg> clips anything past its viewBox, so a
+// artboard. The outer <svg> clips anything past its viewBox, so a
 // selection near an edge would otherwise lose whichever button ran off it.
-export function selectionToolbarPosition(bounds: { left: number; right: number; top: number }) {
+export function selectionToolbarPosition(
+  bounds: { left: number; right: number; top: number },
+  artboard: Artboard = DEFAULT_ARTBOARD,
+) {
   return {
     toolbarX: Math.min(
-      1200 - SELECTION_TOOLBAR_WIDTH - 16,
+      artboard.width - SELECTION_TOOLBAR_WIDTH - 16,
       Math.max(16, (bounds.left + bounds.right) / 2 - SELECTION_TOOLBAR_WIDTH / 2),
     ),
     toolbarY: Math.max(16, bounds.top - 58),
@@ -359,7 +363,7 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
     const top = Math.min(...bounds.map((item) => item.y));
     const right = Math.max(...bounds.map((item) => item.x + item.width));
 
-    return selectionToolbarPosition({ left, right, top });
+    return selectionToolbarPosition({ left, right, top }, settings.artboard);
   };
 
   const getMarqueeRect = (event: PointerEvent<SVGElement>) => {
@@ -503,36 +507,38 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
   };
 
     const selectionToolbar = selectedBounds();
+    const { width, height } = settings.artboard;
 
     return (
       <svg
         ref={setRefs}
         className="artboard"
-        viewBox="0 0 1200 800"
+        viewBox={`0 0 ${width} ${height}`}
+        style={{ aspectRatio: `${width} / ${height}` }}
         role="img"
         onPointerMove={moveDrag}
         onPointerUp={stopDrag}
         onPointerCancel={stopDrag}
       >
         <title>Generated micrographic poster</title>
-        <rect width="1200" height="800" fill="transparent" onPointerDown={startMarquee} />
+        <rect width={width} height={height} fill="transparent" onPointerDown={startMarquee} />
         {settings.showBackground && (
           <>
-            <rect width="1200" height="800" fill={palette.paper} onPointerDown={startMarquee} />
+            <rect width={width} height={height} fill={palette.paper} onPointerDown={startMarquee} />
             {settings.backgroundImage && (
               <image
                 href={settings.backgroundImage}
                 x="0"
                 y="0"
-                width="1200"
-                height="800"
+                width={width}
+                height={height}
                 preserveAspectRatio="xMidYMid slice"
                 onPointerDown={startMarquee}
               />
             )}
           </>
         )}
-        {settings.grid && <Grid palette={palette} />}
+        {settings.grid && <Grid artboard={settings.artboard} palette={palette} />}
         {items.map((item, index) =>
           // An animated item is wrapped in a group of its own, and the CSS
           // transform goes on the wrapper. On the item's own group it would
@@ -659,9 +665,7 @@ function AnimatedLayer({
   );
 }
 
-function Grid({ palette }: { palette: Palette }) {
-  const width = 1200;
-  const height = 800;
+function Grid({ artboard: { width, height }, palette }: { artboard: Artboard; palette: Palette }) {
   const spacing = 40;
   const xLines = Array.from({ length: Math.floor(width / spacing) + 1 }, (_, index) => index * spacing);
   const yLines = Array.from({ length: Math.floor(height / spacing) + 1 }, (_, index) => index * spacing);
