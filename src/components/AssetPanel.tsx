@@ -67,7 +67,9 @@ export function AssetPanel({
                 keeps its size, so the layout on it does not move. */}
             {hasBackground && (
               <button
-                className="add-button"
+                aria-label="Remove background"
+                className="add-button remove-background-button"
+                title="Remove background"
                 onClick={() => {
                   // Cleared too, or picking the same file again would not
                   // fire a change and the image could not be put back.
@@ -77,7 +79,6 @@ export function AssetPanel({
                 type="button"
               >
                 <Trash2 size={16} aria-hidden="true" />
-                Remove
               </button>
             )}
           </div>

@@ -1,8 +1,8 @@
 import { test, expect, type Page } from '@playwright/test';
 
 // `Include background` hides the paper colour along with the image, so once an
-// image was uploaded there was no way back to a plain coloured canvas. Remove
-// takes the image away and leaves the colour.
+// image was uploaded there was no way back to a plain coloured canvas. The bin
+// button beside the file picker takes the image away and leaves the colour.
 
 const IMAGE = {
   name: 'portrait.svg',
@@ -14,7 +14,7 @@ const IMAGE = {
 
 const artboard = (page: Page) => page.locator('svg.artboard');
 const backgroundImage = (page: Page) => artboard(page).locator('image');
-const removeButton = (page: Page) => page.getByRole('button', { name: 'Remove' });
+const removeButton = (page: Page) => page.getByRole('button', { name: 'Remove background' });
 
 test('Remove takes the background image away and keeps the paper colour', async ({ page }) => {
   await page.goto('/creator');
