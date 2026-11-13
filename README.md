@@ -159,15 +159,22 @@ everything is a reformatting change of its own.
 - Choose a palette from the swatches above the canvas, and zoom with the
   controls next to them.
 - Toggle `Grid` and `Include background` in the right panel, or upload your
-  own background image.
+  own background image. Uploading one sets the canvas to the image's shape
+  (its long side at 1200), so a portrait photo shows whole instead of being
+  cropped to a landscape strip.
+- `Canvas size` in the right panel switches the artboard between Landscape
+  3:2 (1200 x 800, the default), Portrait 2:3, Square 1:1, Widescreen 16:9 and
+  Story 9:16, or back to `Match background` after an upload. What is on the
+  canvas keeps its place in the frame and only shrinks if it no longer fits,
+  and templates are fitted to the current size. Each change is one undo step.
 - Use the toolbar to randomize, restart the current template, undo/redo, and
   export. Exports hold the artwork only: selection outlines, the rotate and
   resize handles, and the alignment toolbar stay in the editor.
 - `Export` opens one dialog with every format in it: SVG, PNG at three sizes,
   and GIF. When anything on the canvas has an entrance, the dialog says so —
   only SVG and GIF carry the animation, because a PNG is a single frame.
-- The PNG sizes are `1x`, `2x` or `4x` of the 1200 x 800 artboard, so
-  1200 x 800, 2400 x 1600 or 4800 x 3200 pixels. Every row in the dialog is a
+- The PNG sizes are `1x`, `2x` or `4x` of the artboard — on the default
+  1200 x 800 frame that is 1200 x 800, 2400 x 1600 or 4800 x 3200 pixels. Every row in the dialog is a
   button that exports on the spot — there is nothing to select and nothing to
   confirm, and no size is marked as the current one. The SVG always writes the
   artboard size, and that file scales to any size wherever it is placed.
@@ -176,7 +183,7 @@ everything is a reformatting change of its own.
   *away from* its own position and back, so a viewer that does not run CSS —
   and every PNG — shows the finished artwork rather than the first frame.
 - The GIF plays the same entrances for anywhere that will not run an SVG. It
-  is always 1200 x 800, since a GIF stores every frame as its own picture, and
+  is always the artboard's size (1200 x 800 by default), since a GIF stores every frame as its own picture, and
   it holds on the finished artwork for a moment before looping. The option is
   only offered once at least one layer has an entrance.
 - A GIF is always written on the background colour, even with `Include

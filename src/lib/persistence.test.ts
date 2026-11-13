@@ -28,6 +28,21 @@ describe('saveEditorState / loadEditorState', () => {
     expect(loadEditorState()).toEqual(state);
   });
 
+  it('restores a canvas size other than the default', () => {
+    const portrait = { ...state, settings: { ...state.settings, artboard: { width: 900, height: 1200 } } };
+    saveEditorState(portrait);
+
+    expect(loadEditorState()?.settings.artboard).toEqual({ width: 900, height: 1200 });
+  });
+
+  it('gives a save from before the canvas could change size the default frame', () => {
+    const older: Partial<typeof state.settings> = { ...state.settings };
+    delete older.artboard;
+    writeRaw(JSON.stringify({ version: STORAGE_VERSION, settings: older, canvasItems }));
+
+    expect(loadEditorState()?.settings.artboard).toEqual(initialSettings.artboard);
+  });
+
   it('returns null when nothing has been saved', () => {
     expect(loadEditorState()).toBeNull();
   });
@@ -60,6 +75,9 @@ describe('saveEditorState / loadEditorState', () => {
       { ...state.settings, paletteIndex: 'first' },
       { ...state.settings, grid: 'yes' },
       { ...state.settings, backgroundImage: 42 },
+      { ...state.settings, artboard: { width: 0, height: 800 } },
+      { ...state.settings, artboard: { width: 1200 } },
+      { ...state.settings, artboard: 'portrait' },
       null,
     ];
 

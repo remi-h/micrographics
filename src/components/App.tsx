@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Tooltip } from '@base-ui/react/tooltip';
 import { animationRunTime } from '../lib/animations';
-import { AssetPanel } from './AssetPanel';
+import { AssetPanel, type ArtboardChoice } from './AssetPanel';
 import { ControlPanel } from './ControlPanel';
 import { FeedbackDialog } from './FeedbackDialog';
 import { ExportStatus } from './ExportStatus';
@@ -11,9 +11,10 @@ import { GroupMenu } from './GroupMenu';
 import { MicrographicSvg } from './MicrographicSvg';
 import { StageHeader } from './StageHeader';
 import { initialSettings, loadTemplateItems, palettes, symbolTabs, templates } from '../data';
+import { ARTBOARD_PRESETS, artboardForImage, fitItems, measureImage, sameArtboard } from '../lib/artboard';
 import { groupActions } from '../lib/groups';
 import { loadEditorState, saveEditorState, type PersistedEditorState } from '../lib/persistence';
-import type { CanvasItem, Settings, Template } from '../types';
+import type { Artboard, CanvasItem, Settings, Template } from '../types';
 import { useCanvasItems, visualCenter } from '../hooks/useCanvasItems';
 import { useExport } from '../hooks/useExport';
 import { useHistory } from '../hooks/useHistory';
@@ -62,11 +63,12 @@ function App() {
     const bottom = Math.min(wrapRect.bottom, svgRect.bottom);
     if (right <= left || bottom <= top) return null;
 
+    const { width, height } = settings.artboard;
     return {
-      x: clamp(((left - svgRect.left) / svgRect.width) * 1200, 0, 1200),
-      y: clamp(((top - svgRect.top) / svgRect.height) * 800, 0, 800),
-      width: clamp(((right - left) / svgRect.width) * 1200, 0, 1200),
-      height: clamp(((bottom - top) / svgRect.height) * 800, 0, 800),
+      x: clamp(((left - svgRect.left) / svgRect.width) * width, 0, width),
+      y: clamp(((top - svgRect.top) / svgRect.height) * height, 0, height),
+      width: clamp(((right - left) / svgRect.width) * width, 0, width),
+      height: clamp(((bottom - top) / svgRect.height) * height, 0, height),
     };
   };
 
@@ -107,6 +109,7 @@ function App() {
     setCanvasItems,
     setSelectedIds,
     visibleCanvasRect,
+    artboard: settings.artboard,
   });
   const palette = palettes[settings.paletteIndex];
   const canvasGroupActions = groupActions(canvasItems, selectedIds);
@@ -176,7 +179,7 @@ function App() {
     beginHistoryAction();
     const nextSettings = { ...settings, template };
     setSettings(nextSettings);
-    setCanvasItems(loadTemplateItems(template));
+    setCanvasItems(loadTemplateItems(template, settings.artboard));
     setSelectedIds([]);
   };
 
@@ -189,13 +192,13 @@ function App() {
       paletteIndex: Math.floor(Math.random() * palettes.length),
     };
     setSettings(nextSettings);
-    setCanvasItems(loadTemplateItems(nextTemplate));
+    setCanvasItems(loadTemplateItems(nextTemplate, settings.artboard));
     setSelectedIds([]);
   };
 
   const restartTemplate = () => {
     beginHistoryAction();
-    setCanvasItems(loadTemplateItems(settings.template));
+    setCanvasItems(loadTemplateItems(settings.template, settings.artboard));
     setSelectedIds([]);
   };
 
@@ -210,7 +213,7 @@ function App() {
     const animationFrame = window.requestAnimationFrame(() => {
       const wrap = artboardWrapRef.current;
       const svg = svgRef.current;
-      const { canvasItems: items, selectedIds: selection } = stateRef.current;
+      const { canvasItems: items, selectedIds: selection, settings: current } = stateRef.current;
       const selectedItems = items.filter((item) => selection.includes(item.id));
       if (!wrap || !svg || selectedItems.length === 0) return;
 
@@ -222,8 +225,10 @@ function App() {
       const svgRect = svg.getBoundingClientRect();
       if (svgRect.width === 0 || svgRect.height === 0) return;
 
-      const targetX = wrap.scrollLeft + (center.x / 1200) * svgRect.width + svgRect.left - wrap.getBoundingClientRect().left;
-      const targetY = wrap.scrollTop + (center.y / 800) * svgRect.height + svgRect.top - wrap.getBoundingClientRect().top;
+      const targetX =
+        wrap.scrollLeft + (center.x / current.artboard.width) * svgRect.width + svgRect.left - wrap.getBoundingClientRect().left;
+      const targetY =
+        wrap.scrollTop + (center.y / current.artboard.height) * svgRect.height + svgRect.top - wrap.getBoundingClientRect().top;
       wrap.scrollTo({
         left: Math.max(0, targetX - wrap.clientWidth / 2),
         top: Math.max(0, targetY - wrap.clientHeight / 2),
@@ -258,20 +263,58 @@ function App() {
     return `${item.mark} symbol`;
   };
 
+  // Changes the artboard's size and refits what is on it, as one undo step.
+  // Read from stateRef rather than this render's values: the upload below
+  // calls this once the image has loaded, renders after it was picked.
+  const resizeArtboard = (next: Artboard, changes: Partial<Settings> = {}) => {
+    const { canvasItems: items, settings: current } = stateRef.current;
+    beginHistoryAction();
+    setSettings({ ...current, ...changes, artboard: next });
+    if (!sameArtboard(current.artboard, next)) setCanvasItems(fitItems(items, current.artboard, next));
+  };
+
+  const changeArtboard = (choice: ArtboardChoice) => {
+    if (choice === 'background') {
+      const image = settings.backgroundImage;
+      if (!image) return;
+      void measureImage(image)
+        .then(({ width, height }) => resizeArtboard(artboardForImage(width, height)))
+        .catch(() => {});
+      return;
+    }
+    const preset = ARTBOARD_PRESETS.find((item) => item.id === choice);
+    if (preset) resizeArtboard({ width: preset.width, height: preset.height });
+  };
+
+  // The artboard takes the image's shape, so the whole picture shows instead
+  // of the middle strip a fixed landscape frame used to crop it to.
   const uploadBackground = (file: File | undefined) => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      update('backgroundImage', typeof reader.result === 'string' ? reader.result : null);
-      update('showBackground', true);
+      const backgroundImage = typeof reader.result === 'string' ? reader.result : null;
+      if (!backgroundImage) return;
+      void measureImage(backgroundImage)
+        .then(({ width, height }) => artboardForImage(width, height))
+        // An image the browser cannot measure still becomes the background;
+        // it just keeps the frame it has.
+        .catch(() => stateRef.current.settings.artboard)
+        .then((artboard) => resizeArtboard(artboard, { backgroundImage, showBackground: true }));
     };
     reader.readAsDataURL(file);
   };
+
+  // A portrait frame laid out at the landscape frame's width would be taller
+  // than the stage, so the zoom box narrows until its height matches what a
+  // 3:2 frame of the same width would take.
+  const artboardAspect = settings.artboard.width / settings.artboard.height;
+  const stageFit = Math.min(1, artboardAspect / 1.5);
 
   return (
     <Tooltip.Provider>
       <main className="app-shell">
         <ControlPanel
+          artboard={settings.artboard}
           canvasItems={canvasItems}
           exportingGif={exportingGif}
           itemLabel={itemLabel}
@@ -322,7 +365,7 @@ function App() {
               zoomCanvas(event.deltaY > 0 ? -0.1 : 0.1);
             }}
           >
-            <div className="artboard-zoom" style={{ width: `min(${canvasZoom * 100}%, ${1180 * canvasZoom}px)` }}>
+            <div className="artboard-zoom" style={{ width: `min(${canvasZoom * stageFit * 100}%, ${1180 * canvasZoom * stageFit}px)` }}>
               {/* The same Group / Ungroup menu the Layers list has, on the
                   selection itself. A right-click on an item selects it first
                   (see startDrag), so the menu is always about what is under
@@ -366,10 +409,13 @@ function App() {
         <AssetPanel
           activeSymbolMarks={activeSymbolMarks}
           activeSymbolTab={activeSymbolTab}
+          artboard={settings.artboard}
+          hasBackground={settings.backgroundImage !== null}
           showBackground={settings.showBackground}
           textDraft={textDraft}
           onAddSymbol={addSymbol}
           onAddText={addText}
+          onChangeArtboard={changeArtboard}
           onChangeShowBackground={(value) => update('showBackground', value)}
           onChangeSymbolTab={setActiveSymbolTab}
           onChangeTextDraft={setTextDraft}

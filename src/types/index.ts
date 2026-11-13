@@ -11,8 +11,12 @@ export type Palette = {
   paper: string;
 };
 
+/** The artboard's size in canvas units; see lib/artboard.ts. */
+export type Artboard = { width: number; height: number };
+
 export type Settings = {
   template: Template;
+  artboard: Artboard;
   paletteIndex: number;
   backgroundImage: string | null;
   grid: boolean;

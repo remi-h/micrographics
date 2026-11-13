@@ -4,7 +4,8 @@ import { hitBounds, inkBounds, type Box } from '../lib/canvasGeometry';
 import { expandToGroups, groupItems, moveChild, moveRow, outermostGroupId, regroupCopies, selectionUnits, ungroupItems } from '../lib/groups';
 import { inheritedTiming, keepInheritedEntrances, pruneKeepingTiming, resolveGroupTiming, setGroupTiming } from '../lib/groupTiming';
 import { createItemId } from '../lib/itemIds';
-import type { CanvasItem, CanvasSymbol, CanvasText } from '../types';
+import { clampAnchorX, clampAnchorY, DEFAULT_ARTBOARD } from '../lib/artboard';
+import type { Artboard, CanvasItem, CanvasSymbol, CanvasText } from '../types';
 import { clamp } from '../lib/utils';
 
 // Everything that creates, edits, moves or removes a canvas item.
@@ -41,6 +42,8 @@ export type UseCanvasItemsOptions = {
    * New items are placed inside it when it is known.
    */
   visibleCanvasRect: () => Box | null;
+  /** The artboard items are kept on. Defaults to the 1200 x 800 frame. */
+  artboard?: Artboard;
 };
 
 /** How small an item may be dragged before it stops shrinking. */
@@ -177,9 +180,6 @@ export function unitBounds(items: CanvasItem[]): Box {
   return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
-// The artboard the selection is kept on, in canvas units.
-const ARTBOARD = { width: 1200, height: 800 };
-
 /**
  * Applies a set of per-item moves -- the ones align and distribute compute --
  * and keeps the result on the artboard *as a group*.
@@ -201,6 +201,7 @@ const ARTBOARD = { width: 1200, height: 800 };
 export function moveKeepingTogether(
   items: CanvasItem[],
   moves: Map<string, { dx: number; dy: number }>,
+  artboard: Artboard = DEFAULT_ARTBOARD,
 ): Map<string, { x: number; y: number }> {
   const moved = items
     .filter((item) => moves.has(item.id))
@@ -221,8 +222,8 @@ export function moveKeepingTogether(
     if (high > limit) return limit - high;
     return 0;
   };
-  const shiftX = back(left, right, ARTBOARD.width);
-  const shiftY = back(top, bottom, ARTBOARD.height);
+  const shiftX = back(left, right, artboard.width);
+  const shiftY = back(top, bottom, artboard.height);
 
   return new Map(
     moved.map(({ dx, dy, item }) => [item.id, { x: item.x + dx + shiftX, y: item.y + dy + shiftY }]),
@@ -235,13 +236,13 @@ export function moveKeepingTogether(
 // Group ids are re-minted too, so copying a group yields a second group rather
 // than two halves of one: without that, moving "the copy" would drag the
 // original along with it.
-function duplicateItems(items: CanvasItem[]) {
+function duplicateItems(items: CanvasItem[], artboard: Artboard) {
   return regroupCopies(
     items.map((item) => ({
       ...item,
       id: createItemId(item.kind),
-      x: clamp(item.x + 28, 52, 1148),
-      y: clamp(item.y + 28, 48, 752),
+      x: clampAnchorX(item.x + 28, artboard),
+      y: clampAnchorY(item.y + 28, artboard),
     })),
   );
 }
@@ -253,6 +254,7 @@ export function useCanvasItems({
   setSelectedIds,
   beginHistoryAction,
   visibleCanvasRect,
+  artboard = DEFAULT_ARTBOARD,
 }: UseCanvasItemsOptions): CanvasItems {
   const [textDraft, setTextDraft] = useState('MICRO');
   const [editingTextDraft, setEditingTextDraft] = useState('');
@@ -271,10 +273,12 @@ export function useCanvasItems({
 
     const visible = visibleCanvasRect();
     if (visible) {
-      const minX = clamp(visible.x + 24, 52, 1148 - width);
-      const maxX = clamp(visible.x + visible.width - width - 24, minX, 1148 - width);
-      const minY = clamp(visible.y + 24, 48, 752 - height);
-      const maxY = clamp(visible.y + visible.height - height - 24, minY, 752 - height);
+      const right = artboard.width - 52;
+      const bottom = artboard.height - 48;
+      const minX = clamp(visible.x + 24, 52, right - width);
+      const maxX = clamp(visible.x + visible.width - width - 24, minX, right - width);
+      const minY = clamp(visible.y + 24, 48, bottom - height);
+      const maxY = clamp(visible.y + visible.height - height - 24, minY, bottom - height);
       const centerCandidate = {
         x: clamp(visible.x + visible.width / 2 - width / 2, minX, maxX),
         y: clamp(visible.y + visible.height / 2 - height / 2, minY, maxY),
@@ -294,14 +298,14 @@ export function useCanvasItems({
       return centerCandidate;
     }
 
-    for (let y = 96; y <= 704 - height; y += 64) {
-      for (let x = 96; x <= 1104 - width; x += 64) {
+    for (let y = 96; y <= artboard.height - 96 - height; y += 64) {
+      for (let x = 96; x <= artboard.width - 96 - width; x += 64) {
         const candidate = { x, y, width, height };
         if (!overlaps(candidate)) return candidate;
       }
     }
 
-    return { x: 600 - width / 2, y: 400 - height / 2, width, height };
+    return { x: artboard.width / 2 - width / 2, y: artboard.height / 2 - height / 2, width, height };
   };
 
   const addSymbol = (mark: string) => {
@@ -380,11 +384,11 @@ export function useCanvasItems({
       const active = current.find((item) => item.id === id);
       if (!active) return current;
       const idsToMove = selectedIds.includes(id) ? selectedIds : [id];
-      const dx = clamp(x, 52, 1148) - active.x;
-      const dy = clamp(y, 48, 752) - active.y;
+      const dx = clampAnchorX(x, artboard) - active.x;
+      const dy = clampAnchorY(y, artboard) - active.y;
 
       return current.map((item) =>
-        idsToMove.includes(item.id) ? { ...item, x: clamp(item.x + dx, 52, 1148), y: clamp(item.y + dy, 48, 752) } : item,
+        idsToMove.includes(item.id) ? { ...item, x: clampAnchorX(item.x + dx, artboard), y: clampAnchorY(item.y + dy, artboard) } : item,
       );
     });
   };
@@ -401,8 +405,8 @@ export function useCanvasItems({
           // the artboard's width, which a symbol reached after about 160px of
           // pointer travel and then sat there while the user kept dragging.
           size: clamp(update.size, MIN_ITEM_SIZE[item.kind], MAX_ITEM_SIZE[item.kind]),
-          x: clamp(update.x, 52, 1148),
-          y: clamp(update.y, 48, 752),
+          x: clampAnchorX(update.x, artboard),
+          y: clampAnchorY(update.y, artboard),
         };
       }),
     );
@@ -549,7 +553,7 @@ export function useCanvasItems({
   const pasteClipboard = () => {
     if (clipboardRef.current.length === 0) return;
     beginHistoryAction();
-    const pasted = duplicateItems(clipboardRef.current);
+    const pasted = duplicateItems(clipboardRef.current, artboard);
     clipboardRef.current = pasted;
     setCanvasItems((current) => [...current, ...pasted]);
     setSelectedIds(pasted.map((item) => item.id));
@@ -559,7 +563,7 @@ export function useCanvasItems({
     const selected = canvasItems.filter((item) => selectedIds.includes(item.id));
     if (selected.length === 0) return;
     beginHistoryAction();
-    const duplicated = duplicateItems(selected);
+    const duplicated = duplicateItems(selected, artboard);
     setCanvasItems((current) => [...current, ...duplicated]);
     setSelectedIds(duplicated.map((item) => item.id));
   };
@@ -589,6 +593,7 @@ export function useCanvasItems({
     const placed = moveKeepingTogether(
       units.flatMap((unit) => unit.members),
       moves,
+      artboard,
     );
     setCanvasItems((current) => current.map((item) => ({ ...item, ...placed.get(item.id) })));
   };
@@ -629,7 +634,7 @@ export function useCanvasItems({
     beginHistoryAction();
     setCanvasItems((current) =>
       current.map((item) =>
-        selectedIds.includes(item.id) ? { ...item, x: clamp(item.x + dx, 52, 1148), y: clamp(item.y + dy, 48, 752) } : item,
+        selectedIds.includes(item.id) ? { ...item, x: clampAnchorX(item.x + dx, artboard), y: clampAnchorY(item.y + dy, artboard) } : item,
       ),
     );
   };

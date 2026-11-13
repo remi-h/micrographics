@@ -1,6 +1,7 @@
 import { templateComponents } from '../components/templates';
+import { DEFAULT_ARTBOARD, fitItems } from '../lib/artboard';
 import { resolveGroupTiming } from '../lib/groupTiming';
-import type { CanvasItem, Palette, Settings, Template } from '../types';
+import type { Artboard, CanvasItem, Palette, Settings, Template } from '../types';
 
 export const palettes: Palette[] = [
   {
@@ -155,15 +156,21 @@ export const symbolTabs = [
 
 export const initialSettings: Settings = {
   template: '001',
+  artboard: DEFAULT_ARTBOARD,
   paletteIndex: 0,
   backgroundImage: null,
   grid: false,
   showBackground: true,
 };
 
-export function loadTemplateItems(template: Template): CanvasItem[] {
+// Templates are laid out on the default artboard, and fitted onto any other.
+export function loadTemplateItems(template: Template, artboard: Artboard = DEFAULT_ARTBOARD): CanvasItem[] {
   if (template === 'blank') return [];
   // A template's groups set their entrances on the group (see animatedGroup);
   // what plays is each item's own `animation`, so resolve it into them.
-  return resolveGroupTiming(templateComponents[template]().map((item) => ({ ...item })));
+  return fitItems(
+    resolveGroupTiming(templateComponents[template]().map((item) => ({ ...item }))),
+    DEFAULT_ARTBOARD,
+    artboard,
+  );
 }

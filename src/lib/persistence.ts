@@ -1,4 +1,5 @@
 import { ANIMATION_KINDS, MAX_DURATION, MIN_DELAY, MIN_DURATION, type ItemAnimation } from './animations';
+import { DEFAULT_ARTBOARD } from './artboard';
 import { palettes } from '../data';
 import { normalizeGroups } from './groups';
 import { inheritedTiming, resolveGroupTiming } from './groupTiming';
@@ -51,10 +52,20 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+// Generous bounds rather than the presets: a frame matched to an image can be
+// any shape within artboardForImage's limits, and a save is only rejected for
+// a value no version of the editor would have written.
+const MIN_ARTBOARD_SIDE = 100;
+const MAX_ARTBOARD_SIDE = 4000;
+
+function isArtboardSide(value: unknown): value is number {
+  return isFiniteNumber(value) && value >= MIN_ARTBOARD_SIDE && value <= MAX_ARTBOARD_SIDE;
+}
+
 function parseSettings(value: unknown): Settings | null {
   if (!isRecord(value)) return null;
 
-  const { template, paletteIndex, backgroundImage, grid, showBackground } = value;
+  const { template, artboard = DEFAULT_ARTBOARD, paletteIndex, backgroundImage, grid, showBackground } = value;
   // A Set of own keys, not `template in TEMPLATE_IDS`: `in` walks the
   // prototype chain, so 'toString', 'constructor' and every other
   // Object.prototype key passed validation. Such a value reaches
@@ -66,9 +77,13 @@ function parseSettings(value: unknown): Settings | null {
   if (paletteIndex < 0 || paletteIndex >= palettes.length) return null;
   if (backgroundImage !== null && typeof backgroundImage !== 'string') return null;
   if (typeof grid !== 'boolean' || typeof showBackground !== 'boolean') return null;
+  // Optional: a save from before the artboard could change size has none, and
+  // was drawn on the default frame.
+  if (!isRecord(artboard) || !isArtboardSide(artboard.width) || !isArtboardSide(artboard.height)) return null;
 
   return {
     template: template as Template,
+    artboard: { width: artboard.width, height: artboard.height },
     paletteIndex,
     backgroundImage,
     grid,

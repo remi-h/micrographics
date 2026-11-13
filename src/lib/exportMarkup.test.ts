@@ -185,6 +185,10 @@ describe('exportPixelSize', () => {
     expect(exportPixelSize(4)).toEqual({ width: 4800, height: 3200 });
   });
 
+  it('scales the current artboard, not the default one', () => {
+    expect(exportPixelSize(2, { width: 900, height: 1200 })).toEqual({ width: 1800, height: 2400 });
+  });
+
   it('offers screen, retina and print scales', () => {
     // No default among them: the export dialog asks every time, because there
     // is nowhere for a remembered choice to show without implying a selection
