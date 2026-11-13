@@ -792,6 +792,12 @@ h1 {
   min-width: 84px;
 }
 
+/* Icon only, so square rather than the width of a labelled button. */
+.remove-background-button {
+  min-width: 42px;
+  padding: 0;
+}
+
 .single-swatch {
   width: 16px;
   height: 16px;
