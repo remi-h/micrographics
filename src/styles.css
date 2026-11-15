@@ -711,8 +711,302 @@ h1 {
 
 .symbol-tabs {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* One equal column per tab, however many there are. */
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   gap: 6px;
+}
+
+/* The `Custom` tab: the user's uploaded symbols. */
+.symbol-custom-empty {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px dashed rgba(245, 242, 234, 0.2);
+  border-radius: 8px;
+}
+
+.symbol-custom-empty p,
+.symbol-custom-hint {
+  color: #9a978f;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.symbol-upload {
+  width: 100%;
+}
+
+.symbol-custom-note:empty,
+.canvases-note:empty {
+  display: none;
+}
+
+.symbol-custom-note,
+.canvases-note {
+  color: #ffb4a8;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.symbol-custom-item {
+  position: relative;
+  min-width: 0;
+}
+
+.symbol-custom-delete {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(245, 242, 234, 0.3);
+  border-radius: 50%;
+  color: #f4f0e8;
+  background: #2a2a2a;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.symbol-custom-item:hover .symbol-custom-delete,
+.symbol-custom-delete:focus-visible {
+  opacity: 1;
+}
+
+/* Touch has no hover to reveal it with. */
+@media (hover: none) {
+  .symbol-custom-delete {
+    opacity: 1;
+  }
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The account's row in the left panel. */
+.account-bar {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(245, 242, 234, 0.14);
+  border-radius: 8px;
+  background: #171717;
+}
+
+/* The text above the buttons is the same height signed in or out; see
+   AccountBar. */
+.account-canvas,
+.account-intro {
+  height: 36px;
+  overflow: hidden;
+}
+
+.account-canvas {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+}
+
+.account-canvas .account-note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-canvas-name {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-note {
+  color: #9a978f;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.account-note[data-state="error"],
+.account-note[role="alert"] {
+  color: #ffb4a8;
+}
+
+.account-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+
+.account-button {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid rgba(245, 242, 234, 0.14);
+  border-radius: 8px;
+  color: #f4f0e8;
+  background: #222;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.account-button:hover,
+.account-button:focus-visible {
+  border-color: rgba(245, 242, 234, 0.5);
+}
+
+.account-sign-in {
+  color: #171717;
+  background: #f4f0e8;
+}
+
+.account-sign-out {
+  width: 36px;
+  padding: 0;
+}
+
+/* The list of saved canvases. */
+.canvases-dialog {
+  width: min(460px, calc(100vw - 32px));
+}
+
+.canvases-save,
+.canvases-rename {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.canvases-rename {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  flex: 1;
+}
+
+.canvases-save .add-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.canvases-empty {
+  color: #9a978f;
+  font-size: 13px;
+}
+
+.canvases-list {
+  max-height: min(320px, 40vh);
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.canvases-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid rgba(245, 242, 234, 0.14);
+  border-radius: 8px;
+}
+
+.canvases-row[data-current="true"] {
+  border-color: #f4f0e8;
+}
+
+.canvases-open {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  color: #f4f0e8;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.canvases-open:hover:not(:disabled),
+.canvases-open:focus-visible {
+  background: rgba(245, 242, 234, 0.08);
+}
+
+.canvases-name {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvases-date {
+  color: #9a978f;
+  font-size: 12px;
+}
+
+.canvases-icon,
+.canvases-confirm {
+  min-width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0 8px;
+  border: 1px solid rgba(245, 242, 234, 0.14);
+  border-radius: 6px;
+  color: #f4f0e8;
+  background: #222;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.canvases-confirm {
+  border-color: #ffb4a8;
+  color: #ffb4a8;
+}
+
+.canvases-icon:disabled,
+.canvases-confirm:disabled,
+.canvases-open:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.canvases-save,
+.canvases-list,
+.canvases-empty,
+.canvases-note {
+  margin-top: 12px;
+}
+
+.canvases-footer .dialog-close {
+  width: auto;
+  margin-top: 0;
+}
+
+.canvases-footer {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .symbol-tab {

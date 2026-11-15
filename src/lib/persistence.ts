@@ -1,5 +1,6 @@
 import { ANIMATION_KINDS, MAX_DURATION, MIN_DELAY, MIN_DURATION, type ItemAnimation } from './animations';
 import { DEFAULT_ARTBOARD } from './artboard';
+import { MAX_SYMBOL_NAME_LENGTH, MAX_SYMBOL_SVG_LENGTH, isCustomMark } from './customSymbols';
 import { palettes } from '../data';
 import { normalizeGroups } from './groups';
 import { inheritedTiming, resolveGroupTiming } from './groupTiming';
@@ -161,6 +162,12 @@ function adoptLegacyTiming(items: CanvasItem[], legacy: Set<string>): CanvasItem
   );
 }
 
+function parseCustomSymbol(value: Record<string, unknown>): { svg: string; label?: string } | null {
+  const { svg, label } = value;
+  if (typeof svg !== 'string' || svg.length === 0 || svg.length > MAX_SYMBOL_SVG_LENGTH) return null;
+  return { svg, ...(typeof label === 'string' && label.length > 0 ? { label: label.slice(0, MAX_SYMBOL_NAME_LENGTH) } : {}) };
+}
+
 function parseCanvasItem(value: unknown): CanvasItem | null {
   if (!isRecord(value)) return null;
 
@@ -183,7 +190,11 @@ function parseCanvasItem(value: unknown): CanvasItem | null {
 
   if (kind === 'symbol') {
     if (typeof value.mark !== 'string' || value.mark.length === 0) return null;
-    return { ...groups, ...animation, id, kind, mark: value.mark, rotate, size, x, y };
+    // An uploaded symbol carries its drawing; without one it would restore as
+    // the fallback cross, so an oversized or missing drawing fails the item.
+    const custom = parseCustomSymbol(value);
+    if (isCustomMark(value.mark) && !custom) return null;
+    return { ...groups, ...animation, ...custom, id, kind, mark: value.mark, rotate, size, x, y };
   }
 
   if (kind === 'text') {
@@ -247,6 +258,15 @@ export function loadEditorState(): PersistedEditorState | null {
     return null;
   }
 
+  return parseEditorState(parsed);
+}
+
+/**
+ * Validates an editor state that has been through JSON -- a browser save or a
+ * canvas read back from an account -- and rebuilds it from the fields the
+ * current shape defines. `null` when it is corrupt or from another version.
+ */
+export function parseEditorState(parsed: unknown): PersistedEditorState | null {
   if (!isRecord(parsed)) return null;
   if (parsed.version !== STORAGE_VERSION) return null;
 
@@ -255,6 +275,16 @@ export function loadEditorState(): PersistedEditorState | null {
   if (!settings || !canvasItems) return null;
 
   return { settings, canvasItems, canvasZoom: parseZoom(parsed.canvasZoom) };
+}
+
+/** The JSON-ready form of an editor state: what a save holds, wherever it goes. */
+export function serializeEditorState(state: PersistedEditorState) {
+  return {
+    version: STORAGE_VERSION,
+    settings: state.settings,
+    canvasItems: state.canvasItems,
+    canvasZoom: state.canvasZoom,
+  };
 }
 
 /**
@@ -266,15 +296,7 @@ export function loadEditorState(): PersistedEditorState | null {
 export function saveEditorState(state: PersistedEditorState): boolean {
   try {
     if (typeof window === 'undefined') return false;
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: STORAGE_VERSION,
-        settings: state.settings,
-        canvasItems: state.canvasItems,
-        canvasZoom: state.canvasZoom,
-      }),
-    );
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeEditorState(state)));
     return true;
   } catch {
     return false;

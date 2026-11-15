@@ -1,4 +1,4 @@
-import { useRef, useState, type DragEvent } from 'react';
+import { useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { Dialog } from '@base-ui/react/dialog';
 import { Select } from '@base-ui/react/select';
 import { Toolbar } from '@base-ui/react/toolbar';
@@ -24,6 +24,7 @@ import { Field, ToolButton } from './Controls';
 import { GroupMenu } from './GroupMenu';
 
 export function ControlPanel({
+  accountBar,
   artboard,
   canvasItems,
   exportingGif,
@@ -48,6 +49,8 @@ export function ControlPanel({
   onUngroupSelected,
   onUndo,
 }: {
+  /** The account's row, under the title; nothing on a deployment without accounts. */
+  accountBar?: ReactNode;
   artboard: Artboard;
   canvasItems: CanvasItem[];
   exportingGif: boolean;
@@ -253,6 +256,8 @@ export function ControlPanel({
           <p>Dense graphic systems for posters, decks, and UI texture.</p>
         </div>
       </div>
+
+      {accountBar}
 
       <Toolbar.Root className="toolbar" aria-label="Graphic actions">
         <ToolButton label="Randomize" onClick={onRandomize}>

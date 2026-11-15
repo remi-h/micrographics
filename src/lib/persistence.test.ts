@@ -1,5 +1,13 @@
 import { initialSettings } from '../data';
-import { STORAGE_KEY, STORAGE_VERSION, loadEditorState, saveEditorState, type PersistedEditorState } from './persistence';
+import {
+  STORAGE_KEY,
+  STORAGE_VERSION,
+  loadEditorState,
+  parseEditorState,
+  saveEditorState,
+  serializeEditorState,
+  type PersistedEditorState,
+} from './persistence';
 import type { CanvasItem } from '../types';
 
 const canvasItems: CanvasItem[] = [
@@ -321,6 +329,33 @@ describe('saveEditorState / loadEditorState', () => {
     expect(loaded?.canvasItems).toHaveLength(2);
     expect(loaded?.canvasItems[0].groups).toBeUndefined();
   });
+  // An uploaded symbol carries its own drawing.
+  it('round-trips an uploaded symbol with its drawing and name', () => {
+    const custom: PersistedEditorState = {
+      ...state,
+      canvasItems: [
+        { id: 'symbol-1', kind: 'symbol', label: 'Team logo', mark: 'custom:abc', rotate: 0, size: 42, svg: '<svg xmlns="http://www.w3.org/2000/svg"/>', x: 100, y: 200 },
+      ],
+    };
+
+    expect(saveEditorState(custom)).toBe(true);
+    expect(loadEditorState()).toEqual(custom);
+  });
+
+  it('falls back to defaults when an uploaded symbol has lost its drawing or it is oversized', () => {
+    const item = { id: 'symbol-1', kind: 'symbol', mark: 'custom:abc', rotate: 0, size: 42, x: 100, y: 200 };
+    for (const svg of [undefined, '', 'x'.repeat(200_001)]) {
+      writeRaw(JSON.stringify({ version: STORAGE_VERSION, settings: state.settings, canvasItems: [{ ...item, svg }], canvasZoom: 1 }));
+      expect(loadEditorState()).toBeNull();
+    }
+  });
+
+  it('reads the same shape from a parsed value as from storage', () => {
+    expect(parseEditorState(serializeEditorState(state))).toEqual(state);
+    expect(parseEditorState({ ...serializeEditorState(state), version: STORAGE_VERSION + 1 })).toBeNull();
+    expect(parseEditorState(null)).toBeNull();
+  });
+
   // Animations, like groups, are newer than the saved shape.
   it('round-trips an animation', () => {
     const animated: PersistedEditorState = {

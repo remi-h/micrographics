@@ -30,6 +30,35 @@ http://localhost:3000
 
 If port `3000` is busy, Next.js will prompt you to use another port.
 
+## Accounts (optional)
+
+Signing in with Google lets a user save several canvases and upload their own
+SVG symbols. It runs on [Supabase](https://supabase.com) — Google sign-in and a
+Postgres database — and is switched on by two environment variables. With them
+unset the app has no sign-in at all and works as a single canvas kept in the
+browser.
+
+1. Create a Supabase project.
+2. Run `supabase/migrations/20261115000000_accounts.sql` against it (paste it
+   into the SQL editor, or `supabase db push` with the CLI). It creates the
+   `canvases` and `symbols` tables and the row-level security policies that
+   limit each user to their own rows.
+3. In Google Cloud, create an OAuth client of type "Web application" and add
+   the callback URL Supabase shows under Authentication → Sign In / Providers →
+   Google (`https://<project>.supabase.co/auth/v1/callback`) as an authorized
+   redirect URI. Paste the client ID and secret into that same Supabase page
+   and enable the provider.
+4. In Supabase, under Authentication → URL Configuration, set the Site URL to
+   the deployed site and add `<site>/creator` for every origin the app runs on
+   (`http://localhost:3000/creator` included) to the redirect URLs.
+5. Copy `.env.example` to `.env.local` and fill in the project URL and its
+   publishable (or legacy `anon`) key. Set the same two variables wherever the
+   app is deployed, and rebuild: they are inlined at build time.
+
+Both values are public. The browser talks to the database directly, and what
+keeps one user out of another's data is the row-level security from step 2, so
+never put the `service_role` key in the app.
+
 ## Build
 
 Create a production build:
@@ -57,6 +86,12 @@ Run end-to-end tests (Playwright):
 ```bash
 npm run test:e2e
 ```
+
+The suite runs with accounts switched on and pointed at an address nothing
+serves (see `playwright.config.ts`), so it needs no Supabase project. A spec
+about the signed-in editor calls `signInWithFakeAccount` from `e2e/account.ts`
+before `page.goto`: it seeds a session and answers the account's requests from
+memory.
 
 The templates open with animated groups. A spec about editing plain layers
 should start from `openStillCreator` in `e2e/still-template.ts`, which opens
@@ -105,6 +140,23 @@ everything is a reformatting change of its own.
   or ungroup it to work with its layers one by one.
 - Add symbols from the right panel. They are grouped into `Daily` marks and
   `Tech` logos. Add text from the same panel.
+- `Sign in with Google`, under the title in the left panel, adds an account
+  to the editor (where the deployment has accounts set up; see "Accounts").
+  Nothing needs one: signed out, the editor keeps one canvas in the browser as
+  before.
+- Signed in, the left panel names the canvas on screen and says where it is
+  kept. `Canvases` opens the list of saved ones: name what is on screen and
+  `Save canvas` to keep it in the account, after which every change to it is
+  saved as you work. Click another canvas to open it, use the pencil and bin
+  on its row to rename or delete it (`Delete for good` confirms), `Save a
+  copy` to branch the open one under a new name, and `New canvas` to start a
+  fresh one. Opening or starting a canvas while an unsaved one is on screen
+  asks first. Undo does not reach back across canvases.
+- Signed in, the `Custom` tab beside `Daily` and `Tech` holds your own
+  symbols. `Upload SVG` adds a file (up to 200 KB; scripts and outside links
+  are stripped), and it is then there on every canvas. An uploaded symbol
+  keeps its own colours rather than taking the palette's ink. The `×` on a
+  symbol removes it from the tab; canvases it was already placed on keep it.
 - Drag items on the canvas to move them; select one to rotate or resize it
   with its handles. Resizing keeps the opposite corner of the selection
   pinned, so the item grows along with the pointer. Select several to align or
@@ -221,6 +273,7 @@ everything is a reformatting change of its own.
 - Next.js
 - Base UI
 - Lucide React icons
+- Supabase (optional: Google sign-in and account storage)
 - ESLint + Prettier
 
 ## Project Structure
@@ -230,15 +283,18 @@ app/                  Next.js routes: the landing page and /creator
 src/
   components/         React components, App included
     templates/        one component per template, plus their layout helpers
-  hooks/              React hooks: canvas items, history, export, keyboard
+  hooks/              React hooks: canvas items, history, export, keyboard,
+                      sign-in and the account's canvases and symbols
   lib/                logic with no React state: animations, geometry,
                       groups, export markup, GIF encoding, persistence,
-                      feedback links, rotation snapping, shortcut labels
+                      feedback links, rotation snapping, shortcut labels,
+                      the Supabase client and account storage, SVG cleaning
   data/               palettes, templates, symbol marks, links and the
                       shortcuts list
   types/              shared types, and declarations for untyped packages
   styles.css          global styles
 e2e/                  Playwright tests
+supabase/migrations/  the database schema for accounts
 ```
 
 Unit tests sit next to the file they cover (`groups.ts` and `groups.test.ts`).

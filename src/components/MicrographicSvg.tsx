@@ -787,7 +787,7 @@ function GraphicSymbol({
         />
       )}
       <g ref={glyphRef} transform={`scale(${scale}) translate(-18 -18)`}>
-        <MicroMark color={color} mark={item.mark} x={18} y={18} />
+        <MicroMark color={color} mark={item.mark} svg={item.svg} x={18} y={18} />
       </g>
       {selected && (
         <>
