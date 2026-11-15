@@ -74,3 +74,17 @@ test('Shift snaps a rotate drag to 15 degrees and Alt to quarter turns, each one
   await page.keyboard.press('ControlOrMeta+z');
   await expect.poll(() => selectedRotation(page)).toBe(free);
 });
+
+// Shift turns `[` into `{` on a US keyboard, so a handler matching the key
+// alone never saw Shift+[ and the 45 degree step did nothing.
+test('Shift + [ and ] rotate 45 degrees from the keyboard', async ({ page }) => {
+  await openStillCreator(page);
+  await page.locator('.layer-row').first().click();
+  await expect(selectedItem(page)).toBeVisible();
+  const start = await selectedRotation(page);
+
+  await page.keyboard.press('Shift+BracketRight');
+  await expect.poll(() => selectedRotation(page)).toBe((start + 45) % 360);
+  await page.keyboard.press('Shift+BracketLeft');
+  await expect.poll(() => selectedRotation(page)).toBe(start);
+});

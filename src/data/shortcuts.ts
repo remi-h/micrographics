@@ -34,7 +34,7 @@ export const SHORTCUT_GROUPS: ShortcutGroup[] = [
     title: 'Select',
     shortcuts: [
       { label: 'Select all', keys: [['Mod', 'A']] },
-      { label: 'Add to the selection', keys: [['Shift', 'Click']] },
+      { label: 'Add to the selection', keys: [['Shift', 'Click'], ['Mod', 'Click']] },
       { label: 'Clear the selection', keys: [['Esc']] },
       { label: 'Group', keys: [['Mod', 'G']] },
       { label: 'Ungroup', keys: [['Shift', 'Mod', 'G']] },

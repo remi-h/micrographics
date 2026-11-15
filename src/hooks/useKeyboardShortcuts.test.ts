@@ -263,9 +263,10 @@ describe('useKeyboardShortcuts rotate', () => {
     });
 
     press(']');
-    press(']', { shiftKey: true });
+    // With Shift a US keyboard sends `}` and `{`, so these go by the key's code.
+    press('}', { code: 'BracketRight', shiftKey: true });
     press('[');
-    press('[', { shiftKey: true });
+    press('{', { code: 'BracketLeft', shiftKey: true });
 
     // Only the selected item is rotated, and always from its own current angle.
     expect(actions.rotateItems.mock.calls).toEqual([
