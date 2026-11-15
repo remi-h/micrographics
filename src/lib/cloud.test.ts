@@ -36,6 +36,9 @@ describe('cleanCanvasName', () => {
 });
 
 describe('canvases', () => {
+  beforeEach(() => jest.spyOn(console, 'error').mockImplementation(() => {}));
+  afterEach(() => jest.restoreAllMocks());
+
   it('lists names without downloading the artwork', async () => {
     const { calls, client } = fakeClient({ data: [row], error: null });
     await expect(listCanvases(client)).resolves.toEqual([{ id: 'c1', name: 'Poster', updatedAt: row.updated_at }]);
@@ -59,6 +62,8 @@ describe('canvases', () => {
 
     const gone = fakeClient({ data: null, error: { code: 'PGRST116' } });
     await expect(saveCanvas(gone.client, 'c1', state)).rejects.toThrow('Could not save the canvas.');
+    // What the database said is logged, since the message shown cannot carry it.
+    expect(console.error).toHaveBeenCalledWith('[account] Could not save the canvas.', { code: 'PGRST116' });
   });
 
   it('opens a canvas through the save validator', async () => {

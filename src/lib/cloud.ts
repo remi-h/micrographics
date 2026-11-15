@@ -7,6 +7,14 @@ import { parseEditorState, serializeEditorState, type PersistedEditorState } fro
 
 export const MAX_CANVAS_NAME_LENGTH = 80;
 
+// The message shown is kept plain; what the database actually said goes to
+// the browser console, where it is the only clue to a setup problem such as
+// a missing table, policy or grant.
+function fail(message: string, cause: unknown): never {
+  console.error(`[account] ${message}`, cause);
+  throw new Error(message);
+}
+
 export type SavedCanvas = { id: string; name: string; updatedAt: string };
 export type CustomSymbol = { id: string; name: string; svg: string };
 
@@ -29,7 +37,7 @@ export async function listCanvases(client: SupabaseClient): Promise<SavedCanvas[
     .from('canvases')
     .select(CANVAS_COLUMNS)
     .order('updated_at', { ascending: false });
-  if (error) throw new Error('Could not load your canvases.');
+  if (error) fail('Could not load your canvases.', error);
   return (data as CanvasRow[]).map(toSavedCanvas);
 }
 
@@ -43,7 +51,7 @@ export async function createCanvas(
     .insert({ name: cleanCanvasName(name), data: serializeEditorState(state) })
     .select(CANVAS_COLUMNS)
     .single();
-  if (error) throw new Error('Could not save the canvas.');
+  if (error) fail('Could not save the canvas.', error);
   return toSavedCanvas(data as CanvasRow);
 }
 
@@ -60,7 +68,7 @@ export async function saveCanvas(
     .eq('id', id)
     .select(CANVAS_COLUMNS)
     .single();
-  if (error) throw new Error('Could not save the canvas.');
+  if (error) fail('Could not save the canvas.', error);
   return toSavedCanvas(data as CanvasRow);
 }
 
@@ -71,13 +79,13 @@ export async function renameCanvas(client: SupabaseClient, id: string, name: str
     .eq('id', id)
     .select(CANVAS_COLUMNS)
     .single();
-  if (error) throw new Error('Could not rename the canvas.');
+  if (error) fail('Could not rename the canvas.', error);
   return toSavedCanvas(data as CanvasRow);
 }
 
 export async function deleteCanvas(client: SupabaseClient, id: string): Promise<void> {
   const { error } = await client.from('canvases').delete().eq('id', id);
-  if (error) throw new Error('Could not delete the canvas.');
+  if (error) fail('Could not delete the canvas.', error);
 }
 
 export async function loadCanvas(
@@ -85,7 +93,7 @@ export async function loadCanvas(
   id: string,
 ): Promise<{ canvas: SavedCanvas; state: PersistedEditorState }> {
   const { data, error } = await client.from('canvases').select(`${CANVAS_COLUMNS}, data`).eq('id', id).single();
-  if (error) throw new Error('Could not open the canvas.');
+  if (error) fail('Could not open the canvas.', error);
   const row = data as CanvasRow & { data: unknown };
   const state = parseEditorState(row.data);
   if (!state) throw new Error('That canvas was saved in a form this version cannot open.');
@@ -97,17 +105,17 @@ export async function listSymbols(client: SupabaseClient): Promise<CustomSymbol[
     .from('symbols')
     .select('id, name, svg')
     .order('created_at', { ascending: true });
-  if (error) throw new Error('Could not load your symbols.');
+  if (error) fail('Could not load your symbols.', error);
   return data as CustomSymbol[];
 }
 
 export async function createSymbol(client: SupabaseClient, name: string, svg: string): Promise<CustomSymbol> {
   const { data, error } = await client.from('symbols').insert({ name, svg }).select('id, name, svg').single();
-  if (error) throw new Error('Could not add the symbol.');
+  if (error) fail('Could not add the symbol.', error);
   return data as CustomSymbol;
 }
 
 export async function deleteSymbol(client: SupabaseClient, id: string): Promise<void> {
   const { error } = await client.from('symbols').delete().eq('id', id);
-  if (error) throw new Error('Could not delete the symbol.');
+  if (error) fail('Could not delete the symbol.', error);
 }

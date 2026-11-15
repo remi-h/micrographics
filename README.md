@@ -39,10 +39,11 @@ unset the app has no sign-in at all and works as a single canvas kept in the
 browser.
 
 1. Create a Supabase project.
-2. Run `supabase/migrations/20261115000000_accounts.sql` against it (paste it
-   into the SQL editor, or `supabase db push` with the CLI). It creates the
-   `canvases` and `symbols` tables and the row-level security policies that
-   limit each user to their own rows.
+2. Run every file in `supabase/migrations/`, oldest first, against it (paste
+   each into the SQL editor, or `supabase db push` with the CLI). They create
+   the `canvases` and `symbols` tables, the row-level security policies that
+   limit each user to their own rows, and the grants that let signed-in users
+   reach the tables at all.
 3. In Google Cloud, create an OAuth client of type "Web application" and add
    the callback URL Supabase shows under Authentication → Sign In / Providers →
    Google (`https://<project>.supabase.co/auth/v1/callback`) as an authorized
@@ -54,6 +55,10 @@ browser.
 5. Copy `.env.example` to `.env.local` and fill in the project URL and its
    publishable (or legacy `anon`) key. Set the same two variables wherever the
    app is deployed, and rebuild: they are inlined at build time.
+
+If signing in works but saving says `Could not save the canvas.`, open the
+browser console: the line starting `[account]` has what the database said.
+`permission denied for table` means a migration has not been run.
 
 Both values are public. The browser talks to the database directly, and what
 keeps one user out of another's data is the row-level security from step 2, so
