@@ -6,6 +6,7 @@ import { animationRunTime } from '../lib/animations';
 import { AssetPanel, type ArtboardChoice } from './AssetPanel';
 import { ControlPanel } from './ControlPanel';
 import { FeedbackDialog } from './FeedbackDialog';
+import { ShortcutsDialog } from './ShortcutsDialog';
 import { ExportStatus } from './ExportStatus';
 import { GroupMenu } from './GroupMenu';
 import { MicrographicSvg } from './MicrographicSvg';
@@ -403,6 +404,7 @@ function App() {
             </div>
           </div>
           <div className="stage-footer">
+            <ShortcutsDialog />
             <FeedbackDialog templateName={selectedTemplateName} />
           </div>
         </section>

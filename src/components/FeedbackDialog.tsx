@@ -29,7 +29,7 @@ export function FeedbackDialog({ templateName }: { templateName?: string }) {
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
-      <Dialog.Trigger className="feedback-trigger">
+      <Dialog.Trigger className="stage-footer-button">
         <MessageSquare size={14} aria-hidden="true" />
         Feedback?
       </Dialog.Trigger>
