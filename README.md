@@ -205,6 +205,10 @@ everything is a reformatting change of its own.
   reloading brings the canvas, palette, and zoom back as you left them. Use
   `Restart template` or `Start from scratch` in the toolbar to discard it. The
   save is per browser and is skipped silently if the browser blocks storage.
+- On a laptop-sized screen, `Shortcuts` under the canvas lists every
+  keyboard and pointer shortcut, naming `Cmd`/`Option` on a Mac and
+  `Ctrl`/`Alt` elsewhere. Keys pressed while a dialog is open stay in the
+  dialog; they never edit the canvas behind it.
 - On a laptop-sized screen, `Feedback?` under the canvas opens a short form
   (bug, idea or other, a title and optional details). `Continue on GitHub`
   opens a new issue on this repository with it filled in, to check and submit
@@ -229,8 +233,9 @@ src/
   hooks/              React hooks: canvas items, history, export, keyboard
   lib/                logic with no React state: animations, geometry,
                       groups, export markup, GIF encoding, persistence,
-                      feedback links
-  data/               palettes, templates, symbol marks and links
+                      feedback links, rotation snapping, shortcut labels
+  data/               palettes, templates, symbol marks, links and the
+                      shortcuts list
   types/              shared types, and declarations for untyped packages
   styles.css          global styles
 e2e/                  Playwright tests

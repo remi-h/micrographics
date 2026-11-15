@@ -70,6 +70,10 @@ export function useKeyboardShortcuts({
     const target = event.target as HTMLElement | null;
     const isEditing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.tagName === 'SELECT';
     if (isEditing) return;
+    // A dialog (Export, Shortcuts, Feedback) sits over the canvas and keeps
+    // focus inside it, so a key pressed there is meant for the dialog: Delete
+    // on its Close button must not remove the selection behind it.
+    if (target?.closest?.('[role="dialog"]')) return;
 
     // Rotating from the keyboard takes its own history snapshot. The pointer
     // path does not: MicrographicSvg calls beginHistoryAction on pointer-down,
@@ -143,10 +147,12 @@ export function useKeyboardShortcuts({
     } else if (event.altKey && event.code === 'BracketRight') {
       event.preventDefault();
       quarterTurnSelected(1);
-    } else if (event.key === '[') {
+    } else if (event.key === '[' || event.code === 'BracketLeft') {
+      // Also matched by code: Shift turns `[` into `{` on a US keyboard, so
+      // the key alone never sees Shift+[.
       event.preventDefault();
       rotateSelected(event.shiftKey ? -45 : -15);
-    } else if (event.key === ']') {
+    } else if (event.key === ']' || event.code === 'BracketRight') {
       event.preventDefault();
       rotateSelected(event.shiftKey ? 45 : 15);
     } else if (event.key === 'ArrowLeft') {

@@ -1542,7 +1542,7 @@ div.layer-child {
   padding: 24px;
 }
 
-/* The Feedback button sits under the canvas, and only on a laptop-sized
+/* The Shortcuts and Feedback buttons sit under the canvas, and only on a laptop-sized
    screen: below the three-column layout the stage stacks with the panels and
    the page scrolls, so there is no fixed bottom for it to sit at. */
 .stage-footer {
@@ -1560,10 +1560,11 @@ div.layer-child {
   .stage-footer {
     display: flex;
     justify-content: flex-end;
+    gap: 8px;
   }
 }
 
-.feedback-trigger {
+.stage-footer-button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1577,11 +1578,90 @@ div.layer-child {
   cursor: pointer;
 }
 
-.feedback-trigger:hover,
-.feedback-trigger:focus-visible {
+.stage-footer-button:hover,
+.stage-footer-button:focus-visible {
   border-color: rgba(245, 242, 234, 0.4);
   color: #f4f0e8;
   outline: none;
+}
+
+/* Five short groups in two columns, so the whole list fits a laptop screen
+   without scrolling; one column, scrolling, when the window is short. */
+.shortcuts-dialog {
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+
+.shortcuts-groups {
+  margin-top: 14px;
+  columns: 2 300px;
+  column-gap: 28px;
+}
+
+.shortcuts-group {
+  break-inside: avoid;
+  margin-bottom: 16px;
+}
+
+.shortcuts-group-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(244, 240, 232, 0.5);
+}
+
+.shortcuts-list {
+  margin: 0;
+}
+
+.shortcuts-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(245, 242, 234, 0.06);
+  font-size: 13px;
+}
+
+.shortcuts-row dt {
+  color: rgba(244, 240, 232, 0.82);
+}
+
+.shortcuts-row dd {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.shortcuts-combo {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.shortcuts-or {
+  font-size: 11px;
+  color: rgba(244, 240, 232, 0.45);
+}
+
+.shortcuts-row kbd {
+  min-width: 22px;
+  padding: 2px 6px;
+  border: 1px solid rgba(245, 242, 234, 0.18);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: rgba(245, 242, 234, 0.05);
+  color: #f4f0e8;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 11px;
+  text-align: center;
 }
 
 .feedback-dialog {

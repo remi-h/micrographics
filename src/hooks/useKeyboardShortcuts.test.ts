@@ -143,6 +143,22 @@ describe('useKeyboardShortcuts typing guard', () => {
 
     expect(actions.removeSelected).toHaveBeenCalledTimes(1);
   });
+
+  it('ignores keys pressed inside a dialog over the canvas', () => {
+    const { actions } = setUp();
+    const dialog = fieldOfType('div');
+    dialog.setAttribute('role', 'dialog');
+    const close = document.createElement('button');
+    dialog.append(close);
+
+    press('Delete', {}, close);
+    press(']', {}, close);
+    press('Escape', {}, close);
+
+    expect(actions.removeSelected).not.toHaveBeenCalled();
+    expect(actions.rotateItems).not.toHaveBeenCalled();
+    expect(actions.setSelectedIds).not.toHaveBeenCalled();
+  });
 });
 
 describe('useKeyboardShortcuts modifier shortcuts', () => {
@@ -247,9 +263,10 @@ describe('useKeyboardShortcuts rotate', () => {
     });
 
     press(']');
-    press(']', { shiftKey: true });
+    // With Shift a US keyboard sends `}` and `{`, so these go by the key's code.
+    press('}', { code: 'BracketRight', shiftKey: true });
     press('[');
-    press('[', { shiftKey: true });
+    press('{', { code: 'BracketLeft', shiftKey: true });
 
     // Only the selected item is rotated, and always from its own current angle.
     expect(actions.rotateItems.mock.calls).toEqual([
