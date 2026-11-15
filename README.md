@@ -120,7 +120,8 @@ everything is a reformatting change of its own.
   `Alt`/`Option` to snap to quarter turns (0°, 90°, 180°, 270°). The snap
   lands the item you grabbed on the angle; the rest of a selection turns by
   the same amount. From the keyboard, `[` and `]` turn the selection 15° (45°
-  with `Shift`), and `Alt`/`Option` + `[`/`]` turns it to the next quarter.
+  with `Shift`), and `Alt`/`Option` + `[`/`]` turns it until its first item reaches the next
+  quarter.
 - Select several items and right-click them — on a layer in the `Layers`
   list, or on the canvas — and choose `Group` to lock them together. The menu
   offers only what applies: `Group` for loose items, `Ungroup` for a group,

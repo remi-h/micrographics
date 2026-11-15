@@ -52,7 +52,8 @@ test('Shift snaps a rotate drag to 15 degrees and Alt to quarter turns, each one
   // A free drag first, to a deliberately off-grid angle.
   await dragHandle(page, 37);
   const free = await selectedRotation(page);
-  expect(free % 15).not.toBeCloseTo(0, 0);
+  // Well clear of a 15 degree line, so a snap could not pass for it.
+  expect(Math.abs(free - Math.round(free / 15) * 15)).toBeGreaterThan(1);
 
   await page.keyboard.down('Shift');
   await dragHandle(page, 20);
