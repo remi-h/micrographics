@@ -4,6 +4,7 @@ import type { MouseEvent, PointerEvent, ReactNode } from 'react';
 import { ANIMATION_ORIGIN_STYLE, animationClassName, animationFrames, animationTiming } from '../lib/animations';
 import { hitBounds, intersects, LETTER_SPACING, textBox as modelTextBox } from '../lib/canvasGeometry';
 import { expandToGroups, selectionUnits } from '../lib/groups';
+import { rotationSnapStep, snapAngle } from '../lib/rotation';
 import type { ItemAnimation } from '../lib/animations';
 import { DEFAULT_ARTBOARD } from '../lib/artboard';
 import type { Artboard, CanvasItem, CanvasSymbol, CanvasText, Palette, Settings } from '../types';
@@ -292,6 +293,13 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
   const marqueeRef = useRef<{ additive: boolean; pointerId: number; startX: number; startY: number } | null>(null);
   const [marqueeRect, setMarqueeRect] = useState<{ height: number; width: number; x: number; y: number } | null>(null);
   const rotateRef = useRef<{
+    // The item whose handle was grabbed. A snap lands *its* angle on the grid
+    // and turns the rest of the selection by the same amount, so a mixed
+    // selection keeps the angles between its items.
+    anchorId: string;
+    // Where the pointer last was, so pressing or letting go of a snap key
+    // re-applies the turn without waiting for the pointer to move.
+    lastPoint: { x: number; y: number };
     pointerId: number;
     startAngle: number;
     rotations: Array<{ id: string; rotate: number }>;
@@ -412,10 +420,8 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
     }
 
     if (rotateRef.current) {
-      const point = getSvgPoint(event);
-      const angle = Math.atan2(point.y - rotateRef.current.y, point.x - rotateRef.current.x) * (180 / Math.PI);
-      const delta = angle - rotateRef.current.startAngle;
-      onRotateItems(rotateRef.current.rotations.map((item) => ({ id: item.id, rotate: item.rotate + delta })));
+      rotateRef.current.lastPoint = getSvgPoint(event);
+      applyRotate(event);
       return;
     }
 
@@ -456,6 +462,40 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
     }
   };
 
+  // Shift snaps the grabbed item's absolute angle to 15 degree steps and
+  // Alt/Option to quarter turns (see lib/rotation). Snapping the angle rather
+  // than the delta means an item that starts at 7 degrees lands on 0, 15,
+  // 30..., not 7, 22, 37.
+  const applyRotate = (modifiers: { altKey: boolean; shiftKey: boolean }) => {
+    const rotate = rotateRef.current;
+    if (!rotate) return;
+    const angle = Math.atan2(rotate.lastPoint.y - rotate.y, rotate.lastPoint.x - rotate.x) * (180 / Math.PI);
+    let delta = angle - rotate.startAngle;
+    const step = rotationSnapStep(modifiers);
+    const anchor = rotate.rotations.find((item) => item.id === rotate.anchorId);
+    if (step !== null && anchor) delta = snapAngle(anchor.rotate + delta, step) - anchor.rotate;
+    onRotateItems(rotate.rotations.map((item) => ({ id: item.id, rotate: item.rotate + delta })));
+  };
+
+  const resnapRotate = useEffectEvent((event: KeyboardEvent) => {
+    if (event.key !== 'Shift' && event.key !== 'Alt') return;
+    if (!rotateRef.current) return;
+    // Letting go of Alt focuses the menu bar in some Windows browsers; the
+    // drag owns the key while it lasts.
+    event.preventDefault();
+    applyRotate(event);
+  });
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => resnapRotate(event);
+    window.addEventListener('keydown', handleKey);
+    window.addEventListener('keyup', handleKey);
+    return () => {
+      window.removeEventListener('keydown', handleKey);
+      window.removeEventListener('keyup', handleKey);
+    };
+  }, []);
+
   const startRotate = (event: PointerEvent<SVGElement>, item: CanvasItem) => {
     event.stopPropagation();
     if (event.button !== 0) return;
@@ -463,6 +503,8 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
     const ids = selectedIds.includes(item.id) ? selectedIds : [item.id];
     onBeginHistoryAction();
     rotateRef.current = {
+      anchorId: item.id,
+      lastPoint: point,
       pointerId: event.pointerId,
       startAngle: Math.atan2(point.y - item.y, point.x - item.x) * (180 / Math.PI),
       rotations: items.filter((entry) => ids.includes(entry.id)).map((entry) => ({ id: entry.id, rotate: entry.rotate })),
@@ -470,7 +512,10 @@ export const MicrographicSvg = forwardRef<SVGSVGElement, {
       y: item.y,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
-    selectForPointerAction(event, item);
+    // The handle is only drawn on a selected item, so the press leaves the
+    // selection as it is. Going through selectForPointerAction would read the
+    // Shift held to snap as a shift-click and deselect the item mid-drag.
+    if (!selectedIds.includes(item.id)) onSelectItem(item.id);
   };
 
   const startItemResize = (event: PointerEvent<SVGElement>, item: CanvasItem) => {

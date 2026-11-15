@@ -116,6 +116,12 @@ everything is a reformatting change of its own.
   one thing, by the middle of everything it draws, and keeps its own layout;
   one group on its own has nothing to line up against, so it gets no align
   toolbar.
+- Hold `Shift` while dragging the rotate handle to snap to 15° steps, or
+  `Alt`/`Option` to snap to quarter turns (0°, 90°, 180°, 270°). The snap
+  lands the item you grabbed on the angle; the rest of a selection turns by
+  the same amount. From the keyboard, `[` and `]` turn the selection 15° (45°
+  with `Shift`), and `Alt`/`Option` + `[`/`]` turns it until its first item reaches the next
+  quarter.
 - Select several items and right-click them — on a layer in the `Layers`
   list, or on the canvas — and choose `Group` to lock them together. The menu
   offers only what applies: `Group` for loose items, `Ungroup` for a group,

@@ -260,6 +260,34 @@ describe('useKeyboardShortcuts rotate', () => {
     ]);
   });
 
+  it('turns to the next quarter with alt, turning the rest of the selection by the same amount', () => {
+    const { actions } = setUp({
+      canvasItems: [symbol('symbol-1', 100, 20), symbol('symbol-2', 300, 50)],
+      selectedIds: ['symbol-1', 'symbol-2'],
+    });
+
+    // Option+[ types a curly quote on a Mac keyboard, so the key is not `[`;
+    // the physical key is what the handler matches.
+    press('”', { altKey: true, code: 'BracketRight' });
+    press('“', { altKey: true, code: 'BracketLeft' });
+
+    expect(actions.rotateItems.mock.calls).toEqual([
+      [
+        [
+          { id: 'symbol-1', rotate: 90 },
+          { id: 'symbol-2', rotate: 120 },
+        ],
+      ],
+      [
+        [
+          { id: 'symbol-1', rotate: 0 },
+          { id: 'symbol-2', rotate: 30 },
+        ],
+      ],
+    ]);
+    expect(actions.beginHistoryAction).toHaveBeenCalledTimes(2);
+  });
+
   it('takes a history snapshot before rotating, because the pointer path cannot have taken one', () => {
     const { actions } = setUp();
 
