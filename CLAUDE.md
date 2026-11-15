@@ -9,6 +9,8 @@ Next.js 16 + React 19 + TypeScript app (see README.md for stack/setup).
 `src/data/` for palettes, templates and marks, and `src/types/` for shared
 types. A unit test sits next to the file it covers. README.md's "Project
 Structure" section has the full map; keep it current when you add a folder.
+The account database's schema is `supabase/migrations/`; a change to what is
+stored ships with a new migration there, never an edit to one already applied.
 
 ## Testing
 
@@ -18,6 +20,13 @@ Structure" section has the full map; keep it current when you add a folder.
   The templates open with animated groups; a spec about editing plain layers
   starts from `openStillCreator` (`e2e/still-template.ts`) instead of
   `page.goto('/creator')`.
+  Accounts (Google sign-in, saved canvases, the `Custom` symbols tab) run on
+  Supabase and are off unless `NEXT_PUBLIC_SUPABASE_URL` and
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set. The e2e dev server sets both to an
+  address nothing serves; a spec about the signed-in editor calls
+  `signInWithFakeAccount` (`e2e/account.ts`) before `page.goto`, which seeds a
+  session and answers the REST calls from memory. No spec talks to a real
+  Supabase project or to Google.
 - Typecheck: `npm run typecheck`. `npm run build` also typechecks.
 - Lint: ESLint. Run `npm run lint`. The config is flat config in
   `eslint.config.mjs` (`next lint` was removed in Next 16), built from

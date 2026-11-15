@@ -57,7 +57,7 @@ export const MIN_ITEM_SIZE = { symbol: 16, text: 10 } as const;
 export const MAX_ITEM_SIZE = { symbol: 600, text: 400 } as const;
 
 export type CanvasItems = {
-  addSymbol: (mark: string) => void;
+  addSymbol: (mark: string, custom?: { svg: string; label: string }) => void;
   addText: () => void;
   alignSelected: (axis: 'x' | 'y') => void;
   beginTextEdit: (item: CanvasText) => void;
@@ -308,7 +308,7 @@ export function useCanvasItems({
     return { x: artboard.width / 2 - width / 2, y: artboard.height / 2 - height / 2, width, height };
   };
 
-  const addSymbol = (mark: string) => {
+  const addSymbol = (mark: string, custom?: { svg: string; label: string }) => {
     beginHistoryAction();
     const size = 42;
     const position = findOpenPosition(size + 20, size + 20);
@@ -320,6 +320,7 @@ export function useCanvasItems({
       size,
       rotate: 0,
       mark,
+      ...(custom ? { svg: custom.svg, label: custom.label } : {}),
     };
     setCanvasItems((current) => [...current, item]);
     setSelectedIds([item.id]);

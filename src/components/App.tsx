@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Tooltip } from '@base-ui/react/tooltip';
 import { animationRunTime } from '../lib/animations';
+import { AccountBar } from './AccountBar';
 import { AssetPanel, type ArtboardChoice } from './AssetPanel';
 import { ControlPanel } from './ControlPanel';
 import { FeedbackDialog } from './FeedbackDialog';
@@ -16,6 +17,8 @@ import { ARTBOARD_PRESETS, artboardForImage, fitItems, measureImage, sameArtboar
 import { groupActions } from '../lib/groups';
 import { loadEditorState, saveEditorState, type PersistedEditorState } from '../lib/persistence';
 import type { Artboard, CanvasItem, Settings, Template } from '../types';
+import { useAccount } from '../hooks/useAccount';
+import { useAuth } from '../hooks/useAuth';
 import { useCanvasItems, visualCenter } from '../hooks/useCanvasItems';
 import { useExport } from '../hooks/useExport';
 import { useHistory } from '../hooks/useHistory';
@@ -37,7 +40,7 @@ function App() {
   // entrances, and the same value twice would not re-run the effect that does.
   const [playToken, setPlayToken] = useState(0);
   const persistRef = useRef<PersistedEditorState>({ canvasItems, canvasZoom, settings });
-  const { beginHistoryAction, redo, stateRef, undo } = useHistory({
+  const { beginHistoryAction, clearHistory, redo, stateRef, undo } = useHistory({
     canvasItems,
     selectedIds,
     settings,
@@ -121,7 +124,27 @@ function App() {
   });
   const selectedTemplateName =
     settings.template === 'blank' ? 'Start from scratch' : templates.find((item) => item.id === settings.template)?.name;
-  const activeSymbolMarks = symbolTabs.find((tab) => tab.id === activeSymbolTab)?.marks ?? symbolTabs[0].marks;
+
+  // Puts another canvas on screen: one opened from the account, or a fresh
+  // draft. History goes with the canvas it was made on -- an undo reaching
+  // back into the previous one would write that one's artwork into this one.
+  const showCanvas = (state: Pick<PersistedEditorState, 'canvasItems' | 'settings'> & { canvasZoom?: number }) => {
+    setSettings(state.settings);
+    setCanvasItems(state.canvasItems);
+    if (state.canvasZoom !== undefined) setCanvasZoom(state.canvasZoom);
+    setSelectedIds([]);
+    clearHistory();
+  };
+  const auth = useAuth();
+  const account = useAccount({
+    auth,
+    canvasItems,
+    settings,
+    getState: () => persistRef.current,
+    replaceEditor: showCanvas,
+    resetEditor: () =>
+      showCanvas({ canvasItems: loadTemplateItems(initialSettings.template), settings: initialSettings }),
+  });
 
   // Restore after mount, not in a lazy state initializer: this component is
   // server-rendered, and localStorage only exists on the client, so reading it
@@ -261,6 +284,7 @@ function App() {
 
   const itemLabel = (item: CanvasItem, index: number) => {
     if (item.kind === 'text') return item.text.split('\n')[0] || `Text ${index + 1}`;
+    if (item.svg) return item.label ?? 'Custom symbol';
     return `${item.mark} symbol`;
   };
 
@@ -315,6 +339,7 @@ function App() {
     <Tooltip.Provider>
       <main className="app-shell">
         <ControlPanel
+          accountBar={<AccountBar account={account} auth={auth} hasArtwork={canvasItems.length > 0} />}
           artboard={settings.artboard}
           canvasItems={canvasItems}
           exportingGif={exportingGif}
@@ -409,9 +434,20 @@ function App() {
           </div>
         </section>
         <AssetPanel
-          activeSymbolMarks={activeSymbolMarks}
           activeSymbolTab={activeSymbolTab}
           artboard={settings.artboard}
+          customSymbols={
+            auth.status === 'disabled'
+              ? undefined
+              : {
+                  status: auth.status,
+                  symbols: account.symbols,
+                  error: account.error,
+                  onDelete: (id) => void account.deleteSymbol(id),
+                  onSignIn: auth.signIn,
+                  onUpload: (file) => void account.uploadSymbol(file),
+                }
+          }
           hasBackground={settings.backgroundImage !== null}
           showBackground={settings.showBackground}
           textDraft={textDraft}

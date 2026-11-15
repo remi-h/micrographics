@@ -4,7 +4,7 @@ import { Check, ChevronDown, Trash2, Type } from 'lucide-react';
 import { ARTBOARD_PRESETS, artboardPreset, type ArtboardPresetId } from '../lib/artboard';
 import type { Artboard } from '../types';
 import { Field, ToggleRow } from './Controls';
-import { SymbolPicker } from './SymbolPicker';
+import { SymbolPicker, type CustomSymbols } from './SymbolPicker';
 
 /** What the Canvas size control can ask for: a preset, or the background's own shape. */
 export type ArtboardChoice = ArtboardPresetId | 'background';
@@ -16,9 +16,9 @@ export type ArtboardChoice = ArtboardPresetId | 'background';
 const CUSTOM_VALUE = 'custom';
 
 export function AssetPanel({
-  activeSymbolMarks,
   activeSymbolTab,
   artboard,
+  customSymbols,
   hasBackground,
   showBackground,
   textDraft,
@@ -31,13 +31,13 @@ export function AssetPanel({
   onRemoveBackground,
   onUploadBackground,
 }: {
-  activeSymbolMarks: string[];
   activeSymbolTab: string;
   artboard: Artboard;
+  customSymbols?: CustomSymbols;
   hasBackground: boolean;
   showBackground: boolean;
   textDraft: string;
-  onAddSymbol: (mark: string) => void;
+  onAddSymbol: (mark: string, custom?: { svg: string; label: string }) => void;
   onAddText: () => void;
   onChangeArtboard: (choice: ArtboardChoice) => void;
   onChangeShowBackground: (value: boolean) => void;
@@ -130,8 +130,8 @@ export function AssetPanel({
         </Field>
         <Field label="Symbols">
           <SymbolPicker
-            activeSymbolMarks={activeSymbolMarks}
             activeSymbolTab={activeSymbolTab}
+            custom={customSymbols}
             onAddSymbol={onAddSymbol}
             onChangeTab={onChangeSymbolTab}
           />

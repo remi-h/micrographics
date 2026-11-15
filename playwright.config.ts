@@ -29,6 +29,13 @@ export default defineConfig({
     command: `npm run dev -- --port ${PORT}`,
     url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
+    // Accounts are on for the suite, pointed at an address on the app's own
+    // origin that nothing serves: the account specs answer those requests
+    // themselves (see e2e/account.ts), and a signed-out editor sends none.
+    env: {
+      NEXT_PUBLIC_SUPABASE_URL: `http://localhost:${PORT}/supabase`,
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: 'e2e-public-key',
+    },
     timeout: 120_000,
   },
 });

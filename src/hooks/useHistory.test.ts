@@ -124,6 +124,30 @@ describe('useHistory', () => {
     expect(result.current.redoStack).toHaveLength(0);
   });
 
+  it('forgets both stacks when the canvas is replaced by another', () => {
+    const { result } = setUp();
+
+    act(() => {
+      result.current.beginHistoryAction();
+      result.current.setCanvasItems([symbol('symbol-2')]);
+    });
+    act(() => {
+      result.current.beginHistoryAction();
+      result.current.setCanvasItems([symbol('symbol-3')]);
+    });
+    act(() => result.current.undo());
+    expect(result.current.undoStack).toHaveLength(1);
+    expect(result.current.redoStack).toHaveLength(1);
+
+    act(() => result.current.clearHistory());
+    act(() => result.current.undo());
+    act(() => result.current.redo());
+
+    expect(result.current.canvasItems).toEqual([symbol('symbol-2')]);
+    expect(result.current.undoStack).toHaveLength(0);
+    expect(result.current.redoStack).toHaveLength(0);
+  });
+
   it('copies canvas items into a snapshot, so a later mutation cannot rewrite it', () => {
     const original = symbol('symbol-1', 100);
     const { result } = setUp({ canvasItems: [original] });

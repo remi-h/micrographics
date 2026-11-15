@@ -73,6 +73,15 @@ export type CanvasSymbol = {
   animation?: ItemAnimation;
   kind: 'symbol';
   mark: string;
+  /**
+   * The drawing itself, for a symbol the user uploaded (its `mark` starts
+   * `custom:`). Carried on the item rather than looked up, so a canvas still
+   * draws after the symbol is deleted from the account, when signed out, and
+   * in an export. Already sanitized; see lib/customSymbols.ts.
+   */
+  svg?: string;
+  /** The name an uploaded symbol was given, for the Layers list. */
+  label?: string;
   rotate: number;
   size: number;
   x: number;

@@ -31,6 +31,8 @@ export type History = {
   beginHistoryAction: () => void;
   undo: () => void;
   redo: () => void;
+  /** Forgets both stacks: what is on the canvas now is a different document. */
+  clearHistory: () => void;
   /**
    * The stacks, for reading only: what is on them decides whether undo and
    * redo do anything. `undo` and `redo` close over the stacks of the render
@@ -114,5 +116,10 @@ export function useHistory({
     restoreSnapshot(next);
   };
 
-  return { beginHistoryAction, redo, redoStack, stateRef, undo, undoStack };
+  const clearHistory = () => {
+    setUndoStack([]);
+    setRedoStack([]);
+  };
+
+  return { beginHistoryAction, clearHistory, redo, redoStack, stateRef, undo, undoStack };
 }
