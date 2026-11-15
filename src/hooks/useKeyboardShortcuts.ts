@@ -1,9 +1,10 @@
 import { useEffect, useEffectEvent } from 'react';
+import { QUARTER_ROTATE_STEP, stepAngle } from '../lib/rotation';
 import type { CanvasItem } from '../types';
 
 // The editor's global keyboard shortcuts: one `keydown` listener on `window`,
 // covering undo/redo, delete, escape, select-all, the clipboard, duplicate,
-// zoom, `[`/`]` rotate and arrow-key nudge.
+// zoom, `[`/`]` rotate (Alt for quarter turns) and arrow-key nudge.
 //
 // Like `useHistory` and `useCanvasItems`, this owns no state. It is handed the
 // current canvas items and selection plus the actions to run, because the
@@ -83,6 +84,15 @@ export function useKeyboardShortcuts({
       );
     };
 
+    // Alt/Option + `[`/`]` turns a quarter at a time, landing the first
+    // selected item on the next multiple of 90 the way the rotate handle snaps
+    // with Alt held; the rest of the selection turns by the same amount.
+    const quarterTurnSelected = (direction: 1 | -1) => {
+      const first = canvasItems.find((item) => selectedIds.includes(item.id));
+      if (!first) return;
+      rotateSelected(stepAngle(first.rotate, QUARTER_ROTATE_STEP, direction) - first.rotate);
+    };
+
     const modifier = event.metaKey || event.ctrlKey;
     if (modifier && event.key.toLowerCase() === 'z') {
       event.preventDefault();
@@ -126,6 +136,13 @@ export function useKeyboardShortcuts({
     } else if (modifier && event.key === '0') {
       event.preventDefault();
       resetCanvasZoom();
+    } else if (event.altKey && event.code === 'BracketLeft') {
+      // Matched by code: Option turns `[` into another character on macOS.
+      event.preventDefault();
+      quarterTurnSelected(-1);
+    } else if (event.altKey && event.code === 'BracketRight') {
+      event.preventDefault();
+      quarterTurnSelected(1);
     } else if (event.key === '[') {
       event.preventDefault();
       rotateSelected(event.shiftKey ? -45 : -15);
